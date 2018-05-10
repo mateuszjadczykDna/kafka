@@ -287,14 +287,13 @@ public class StreamThreadTest {
             mockTime,
             config,
             consumer,
-            consumer,
-            null,
-            taskManager,
-            streamsMetrics,
-            internalTopologyBuilder,
-            clientId,
-            new LogContext("")
-        );
+            consumer, ,
+                null,
+                taskManager,
+                streamsMetrics,
+                internalTopologyBuilder,
+                clientId,
+                new LogContext(""));
         thread.maybeCommit(mockTime.milliseconds());
         mockTime.sleep(commitInterval - 10L);
         thread.maybeCommit(mockTime.milliseconds());
@@ -319,13 +318,12 @@ public class StreamThreadTest {
             mockTime,
             config,
             consumer,
-            consumer,
-            null,
-            taskManager,
-            streamsMetrics,
-            internalTopologyBuilder,
-            clientId,
-            new LogContext(""));
+            consumer, ,
+                null,
+                taskManager,
+                streamsMetrics,
+                internalTopologyBuilder,
+                clientId, new LogContext(""));
         thread.maybeCommit(mockTime.milliseconds());
         mockTime.sleep(commitInterval - 10L);
         thread.maybeCommit(mockTime.milliseconds());
@@ -351,13 +349,12 @@ public class StreamThreadTest {
             mockTime,
             config,
             consumer,
-            consumer,
-            null,
-            taskManager,
-            streamsMetrics,
-            internalTopologyBuilder,
-            clientId,
-            new LogContext(""));
+            consumer, ,
+                null,
+                taskManager,
+                streamsMetrics,
+                internalTopologyBuilder,
+                clientId, new LogContext(""));
         thread.maybeCommit(mockTime.milliseconds());
         mockTime.sleep(commitInterval + 1);
         thread.maybeCommit(mockTime.milliseconds());
@@ -497,14 +494,13 @@ public class StreamThreadTest {
             mockTime,
             config,
             consumer,
-            consumer,
-            null,
-            taskManager,
-            streamsMetrics,
-            internalTopologyBuilder,
-            clientId,
-            new LogContext("")
-        );
+            consumer, ,
+                null,
+                taskManager,
+                streamsMetrics,
+                internalTopologyBuilder,
+                clientId,
+                new LogContext(""));
         thread.setStateListener(
             new StreamThread.StateListener() {
                 @Override
@@ -532,14 +528,13 @@ public class StreamThreadTest {
             mockTime,
             config,
             consumer,
-            consumer,
-            null,
-            taskManager,
-            streamsMetrics,
-            internalTopologyBuilder,
-            clientId,
-            new LogContext("")
-        );
+            consumer, ,
+                null,
+                taskManager,
+                streamsMetrics,
+                internalTopologyBuilder,
+                clientId,
+                new LogContext(""));
         thread.shutdown();
         EasyMock.verify(taskManager);
     }
@@ -558,13 +553,12 @@ public class StreamThreadTest {
             mockTime,
             config,
             consumer,
-            consumer,
-            null,
-            taskManager,
-            streamsMetrics,
-            internalTopologyBuilder,
-            clientId,
-            new LogContext(""));
+            consumer, ,
+                null,
+                taskManager,
+                streamsMetrics,
+                internalTopologyBuilder,
+                clientId, new LogContext(""));
         thread.shutdown();
         // Execute the run method. Verification of the mock will check that shutdown was only done once
         thread.run();

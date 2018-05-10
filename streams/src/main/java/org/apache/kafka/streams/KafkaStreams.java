@@ -388,6 +388,8 @@ public class KafkaStreams {
         final Map<MetricName, Metric> result = new LinkedHashMap<>();
         for (final StreamThread thread : threads) {
             result.putAll(thread.consumerMetrics());
+            result.putAll(thread.producerMetrics());
+            result.putAll(thread.adminClientMetrics());
         }
         if (globalStreamThread != null) result.putAll(globalStreamThread.consumerMetrics());
         result.putAll(metrics.metrics());

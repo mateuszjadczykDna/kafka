@@ -571,6 +571,9 @@ public class StreamThread extends Thread {
     final ConsumerRebalanceListener rebalanceListener;
     final Consumer<byte[], byte[]> restoreConsumer;
     final Consumer<byte[], byte[]> consumer;
+    // reference to thread producer
+    final Producer<byte[], byte[]> producer;
+    final AdminClient adminClient;
     final InternalTopologyBuilder builder;
 
     public static StreamThread create(final InternalTopologyBuilder builder,
@@ -656,22 +659,26 @@ public class StreamThread extends Thread {
         taskManager.setConsumer(consumer);
 
         return new StreamThread(
-            time,
-            config,
-            restoreConsumer,
-            consumer,
-            originalReset,
-            taskManager,
-            streamsMetrics,
-            builder,
-            threadClientId,
-            logContext);
+                time,
+                config,
+                restoreConsumer,
+                consumer,
+                threadProducer,
+                adminClient,
+                originalReset,
+                taskManager,
+                streamsMetrics,
+                builder,
+                threadClientId,
+                logContext);
     }
 
     public StreamThread(final Time time,
                         final StreamsConfig config,
                         final Consumer<byte[], byte[]> restoreConsumer,
                         final Consumer<byte[], byte[]> consumer,
+                        final Producer<byte[], byte[]> producer,
+                        final AdminClient adminClient,
                         final String originalReset,
                         final TaskManager taskManager,
                         final StreamsMetricsThreadImpl streamsMetrics,
@@ -692,6 +699,8 @@ public class StreamThread extends Thread {
         this.taskManager = taskManager;
         this.restoreConsumer = restoreConsumer;
         this.consumer = consumer;
+        this.producer = producer;
+        this.adminClient = adminClient;
         this.originalReset = originalReset;
 
         this.pollTimeMs = config.getLong(StreamsConfig.POLL_MS_CONFIG);
@@ -1223,6 +1232,24 @@ public class StreamThread extends Thread {
         final LinkedHashMap<MetricName, Metric> result = new LinkedHashMap<>();
         result.putAll(consumerMetrics);
         result.putAll(restoreConsumerMetrics);
+        return result;
+    }
+
+    public Map<MetricName, Metric> producerMetrics() {
+        final LinkedHashMap<MetricName, Metric> result = new LinkedHashMap<>();
+        if (producer != null) {
+            final Map<MetricName, ? extends Metric> producerMetrics = producer.metrics();
+            result.putAll(producerMetrics);
+        }
+        return result;
+    }
+
+    public Map<MetricName, Metric> adminClientMetrics() {
+        final LinkedHashMap<MetricName, Metric> result = new LinkedHashMap<>();
+        if (adminClient != null) {
+            final Map<MetricName, ? extends Metric> adminClientMetrics = adminClient.metrics();
+            result.putAll(adminClientMetrics);
+        }
         return result;
     }
 }
