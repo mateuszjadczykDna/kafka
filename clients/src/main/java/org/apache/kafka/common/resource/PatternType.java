@@ -67,7 +67,36 @@ public enum PatternType {
      *
      * A prefixed name defines a prefix for a resource, e.g. topics with names that start with 'foo'.
      */
-    PREFIXED((byte) 4);
+    PREFIXED((byte) 4),
+
+    /********** These are Confluent-internal pattern types used internally in filters, but not exposed to clients or stored in ZK. **********/
+    /**
+     * Match all LITERAL ACLs of tenant. Interceptor transforms:
+     *   (LITERAL, name-null) to (CONFLUENT_ALL_TENANT_LITERAL, name=tenantPrefix)
+     */
+    CONFLUENT_ALL_TENANT_LITERAL((byte) 101),
+
+    /**
+     * Match all PREFIXED ACLs of tenant. Interceptor transforms:
+     *   (PREFIXED, name-null) to (CONFLUENT_ALL_TENANT_PREFIXED, name=tenantPrefix)
+     */
+    CONFLUENT_ALL_TENANT_PREFIXED((byte) 102),
+
+    /**
+     * Match all ACLs of tenant. Interceptor transforms:
+     *   (ANY, name-null) and (MATCH, name=null) to (CONFLUENT_ALL_TENANT_ANY, name=tenantPrefix)
+     */
+    CONFLUENT_ALL_TENANT_ANY((byte) 103),
+
+    /**
+     * MATCH with the same semantics as non-tenant MATCH, but this only matches tenant-prefixed resources.
+     * Interceptor transforms:
+     *   (MATCH, name) to (CONFLUENT_ONLY_TENANT_MATCH, tenantPrefix + name)
+     *   (MATCH, name=null) to (CONFLUENT_ALL_TENANT_ANY, tenantPrefix)
+     */
+    CONFLUENT_ONLY_TENANT_MATCH((byte) 104);
+
+    /********** End of Confluent internal pattern types **********/
 
     private final static Map<Byte, PatternType> CODE_TO_VALUE =
         Collections.unmodifiableMap(
@@ -105,7 +134,12 @@ public enum PatternType {
      * @return whether this resource pattern type is a concrete type, rather than UNKNOWN or one of the filter types.
      */
     public boolean isSpecific() {
-        return this != UNKNOWN && this != ANY && this != MATCH;
+        return this != UNKNOWN && this != ANY && this != MATCH && !isTenantPrefixed();
+    }
+
+    public boolean isTenantPrefixed() {
+        return this == CONFLUENT_ALL_TENANT_LITERAL || this == CONFLUENT_ALL_TENANT_PREFIXED
+                || this == CONFLUENT_ALL_TENANT_ANY || this == CONFLUENT_ONLY_TENANT_MATCH;
     }
 
     /**
@@ -121,4 +155,5 @@ public enum PatternType {
     public static PatternType fromString(String name) {
         return NAME_TO_VALUE.getOrDefault(name, UNKNOWN);
     }
+
 }

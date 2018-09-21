@@ -173,4 +173,71 @@ public class ResourcePatternFilterTest {
         assertTrue(new ResourcePatternFilter(TOPIC, "Name-something", PatternType.MATCH)
             .matches(new ResourcePattern(TOPIC, "Name", PREFIXED)));
     }
+
+    @Test
+    public void testAllTenantLiteral() {
+        ResourcePatternFilter filter = new ResourcePatternFilter(TOPIC, "Tenant_", PatternType.CONFLUENT_ALL_TENANT_LITERAL);
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", LITERAL)));
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_", PREFIXED))); // Wildcard literal for tenants
+
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "*", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(GROUP, "Tenant_Name", LITERAL)));
+    }
+
+    @Test
+    public void testAllTenantPrefixed() {
+        ResourcePatternFilter filter = new ResourcePatternFilter(TOPIC, "Tenant_", PatternType.CONFLUENT_ALL_TENANT_PREFIXED);
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", PREFIXED)));
+
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Tenant_", PREFIXED))); // Wildcard literal for tenants
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "*", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(GROUP, "Tenant_Name", PREFIXED)));
+    }
+
+    @Test
+    public void testAllTenantAny() {
+        ResourcePatternFilter filter = new ResourcePatternFilter(TOPIC, "Tenant_", PatternType.CONFLUENT_ALL_TENANT_ANY);
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", LITERAL)));
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_", PREFIXED)));
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", PREFIXED)));
+
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "*", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(GROUP, "Tenant_Name", LITERAL)));
+    }
+
+    @Test
+    public void testOnlyTenantMatch() {
+        ResourcePatternFilter filter = new ResourcePatternFilter(TOPIC, "Tenant_Name", PatternType.CONFLUENT_ONLY_TENANT_MATCH);
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", LITERAL)));
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_", PREFIXED)));
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name", PREFIXED)));
+        assertTrue(filter.matches(new ResourcePattern(TOPIC, "Tenant_N", PREFIXED)));
+
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name_Something", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Tenant_Name_Something", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "OtherTenant_", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "Name", PREFIXED)));
+        assertFalse(filter.matches(new ResourcePattern(TOPIC, "*", LITERAL)));
+        assertFalse(filter.matches(new ResourcePattern(GROUP, "Tenant_Name", LITERAL)));
+    }
 }

@@ -96,8 +96,31 @@ public class ResourcePatternFilter {
             return false;
         }
 
-        if (!patternType.equals(PatternType.ANY) && !patternType.equals(PatternType.MATCH) && !patternType.equals(pattern.patternType())) {
+        if (!patternType.equals(PatternType.ANY) && !patternType.equals(PatternType.MATCH) &&
+                !patternType.isTenantPrefixed() && !patternType.equals(pattern.patternType())) {
             return false;
+        }
+
+        if (patternType.isTenantPrefixed()) {
+            int index;
+            if (name == null || (index = name.indexOf("_")) == -1)
+                throw new IllegalStateException("Resource name should be tenant-prefixed");
+            String prefix = name.substring(0, index + 1);
+            if (!pattern.name().startsWith(prefix))
+                return false;
+            switch (patternType) {
+                case CONFLUENT_ALL_TENANT_LITERAL:
+                    return pattern.patternType() == PatternType.LITERAL ||
+                            (pattern.patternType() == PatternType.PREFIXED && pattern.name().equals(prefix));
+                case CONFLUENT_ALL_TENANT_PREFIXED:
+                    return pattern.patternType() == PatternType.PREFIXED && !pattern.name().equals(prefix);
+                case CONFLUENT_ALL_TENANT_ANY:
+                    return true;
+                case CONFLUENT_ONLY_TENANT_MATCH:
+                    break; // Already checked prefix, use the regular MATCH logic below
+                default:
+                    throw new IllegalStateException("Not a Confluent tenant pattern type " + patternType);
+            }
         }
 
         if (name == null) {
@@ -140,6 +163,14 @@ public class ResourcePatternFilter {
             return "Resource name is NULL.";
         if (patternType == PatternType.MATCH)
             return "Resource pattern type is MATCH.";
+        if (patternType == PatternType.CONFLUENT_ALL_TENANT_LITERAL)
+            return "Resource pattern type is CONFLUENT_TENANT_LITERALL.";
+        if (patternType == PatternType.CONFLUENT_ALL_TENANT_PREFIXED)
+            return "Resource pattern type is CONFLUENT_ALL_TENANT_PREFIXED.";
+        if (patternType == PatternType.CONFLUENT_ALL_TENANT_ANY)
+            return "Resource pattern type is CONFLUENT_ALL_TENANT_ANY.";
+        if (patternType == PatternType.CONFLUENT_ONLY_TENANT_MATCH)
+            return "Resource pattern type is CONFLUENT_ONLY_TENANT_MATCH.";
         if (patternType == PatternType.UNKNOWN)
             return "Resource pattern type is UNKNOWN.";
         return null;

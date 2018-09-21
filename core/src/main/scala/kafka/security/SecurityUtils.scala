@@ -49,5 +49,5 @@ object SecurityUtils {
     new AclBinding(resourcePattern, entry)
   }
 
-  def isClusterResource(name: String): Boolean = name.equals(Resource.ClusterResourceName)
+  def isClusterResource(name: String): Boolean = name.endsWith(Resource.ClusterResourceName) // may be tenant-prefixed internally
 }
