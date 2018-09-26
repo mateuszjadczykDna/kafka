@@ -1567,6 +1567,35 @@ project(':connect:basic-auth-extension') {
   }
 }
 
+project(':ce-security') {
+  archivesBaseName = "ce-security"
+
+  dependencies {
+    compile libs.bcpkix
+    compile libs.jose4j
+    testCompile libs.junit
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.testRuntime) {
+      include('slf4j-log4j12*')
+      include('log4j*jar')
+    }
+    from (configurations.runtime) {
+    }
+    into "$buildDir/dependant-libs-${versions.scala}"
+    duplicatesStrategy 'exclude'
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
+
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+}
+
 task aggregatedJavadoc(type: Javadoc) {
   def projectsWithJavadoc = subprojects.findAll { it.javadoc.enabled }
   source = projectsWithJavadoc.collect { it.sourceSets.main.allJava }
