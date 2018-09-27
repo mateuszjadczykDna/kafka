@@ -1,0 +1,34 @@
+syntax = "proto3";
+package command;
+
+import "command/command_alert.proto";
+import "command/command_cluster_metadata.proto";
+
+option java_package = "io.confluent.command.record";
+
+enum CommandConfigType {
+  LICENSE_INFO = 0;
+  ACTION_CONFIG = 1;
+  MONITORING_TRIGGER_CONFIG = 2;
+  CLUSTER_METADATA = 3;
+}
+
+message CommandKey {
+  CommandConfigType configType = 1;
+  oneof key {
+    string guid = 2;
+  }
+}
+
+message LicenseInfo {
+  string jwt = 1;
+}
+
+message CommandMessage {
+  oneof command {
+    LicenseInfo licenseInfo = 1;
+    command_alert.ActionConfig actionConfig = 2;
+    command_alert.MonitoringTriggerConfig monitoringTriggerConfig = 3;
+    command_cluster_metadata.ClusterMetadata clusterMetadata = 4;
+  }
+}

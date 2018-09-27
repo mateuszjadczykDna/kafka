@@ -218,4 +218,6 @@
     <suppress checks="JavaNCSS"
               files="RequestResponseTest.java"/>
 
+    <suppress checks=".+"
+              files="ce-serializers/build/generated/.+.java$"/>
 </suppressions>

@@ -1,0 +1,46 @@
+syntax = "proto3";
+package alert;
+import "command/command_alert.proto";
+
+option java_package = "io.confluent.controlcenter.alert.record";
+
+message BrokerClusterComponent {
+  string clusterId = 1;
+  string brokerId = 2;
+}
+
+message ComponentDesc {
+  oneof component {
+    string componentId = 3;
+    BrokerClusterComponent brokerCluster = 4;
+  }
+}
+
+message TriggerInfo {
+  int64 window = 1;         // window of the trigger
+  bool hasError = 2;        // the window has missing monitoring data
+  ComponentDesc component = 3;  // component (e.g. topic or broker) that fired the trigger
+  oneof value {
+    int64 longValue = 7;
+    command_alert.StatusValue statusValue = 8;
+  }
+}
+
+message ActionInfo {
+  string guid = 1;
+  string name = 2;
+  oneof action {
+    command_alert.EmailAction email = 3;
+  }
+}
+
+message AlertInfo {
+  string guid = 1;       // alert GUID
+  int64 timestamp = 2;   // time in C3 time of this alert
+
+  oneof triggerConfig {
+    command_alert.MonitoringTriggerConfig monitoringTrigger = 3;
+  }
+  repeated TriggerInfo triggers = 4;
+  repeated ActionInfo actions = 5;
+}

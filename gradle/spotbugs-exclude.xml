@@ -315,4 +315,24 @@ For a detailed description of spotbugs bug categories, see https://spotbugs.read
 
     <!-- END Suppress warnings for unused members that are undetectably used by Jackson -->
 
+    <!-- Exclusions for protobuf-generated files. -->
+    <Match>
+        <Package name="~io\.confluent\.command.*"/>
+    </Match>
+    <Match>
+        <Package name="~io\.confluent\.metrics\.record.*"/>
+    </Match>
+    <Match>
+        <Package name="~io\.confluent\.controlcenter\.alert\.record.*"/>
+    </Match>
+    <Match>
+        <Package name="~io\.confluent\.controlcenter\.command.*"/>
+    </Match>
+    <Match>
+        <Package name="~io\.confluent\.controlcenter\.record.*"/>
+    </Match>
+    <Match>
+        <Package name="~io\.confluent\.monitoring\.record.*"/>
+    </Match>
+
 </FindBugsFilter>

@@ -1,0 +1,196 @@
+syntax = "proto3";
+package controlcenter;
+import "control-center/alert.proto";
+import "monitoring.proto";
+import "command/command_alert.proto";
+
+option java_package = "io.confluent.controlcenter.record";
+
+message TopicPartition {
+  string topic = 1;
+  int32 partition = 2;
+  string clusterId = 3;
+}
+
+message MemberInfo {
+  string clientId = 1;
+  string group = 2;
+  string topic = 3;
+  TopicPartition topicPartition = 4;
+}
+
+message WindowedGrouping {
+  int64 window = 1;
+  repeated MemberInfo members = 2;
+}
+
+message TopicPartitionInfo {
+  int64 window = 1;
+  string topic = 2;
+  int32 partition = 3;
+  map<string, bool> producer_clients = 4;
+  map<string, bool> consumer_clients = 5;
+  map<string, bool> producer_groups = 6;
+  map<string, bool> consumer_groups = 7;
+}
+
+message SequenceInfo {
+  int64 sequence = 1;
+  int64 timestamp = 2;
+  int64 minWindow = 3;
+  int64 maxWindow = 4;
+}
+
+message SequenceInfoPair {
+  SequenceInfo lower = 1;
+  SequenceInfo upper = 2;
+}
+
+message VerifierInfo {
+  monitoring.MonitoringMessage baseMonitoringMessage = 1;
+  int64 timeout = 2;
+  int64 windowHistorySize = 3;
+  int64 expectedWindowDistance = 4;
+  SequenceInfo lastSequenceWithWindow = 5;
+  bool shutdownReceived = 6;
+  bool sessionEnded = 7;
+  int64 lastSequenceTime = 8;
+  repeated SequenceInfoPair ranges = 9;
+  bool maybeSessionEnded = 10;
+}
+
+message ClientGroup {
+  int64 window = 1;
+  string group = 2;
+  string client = 3;
+}
+
+message TopicPartitionClientGroup {
+  TopicPartition topicPartition = 1;
+  ClientGroup clientGroup = 2;
+}
+
+message ClientGroups {
+  repeated ClientGroup clientGroups = 1;
+}
+
+message ClientGroupProductionAggregate {
+  monitoring.MonitoringMessage agg = 1;
+  monitoring.MonitoringMessage diff = 2;
+  repeated ClientGroup clientGroup = 3;
+  ClientGroup newClientGroup = 4;
+}
+
+message VerifiableMonitoringMessage {
+  monitoring.MonitoringMessage monitoringMessage = 1;
+  string guid = 2;
+}
+
+enum ClusterType {
+  KAFKA = 0;
+  KAFKA_CONNECT = 1;
+}
+
+enum ClusterContext {
+  STREAM_MONITORING = 0;
+  KAFKA_CONNECT_UI = 1;
+  CLUSTER_MANAGEMENT = 2;
+}
+
+message Cluster {
+  ClusterType clusterType = 1;
+  string clusterId = 2;  //the UUID (required)
+  string clusterName = 3 [deprecated=true]; //the optional name set on the cluster itself
+}
+
+message TriggerEvent {
+  string triggerGuid = 1;   // GUID of MonitoringTriggerConfig
+  int64 timestamp = 2;      // time (in C3 time) of this trigger event
+  alert.TriggerInfo info = 3;
+  bool heartbeat = 4;      // true if this is a heartbeat event, not actual trigger
+  int32 internalTopicPartition = 5;
+  int64 window = 6;      // window of associated triggering action
+}
+
+message ClientTriggerMeasurement {
+  int64 consumptionDiff = 2;   // expected consumption minus actual consumption
+  int64 avgLatency = 3;
+  int64 maxLatency = 4;
+  bool hasError = 5;
+  int64 consumerLag = 6;
+}
+
+message MetricMeasurement {
+  oneof metricType {
+    command_alert.BrokerTriggerMetricType brokerMetric = 1;
+    command_alert.TopicTriggerMetricType topicMetric = 2;
+  }
+  oneof value {
+    int64 longValue = 3;
+    command_alert.StatusValue statusValue = 4;
+  }
+}
+
+enum ComponentType {
+  CONSUMER_GROUP = 0;
+  BROKER_CLUSTER = 1;
+  BROKER = 2;
+  TOPIC = 3;
+}
+
+message TriggerMeasurement {
+  string clusterId = 1;   // UUID of Kafka Cluster
+  string component = 2;
+  ComponentType componentType = 3;
+  int64 window = 4;
+
+  oneof measurement {
+    ClientTriggerMeasurement clientMeasurement = 5;
+    MetricMeasurement metricMeasurement = 6;
+  }
+
+  int64 lastTriggerEventTimestamp = 7;  // ensure we don't send duplicate trigger events
+  bool heartbeat = 8;
+
+  int64 arrivalTime = 9;         // (latest) C3 time of arrival of monitoring messages for this measurement
+}
+
+// all actions for a trigger that have the same frequency
+message TriggerAction {
+  repeated alert.ActionInfo actions = 1;
+
+  int64 sendPeriodMs = 2;
+  int64 intervalMs = 3;
+  int64 nextActionTimestamp = 4;
+  int64 lastTriggerInfoSequence = 5;        // ensure we don't duplicate same trigger info (with
+                                            // the same timestamp) into multiple alerts
+}
+
+message TriggerActions {
+  string triggerGuid = 1;
+  alert.ComponentDesc component = 4;
+  repeated TriggerAction actions = 2;
+  int64 nextTriggerInfoSequence = 3;
+}
+
+message VerifiableTriggerInfo {
+  alert.TriggerInfo info = 1;
+  int64 sequence = 2;
+}
+
+//TODO - see if we can get rid of this
+// We'll need to add a timestamp field to TriggerActions and add support for nested structs when serializing PBs to keys
+message TriggerEventKey {
+  string triggerGuid = 1;
+  string component = 4;   // e.g., consumer group, topic, brokerCluster, or brokerCluster:broker
+  int64 timestamp = 2;
+  int64 window = 3;
+}
+
+// temporary
+message WindowedClusterGroup {
+  int64 window = 1;         // end of KStream window
+  string clusterId = 2;
+  string component = 3;
+  string metricName = 4;   // needs to be unique, but not used for mapping to metric types
+}

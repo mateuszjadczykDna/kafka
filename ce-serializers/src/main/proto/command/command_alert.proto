@@ -1,0 +1,113 @@
+syntax = "proto3";
+package command_alert;
+
+option java_package = "io.confluent.command.record.alert";
+
+enum TriggerMetricType {
+  CONSUMPTION_DIFF = 0;
+  MAX_LATENCY = 1;
+  AVG_LATENCY = 2;
+  CONSUMER_LAG = 3;
+}
+
+enum BrokerTriggerMetricType {
+  BROKER_BYTES_IN = 0;
+  BROKER_BYTES_OUT = 1;
+  BROKER_PRODUCTION_REQ_LATENCY_999 = 2;
+  BROKER_PRODUCTION_REQ_LATENCY_990 = 3;
+  BROKER_PRODUCTION_REQ_LATENCY_950 = 4;
+  BROKER_PRODUCTION_REQ_LATENCY_MEDIAN = 5;
+  BROKER_PRODUCTION_REQ_COUNT = 6;
+  BROKER_FETCH_REQ_LATENCY_999 = 7;
+  BROKER_FETCH_REQ_LATENCY_990 = 8;
+  BROKER_FETCH_REQ_LATENCY_950 = 9;
+  BROKER_FETCH_REQ_LATENCY_MEDIAN = 10;
+  UNDER_REPLICATED_TOPIC_PARTITIONS = 11;
+  OFFLINE_TOPIC_PARTITIONS = 12;
+  ZK_STATUS = 13;
+  ZK_EXPIRATION_RATE = 14;
+  ACTIVE_CONTROLLER_COUNT = 15;
+  LEADER_ELECTION_RATE = 16;
+  UNCLEAN_ELECTION_COUNT = 17;
+  CLUSTER_STATUS = 18;
+}
+
+enum TopicTriggerMetricType {
+  TOPIC_BYTES_IN = 0;
+  TOPIC_BYTES_OUT = 1;
+  TOPIC_PRODUCTION_REQ_COUNT = 2;
+  TOPIC_UNDER_REPLICATED_TOPIC_PARTITIONS = 3;
+  TOPIC_OUT_OF_SYNC_REPLICA_COUNT = 4;
+}
+
+enum TriggerCondition {
+  GREATER_THAN = 0;
+  LESS_THAN = 1;
+  EQUAL = 2;
+  NOT_EQUAL = 3;
+}
+
+enum StatusValue {
+  ONLINE = 0;
+  OFFLINE = 1;
+}
+
+enum TopicNameFilter {
+  EQUALS = 0;
+  BEGINS_WITH = 1;
+  ENDS_WITH = 2;
+  CONTAINS = 3;
+  ALL_TOPICS = 4;
+}
+
+message BrokerClusterComponents {
+  repeated string brokerClusters = 1;
+}
+
+message TopicComponents {
+  TopicNameFilter filter = 1;
+  string value = 2;
+}
+
+message MonitoringTriggerConfig {
+  string guid = 1;
+  string name = 2;
+  string clusterId = 3;
+
+  oneof component {
+    string group = 4;
+    BrokerClusterComponents brokerClusters = 9;
+    TopicComponents topic = 10;
+  }
+
+  oneof triggerMetric {
+    TriggerMetricType metric = 5;
+    BrokerTriggerMetricType brokerMetric = 11;
+    TopicTriggerMetricType topicMetric = 12;
+  }
+
+  TriggerCondition condition = 6;
+  oneof value {
+    int64 longValue = 7;
+    StatusValue statusValue = 13;
+  }
+  int64 lagMs = 8;
+}
+
+message EmailAction {
+  string address = 1;
+  string subject = 2;
+}
+
+message ActionConfig {
+  string guid = 1;
+  string name = 2;
+  bool enabled = 3;
+
+  repeated string triggerGuid = 4;
+  int32 maxSendRate = 5;
+  int64 intervalMs = 6;
+  oneof action {
+    EmailAction email = 7;
+  }
+}

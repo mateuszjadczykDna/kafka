@@ -1,0 +1,44 @@
+syntax = "proto3";
+package monitoring;
+
+option java_package = "io.confluent.monitoring.record";
+
+enum ClientType {
+  CONSUMER = 0;
+  PRODUCER = 1;
+  CONTROLCENTER = 2;
+}
+
+enum MessageType {
+  NORMAL = 0;
+  ERROR = 1;
+  HEARTBEAT = 2;
+}
+
+message MonitoringMessage {
+  ClientType clientType = 1;
+  string clientId = 2;
+  string group = 3;
+  string session = 4;
+  int64 sequence = 5;
+
+  int64 window = 6;
+  int64 timestamp = 7;
+  string topic = 8;
+  int32 partition = 9;
+  int64 count = 10;
+  int64 aggregateBytes = 11;
+  int32 aggregateCrc = 12;
+  int64 totalLatency = 13;
+  int64 minLatency = 14;
+  int64 maxLatency = 15;
+  int64 samplePeriod = 16;
+  MessageType type = 17;
+  bool shutdown = 18;
+  int64 minWindow = 19;
+  int64 maxWindow = 20;
+  int32 monitoringTopicPartition = 21;
+  string clusterId = 22; //Kafka cluster ID (required)
+  string clusterName = 23; //Kafka cluster name (optional, human-friendly)
+  int64 arrivalTime = 24; // C3 time when the message arrived to C3
+}

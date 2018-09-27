@@ -14,17 +14,37 @@
 
 <import-control pkg="io.confluent">
   <!-- common library dependencies -->
+  <allow pkg="com" />
   <allow pkg="java" />
-  <allow pkg="javax.management" />
-  <allow pkg="org.bouncycastle" />
-  <allow pkg="org.jose4j" />
-  <allow pkg="org.slf4j" />
-  <allow pkg="org.junit" />
-  <allow pkg="org.hamcrest" />
-  <allow pkg="org.easymock" />
-  <allow pkg="org.powermock" />
   <allow pkg="java.security" />
+  <allow pkg="javax.management" />
   <allow pkg="javax.net.ssl" />
   <allow pkg="javax.security" />
+  <allow pkg="javax.xml.bind" />
+  <allow pkg="junit" />
+  <allow pkg="org.bouncycastle" />
+  <allow pkg="org.easymock" />
+  <allow pkg="org.hamcrest" />
   <allow pkg="org.ietf.jgss" />
+  <allow pkg="org.jose4j" />
+  <allow pkg="org.junit" />
+  <allow pkg="org.powermock" />
+  <allow pkg="org.slf4j" />
+
+  <subpackage name="metrics">
+    <allow pkg="io.confluent.metrics" />
+  </subpackage>
+
+  <subpackage name="monitoring">
+    <allow pkg="io.confluent.monitoring" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+  </subpackage>
+
+  <subpackage name="serializers">
+    <allow pkg="io.confluent.monitoring" />
+    <allow pkg="io.confluent.serializers" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+  </subpackage>
 </import-control>

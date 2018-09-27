@@ -34,6 +34,7 @@ buildscript {
     classpath 'org.owasp:dependency-check-gradle:3.2.1'
     classpath "com.diffplug.spotless:spotless-plugin-gradle:3.10.0"
     classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:1.6.3"
+    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.6'
   }
 }
 
@@ -1583,7 +1584,7 @@ project(':ce-security') {
     }
     from (configurations.runtime) {
     }
-    into "$buildDir/dependant-libs-${versions.scala}"
+    into "$buildDir/dependant-libs"
     duplicatesStrategy 'exclude'
   }
 
@@ -1594,6 +1595,60 @@ project(':ce-security') {
   checkstyle {
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
   }
+}
+
+project(':ce-serializers') {
+  apply plugin: 'com.google.protobuf'
+  archivesBaseName = "ce-serializers"
+
+  dependencies {
+    compile libs.gson
+    compile libs.guava
+    compile libs.jaxbApi
+    compile libs.protobuf
+    compile libs.protobufUtil
+    compile project(':clients')
+    testCompile libs.junit
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.testRuntime) {
+      include('slf4j-log4j12*')
+      include('log4j*jar')
+    }
+    from (configurations.runtime) {
+    }
+    into "$buildDir/dependant-libs"
+    duplicatesStrategy 'exclude'
+  }
+
+  protobuf {
+    protoc {
+      // Download the protoc executable from repositories.
+      artifact = "com.google.protobuf:protoc:${versions.protobuf}"
+    }
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
+
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+
+  sourceSets {
+    main {
+      proto {
+        srcDir 'src/main/resources/protobuf'
+      }
+      java {
+        srcDirs "src/main/java", "${protobuf.generatedFilesBaseDir}/main/java"
+      }
+    }
+  }
+
+  compileJava.dependsOn 'generateProto'
 }
 
 task aggregatedJavadoc(type: Javadoc) {
