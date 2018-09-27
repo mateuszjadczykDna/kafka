@@ -335,4 +335,12 @@ For a detailed description of spotbugs bug categories, see https://spotbugs.read
         <Package name="~io\.confluent\.monitoring\.record.*"/>
     </Match>
 
+    <Match>
+        <Class name="io.confluent.kafka.server.plugins.policy.AlterConfigPolicy"/>
+        <Bug pattern="NM_SAME_SIMPLE_NAME_AS_INTERFACE"/>
+    </Match>
+    <Match>
+        <Class name="io.confluent.kafka.server.plugins.policy.CreateTopicPolicy"/>
+        <Bug pattern="NM_SAME_SIMPLE_NAME_AS_INTERFACE"/>
+    </Match>
 </FindBugsFilter>

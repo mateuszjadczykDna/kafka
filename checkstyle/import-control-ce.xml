@@ -16,9 +16,11 @@
   <!-- common library dependencies -->
   <allow pkg="com" />
   <allow pkg="java" />
+  <allow pkg="org.I0Itec" />
   <allow pkg="java.security" />
   <allow pkg="javax.management" />
-  <allow pkg="javax.net.ssl" />
+  <allow pkg="javax.naming" />
+  <allow pkg="javax.net" />
   <allow pkg="javax.security" />
   <allow pkg="javax.xml.bind" />
   <allow pkg="junit" />
@@ -28,8 +30,20 @@
   <allow pkg="org.ietf.jgss" />
   <allow pkg="org.jose4j" />
   <allow pkg="org.junit" />
+  <allow pkg="org.mindrot" />
   <allow pkg="org.powermock" />
   <allow pkg="org.slf4j" />
+
+  <subpackage name="license">
+    <allow pkg="io.confluent.command" />
+    <allow pkg="io.confluent.license" />
+    <allow pkg="io.confluent.serializers" />
+    <allow pkg="kafka" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+    <allow pkg="org.apache.kafka.connect" />
+    <allow pkg="org.apache.zookeeper" />
+  </subpackage>
 
   <subpackage name="metrics">
     <allow pkg="io.confluent.metrics" />
@@ -46,5 +60,16 @@
     <allow pkg="io.confluent.serializers" />
     <allow pkg="org.apache.kafka.clients" />
     <allow pkg="org.apache.kafka.common" />
+  </subpackage>
+
+  <subpackage name="kafka">
+    <allow pkg="io.confluent.common" />
+    <allow pkg="io.confluent.kafka" />
+    <allow pkg="io.confluent.license" />
+    <allow pkg="kafka" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+    <allow pkg="org.apache.kafka.server" />
+    <allow pkg="scala" />
   </subpackage>
 </import-control>

@@ -110,17 +110,17 @@ public class LicenseStoreTest {
     );
   }
 
-  CommandKey KEY = CommandKey.newBuilder()
+  private static final CommandKey KEY = CommandKey.newBuilder()
       .setConfigType(CommandConfigType.LICENSE_INFO)
       .setGuid("CONFLUENT_LICENSE")
       .build();
-  CommandMessage LICENSE_MSG0 = CommandMessage.newBuilder()
+  private static final CommandMessage LICENSE_MSG0 = CommandMessage.newBuilder()
       .setLicenseInfo(LicenseInfo.newBuilder().setJwt("jwt 0").build())
       .build();
-  CommandMessage LICENSE_MSG1 = CommandMessage.newBuilder()
+  private static final CommandMessage LICENSE_MSG1 = CommandMessage.newBuilder()
       .setLicenseInfo(LicenseInfo.newBuilder().setJwt("jwt 1").build())
       .build();
-  CommandMessage LICENSE_MSG2 = CommandMessage.newBuilder()
+  private static final CommandMessage LICENSE_MSG2 = CommandMessage.newBuilder()
       .setLicenseInfo(LicenseInfo.newBuilder().setJwt("jwt 2").build())
       .build();
   private Time time = Time.SYSTEM;
