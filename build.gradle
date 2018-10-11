@@ -110,7 +110,7 @@ allprojects {
 }
 
 ext {
-  gradleVersion = "4.10"
+  gradleVersion = "4.10.2"
   minJavaVersion = "8"
   buildVersionFileName = "kafka-version.properties"
 
@@ -577,7 +577,6 @@ project(':core') {
   println "Building project 'core' with Scala version ${versions.scala}"
 
   apply plugin: 'scala'
-  apply plugin: "org.scoverage"
   archivesBaseName = "kafka_${versions.baseScala}"
 
   dependencies {
@@ -603,6 +602,7 @@ project(':core') {
 
     testCompile project(':clients').sourceSets.test.output
     testCompile libs.bcpkix
+    testCompile libs.mockitoCore
     testCompile libs.easymock
     testCompile(libs.apacheda) {
       exclude group: 'xml-apis', module: 'xml-apis'
@@ -622,20 +622,8 @@ project(':core') {
     testCompile libs.scalatest
     testCompile libs.slf4jlog4j
     testCompile libs.jfreechart
-
-    scoverage libs.scoveragePlugin
-    scoverage libs.scoverageRuntime
   }
   
-  scoverage {
-    reportDir = file("${rootProject.buildDir}/scoverage")
-    highlighting = false
-  }
-  checkScoverage {
-    minimumRate = 0.0
-  }
-  checkScoverage.shouldRunAfter('test')
-
   configurations {
     // manually excludes some unnecessary dependencies
     compile.exclude module: 'javax'
@@ -842,6 +830,7 @@ project(':clients') {
   conf2ScopeMappings.addMapping(1000, configurations.jacksonDatabindConfig, "provided")
 
   dependencies {
+    compile libs.zstd
     compile libs.lz4
     compile libs.snappy
     compile libs.slf4jApi
@@ -851,9 +840,7 @@ project(':clients') {
 
     testCompile libs.bcpkix
     testCompile libs.junit
-    testCompile libs.easymock
-    testCompile libs.powermockJunit4
-    testCompile libs.powermockEasymock
+    testCompile libs.mockitoCore
 
     testRuntime libs.slf4jlog4j
     testRuntime libs.jacksonDatabind
