@@ -18,12 +18,14 @@ package org.apache.kafka.common.network;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.config.internals.ConfluentConfigs;
 import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.KafkaPrincipalBuilder;
 import org.apache.kafka.common.security.auth.SslAuthenticationContext;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.interceptor.BrokerInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,8 +92,9 @@ public class SslChannelBuilder implements ChannelBuilder, ListenerReconfigurable
         try {
             SslTransportLayer transportLayer = buildTransportLayer(sslFactory, id, key, peerHost(key));
             Authenticator authenticator = new SslAuthenticator(configs, transportLayer, listenerName);
+            BrokerInterceptor interceptor = ConfluentConfigs.buildBrokerInterceptor(mode, configs);
             return new KafkaChannel(id, transportLayer, authenticator, maxReceiveSize,
-                    memoryPool != null ? memoryPool : MemoryPool.NONE);
+                    memoryPool != null ? memoryPool : MemoryPool.NONE, interceptor);
         } catch (Exception e) {
             log.info("Failed to create channel due to ", e);
             throw new KafkaException(e);

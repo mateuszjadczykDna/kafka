@@ -17,11 +17,13 @@
 package org.apache.kafka.common.network;
 
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.config.internals.ConfluentConfigs;
 import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.KafkaPrincipalBuilder;
 import org.apache.kafka.common.security.auth.PlaintextAuthenticationContext;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.interceptor.BrokerInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,12 +36,14 @@ public class PlaintextChannelBuilder implements ChannelBuilder {
     private static final Logger log = LoggerFactory.getLogger(PlaintextChannelBuilder.class);
     private final ListenerName listenerName;
     private Map<String, ?> configs;
+    private final Mode mode;
 
     /**
      * Constructs a plaintext channel builder. ListenerName is non-null whenever
      * it's instantiated in the broker and null otherwise.
      */
-    public PlaintextChannelBuilder(ListenerName listenerName) {
+    public PlaintextChannelBuilder(Mode mode, ListenerName listenerName) {
+        this.mode = mode;
         this.listenerName = listenerName;
     }
 
@@ -52,8 +56,9 @@ public class PlaintextChannelBuilder implements ChannelBuilder {
         try {
             PlaintextTransportLayer transportLayer = new PlaintextTransportLayer(key);
             PlaintextAuthenticator authenticator = new PlaintextAuthenticator(configs, transportLayer, listenerName);
+            BrokerInterceptor interceptor = ConfluentConfigs.buildBrokerInterceptor(mode, configs);
             return new KafkaChannel(id, transportLayer, authenticator, maxReceiveSize,
-                    memoryPool != null ? memoryPool : MemoryPool.NONE);
+                    memoryPool != null ? memoryPool : MemoryPool.NONE, interceptor);
         } catch (Exception e) {
             log.warn("Failed to create channel due to ", e);
             throw new KafkaException(e);

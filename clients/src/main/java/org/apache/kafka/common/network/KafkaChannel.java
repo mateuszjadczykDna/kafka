@@ -18,8 +18,13 @@ package org.apache.kafka.common.network;
 
 import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.memory.MemoryPool;
+import org.apache.kafka.common.metrics.Metrics;
+import org.apache.kafka.common.requests.RequestContext;
+import org.apache.kafka.common.requests.RequestHeader;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.server.interceptor.BrokerInterceptor;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -77,6 +82,8 @@ public class KafkaChannel {
     private final String id;
     private final TransportLayer transportLayer;
     private final Authenticator authenticator;
+    private final BrokerInterceptor interceptor;
+
     // Tracks accumulated network thread time. This is updated on the network thread.
     // The values are read and reset after each response is sent.
     private long networkThreadTimeNanos;
@@ -90,7 +97,8 @@ public class KafkaChannel {
     private ChannelMuteState muteState;
     private ChannelState state;
 
-    public KafkaChannel(String id, TransportLayer transportLayer, Authenticator authenticator, int maxReceiveSize, MemoryPool memoryPool) {
+    public KafkaChannel(String id, TransportLayer transportLayer, Authenticator authenticator,
+                        int maxReceiveSize, MemoryPool memoryPool, BrokerInterceptor interceptor) throws IOException {
         this.id = id;
         this.transportLayer = transportLayer;
         this.authenticator = authenticator;
@@ -100,6 +108,7 @@ public class KafkaChannel {
         this.disconnected = false;
         this.muteState = ChannelMuteState.NOT_MUTED;
         this.state = ChannelState.NOT_CONNECTED;
+        this.interceptor = interceptor;
     }
 
     public void close() throws IOException {
@@ -391,4 +400,12 @@ public class KafkaChannel {
     public int hashCode() {
         return Objects.hash(id);
     }
+
+    public RequestContext newRequestContext(RequestHeader header,
+                                            ListenerName listenerName,
+                                            SecurityProtocol protocol,
+                                            Metrics metrics) {
+        return interceptor.newContext(header, id, socketAddress(), principal(), listenerName, protocol, metrics);
+    }
+
 }

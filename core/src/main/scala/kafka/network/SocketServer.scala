@@ -702,8 +702,7 @@ private[kafka] class Processor(val id: Int,
           case Some(channel) =>
             val header = RequestHeader.parse(receive.payload)
             val connectionId = receive.source
-            val context = new RequestContext(header, connectionId, channel.socketAddress,
-              channel.principal, listenerName, securityProtocol)
+            val context = channel.newRequestContext(header, listenerName, securityProtocol, metrics)
             val req = new RequestChannel.Request(processor = id, context = context,
               startTimeNanos = time.nanoseconds, memoryPool, receive.payload, requestChannel.metrics)
             requestChannel.sendRequest(req)

@@ -30,7 +30,7 @@ import kafka.utils.Implicits._
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.Reconfigurable
 import org.apache.kafka.common.config.ConfigDef.{ConfigKey, ValidList}
-import org.apache.kafka.common.config.internals.BrokerSecurityConfigs
+import org.apache.kafka.common.config.internals.{BrokerSecurityConfigs, ConfluentConfigs}
 import org.apache.kafka.common.config.{AbstractConfig, ConfigDef, ConfigException, SaslConfigs, SslConfigs, TopicConfig}
 import org.apache.kafka.common.metrics.Sensor
 import org.apache.kafka.common.network.ListenerName
@@ -1030,6 +1030,10 @@ object KafkaConfig {
       .define(PasswordEncoderCipherAlgorithmProp, STRING, Defaults.PasswordEncoderCipherAlgorithm, LOW, PasswordEncoderCipherAlgorithmDoc)
       .define(PasswordEncoderKeyLengthProp, INT, Defaults.PasswordEncoderKeyLength, atLeast(8), LOW, PasswordEncoderKeyLengthDoc)
       .define(PasswordEncoderIterationsProp, INT, Defaults.PasswordEncoderIterations, atLeast(1024), LOW, PasswordEncoderIterationsDoc)
+
+      /** ********* Confluent Configuration ****************/
+      .defineInternal(ConfluentConfigs.BROKER_INTERCEPTOR_CLASS_CONFIG, CLASS,
+        ConfluentConfigs.BROKER_INTERCEPTOR_CLASS_DEFAULT, LOW)
   }
 
   def configNames() = configDef.names().asScala.toList.sorted

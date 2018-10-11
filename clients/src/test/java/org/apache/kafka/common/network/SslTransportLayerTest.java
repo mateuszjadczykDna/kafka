@@ -23,8 +23,8 @@ import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.memory.MemoryPool;
 import org.apache.kafka.common.metrics.Metrics;
-import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.security.TestSecurityConfig;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
@@ -848,7 +848,7 @@ public class SslTransportLayerTest {
 
     @Test
     public void testClosePlaintext() throws Exception {
-        testClose(SecurityProtocol.PLAINTEXT, new PlaintextChannelBuilder(null));
+        testClose(SecurityProtocol.PLAINTEXT, new PlaintextChannelBuilder(Mode.CLIENT, null));
     }
 
     private void testClose(SecurityProtocol securityProtocol, ChannelBuilder clientChannelBuilder) throws Exception {
