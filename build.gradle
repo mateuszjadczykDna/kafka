@@ -1728,23 +1728,11 @@ project(':ce-broker-plugins') {
     dependsOn 'copyDependantLibs'
   }
 
-  shadowJar {
-    baseName = 'ce-broker-plugins-all'
-    classifier = null
-    version = null
-    mergeServiceFiles()
-    relocate 'com.google.protobuf', 'io.confluent.shaded.com.google.protobuf'
-    relocate 'com.google.common', 'io.confluent.shaded.com.google.common'
-    relocate 'com.google.gson', 'io.confluent.shaded.com.google.gson'
-  }
-
   checkstyle {
     // Checkstyle is disabled for now on this subproject.  One reason is
     // because the checkstyle import-control plugin can't handle subprojects
     // where there is more than one root package.  See:
     // https://stackoverflow.com/questions/16142898/checkstyle-rule-to-limit-interactions-between-root-packages-with-importcontrol
-    //
-    // Another reason is because 
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
     sourceSets = []
   }
