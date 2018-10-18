@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#
+# Copyright 2016-2017 Confluent Inc.
+#
+
+set -o nounset \
+    -o errexit \
+    -o verbose \
+    -o xtrace
+
+dub ensure KAFKA_SECRETS_DIR
+dub ensure KAFKA_LOG4J_DIR
+dub ensure KAFKA_CONFIG_DIR
+dub ensure CAAS_POD_ID
+
+if [ -e /mnt/sslcerts/fullchain.pem ] && [ -e /mnt/sslcerts/privkey.pem ]; then
+
+openssl pkcs12 -export \
+	-in /mnt/sslcerts/fullchain.pem \
+	-inkey /mnt/sslcerts/privkey.pem \
+	-out /tmp/pkcs.p12 \
+	-name kafkassl \
+	-passout pass:mykeypassword
+
+keytool -importkeystore \
+	-deststorepass mystorepassword \
+	-destkeypass mykeypassword \
+	-destkeystore /tmp/keystore.jks \
+	-srckeystore /tmp/pkcs.p12 \
+	-srcstoretype PKCS12 \
+	-srcstorepass mykeypassword 
+
+fi
+
+# TODO - final configs need to go in a writable scratch directory
+cat ${KAFKA_CONFIG_DIR}/shared/server-common.properties > /opt/caas/config/kafka/"${COMPONENT}".properties
+cat ${KAFKA_CONFIG_DIR}/pod/${CAAS_POD_ID}/server-pod.properties >> /opt/caas/config/kafka/"${COMPONENT}".properties
+cat  /opt/caas/config/kafka/"${COMPONENT}".properties
+cat ${KAFKA_CONFIG_DIR}/shared/log4j.properties >  /opt/caas/config/kafka/log4j.properties
+cat ${KAFKA_CONFIG_DIR}/pod/${CAAS_POD_ID}/log4j.properties >> /opt/caas/config/kafka/log4j.properties
+cat ${KAFKA_CONFIG_DIR}/shared/disk-usage-agent.properties >  /opt/caas/config/kafka/disk-usage-agent.properties
+cat ${KAFKA_CONFIG_DIR}/shared/jvm.config > /opt/caas/config/kafka/jvm.config
+cat ${KAFKA_CONFIG_DIR}/pod/${CAAS_POD_ID}/jvm.config >> /opt/caas/config/kafka/jvm.config
+cp /opt/caas/templates/jmx-exporter.yaml.j2 /opt/caas/config/jmx-exporter.yaml
