@@ -45,6 +45,7 @@ import org.apache.kafka.common.requests.ControlledShutdownResponse;
 import org.apache.kafka.common.requests.CreateAclsRequest;
 import org.apache.kafka.common.requests.CreateAclsResponse;
 import org.apache.kafka.common.requests.CreatePartitionsRequest;
+import org.apache.kafka.common.requests.CreatePartitionsRequest.PartitionDetails;
 import org.apache.kafka.common.requests.CreatePartitionsResponse;
 import org.apache.kafka.common.requests.CreateTopicsRequest;
 import org.apache.kafka.common.requests.CreateTopicsResponse;
@@ -1128,9 +1129,9 @@ public class MultiTenantRequestContextTest {
   public void testCreatePartitionsRequest() throws Exception {
     for (short ver = ApiKeys.CREATE_PARTITIONS.oldestVersion(); ver <= ApiKeys.CREATE_PARTITIONS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_PARTITIONS, ver);
-      Map<String, NewPartitions> requestTopics = new HashMap<>();
-      requestTopics.put("foo", NewPartitions.increaseTo(4));
-      requestTopics.put("bar", NewPartitions.increaseTo(4));
+      Map<String, PartitionDetails> requestTopics = new HashMap<>();
+      requestTopics.put("foo", new PartitionDetails(4));
+      requestTopics.put("bar", new PartitionDetails(4));
       CreatePartitionsRequest inbound = new CreatePartitionsRequest.Builder(requestTopics, 30000, false).build(ver);
       CreatePartitionsRequest request = (CreatePartitionsRequest) parseRequest(context, inbound);
       assertEquals(asSet("tenant_foo", "tenant_bar"), request.newPartitions().keySet());

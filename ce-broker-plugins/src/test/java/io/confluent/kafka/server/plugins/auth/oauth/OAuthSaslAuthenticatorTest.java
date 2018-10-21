@@ -1,6 +1,7 @@
 package io.confluent.kafka.server.plugins.auth.oauth;
 
 import io.confluent.kafka.clients.plugins.auth.oauth.OAuthBearerLoginCallbackHandler;
+import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.network.CertStores;
 import org.apache.kafka.common.network.ChannelBuilder;
 import org.apache.kafka.common.network.NioEchoServer;
@@ -15,6 +16,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.security.authenticator.CredentialCache;
 import org.apache.kafka.common.security.authenticator.LoginManager;
 import org.apache.kafka.common.security.authenticator.TestJaasConfig;
+import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.junit.After;
 import org.junit.Before;
@@ -46,7 +48,7 @@ public class OAuthSaslAuthenticatorTest {
     this.saslServerConfigs = serverCertStores.getTrustingConfig(clientCertStores);
     this.saslClientConfigs = clientCertStores.getTrustingConfig(serverCertStores);
     this.credentialCache = new CredentialCache();
-    this.mockTime = new MockTime();
+    this.mockTime = new MockTime(1);
   }
 
   @After
@@ -127,7 +129,7 @@ public class OAuthSaslAuthenticatorTest {
   private void createAndCheckClientConnectionFailure(SecurityProtocol securityProtocol, String node)
           throws Exception {
     createClientConnection(securityProtocol, node);
-    NetworkTestUtils.waitForChannelClose(selector, node, ChannelState.State.AUTHENTICATION_FAILED, this.mockTime);
+    NetworkTestUtils.waitForChannelClose(selector, node, ChannelState.State.AUTHENTICATION_FAILED);
     selector.close();
     selector = null;
   }
@@ -147,7 +149,10 @@ public class OAuthSaslAuthenticatorTest {
     String saslMechanism = (String) this.saslClientConfigs.get("sasl.mechanism");
     ChannelBuilder channelBuilder = ChannelBuilders.clientChannelBuilder(securityProtocol, JaasContext.Type.CLIENT,
             new TestSecurityConfig(clientConfigs), (ListenerName) null, saslMechanism, true);
-    this.selector = NetworkTestUtils.createSelector(channelBuilder, this.mockTime);
+    // Create the selector manually instead of using NetworkTestUtils so we can use a longer timeout
+    this.selector = new Selector(25000L, new Metrics(), this.mockTime, "MetricGroup",
+    channelBuilder, new LogContext());
+
   }
 
   private NioEchoServer createEchoServer(SecurityProtocol securityProtocol) throws Exception {
