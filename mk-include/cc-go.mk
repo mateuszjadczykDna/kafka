@@ -1,0 +1,121 @@
+SERVICE_NAME ?=
+MAIN_GO ?= main.go
+GO_OUTDIR ?= bin
+
+# for terraform
+MODULE_NAME ?= $(SERVICE_NAME)
+# for docker images
+IMAGE_NAME ?= $(SERVICE_NAME)
+# for helm charts
+CHART_NAME ?= $(SERVICE_NAME)
+
+BASE_IMAGE ?= confluent-docker.jfrog.io/confluentinc/cc-service-base
+BASE_VERSION ?= 1.9
+
+GO_LDFLAGS ?= "-X main.version=$(VERSION)"
+
+ALL_SRC = $(shell find . -type d -path ./vendor -prune -o -name \*.go -not -name bindata.go -print)
+
+CODECOV ?= false
+GO_TEST_ARGS ?= -race -v -cover
+GO_CODECOV_TEST_ARGS ?= -race -v
+
+GO111MODULE ?= off
+export GO111MODULE
+DEP_VERSION ?= v0.5.0
+ifeq ($(CI),true)
+DEP_ARGS := -vendor-only
+endif
+
+GO_BUILD_TARGET ?= build-go
+GO_TEST_TARGET ?= lint-go test-go
+GO_CLEAN_TARGET ?= clean-go
+
+INIT_CI_TARGETS += deps
+BUILD_TARGETS += $(GO_BUILD_TARGET)
+TEST_TARGETS += $(GO_TEST_TARGET)
+CLEAN_TARGETS += $(GO_CLEAN_TARGET)
+
+.PHONY: show-go
+## Show Go Variables
+show-go:
+	@echo "SERVICE_NAME: $(SERVICE_NAME)"
+	@echo "MAIN_GO: $(MAIN_GO)"
+	@echo "GO_OUTDIR: $(GO_OUTDIR)"
+	@echo "GO_LDFLAGS: $(GO_LDFLAGS)"
+	@echo "DEP_ARGS: $(DEP_ARGS)"
+	@echo "IMAGE_NAME: $(IMAGE_NAME)"
+	@echo "CHART_NAME: $(CHART_NAME)"
+	@echo "MODULE_NAME: $(MODULE_NAME)"
+	@echo "GO111MODULE: $(GO111MODULE)"
+
+.PHONY: clean-go
+clean-go:
+	rm -rf $(SERVICE_NAME) .netrc bin/
+
+.PHONY: vet
+vet:
+	@go list ./... | grep -v vendor | xargs go vet
+
+.PHONY: deps
+## Install and run dep ensure (with -vendor-only if on CI) or run go mod download
+deps:
+ifeq ($(GO111MODULE),off)
+	@(dep version | grep $(DEP_VERSION)) || (mkdir -p $(GOPATH)/bin && DEP_RELEASE_TAG=$(DEP_VERSION) curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh && dep version)
+	dep ensure $(DEP_ARGS)
+else
+	@test -f Gopkg.toml && echo "WARNING: GO111MODULE enabled but Gopkg.toml found!" || true
+	@test -f go.mod || echo "ERROR: GO111MODULE enabled but go.mod not found!"
+	@test -f go.sum || echo "ERROR: GO111MODULE enabled but go.sum not found!"
+	go mod download
+	go mod verify
+endif
+
+.PHONY: lint-go
+## Lints (gofmt) and vets (go vet) project
+lint-go: vet
+	@test -z "$$(gofmt -e -s -l -d $(ALL_SRC) | tee /dev/tty)"
+
+.PHONY: fmt
+# Format entire codebase
+fmt:
+	@gofmt -e -s -l -w $(ALL_SRC)
+
+.PHONY: build-go
+## Build just the go project, override with BUILD_GO_OVERRIDE
+build-go: $(BUILD_GO_OVERRIDE)
+ifeq ($(BUILD_GO_OVERRIDE),)
+	go build -o $(GO_OUTDIR)/$(SERVICE_NAME) -ldflags $(GO_LDFLAGS) $(MAIN_GO)
+endif
+
+.PHONY: install
+## Install the go binary into $GOBIN
+install:
+	go build -o $(GOBIN)/$(SERVICE_NAME) $(MAIN_GO)
+
+.PHONY: run
+## Run MAIN_GO
+run: deps
+	go run $(MAIN_GO)
+
+.PHONY: test-go
+## Run Go Tests
+test-go:
+ifeq ($(CI)$(CODECOV),truetrue)
+	test -f coverage.txt && truncate -s 0 coverage.txt || true
+	go test $(GO_CODECOV_TEST_ARGS) -coverprofile=coverage.txt ./...
+	curl -s https://codecov.io/bash | bash
+else
+	go test $(GO_TEST_ARGS) ./...
+endif
+
+.PHONY: generate
+## Run go generate
+generate:
+	go generate
+
+.PHONY: seed-local-mothership
+seed-local-mothership:
+	psql -d postgres -c 'DROP DATABASE IF EXISTS mothership;'
+	psql -d postgres -c 'CREATE DATABASE mothership;'
+	psql -d mothership -f mk-include/seed-db/mothership-seed.sql

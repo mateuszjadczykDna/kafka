@@ -20,7 +20,7 @@ RUN tar -xzvf /home/gradle/core/build/distributions/kafka_*-SNAPSHOT.tgz --strip
 
 ##########
 
-FROM 368821881613.dkr.ecr.us-west-2.amazonaws.com/confluentinc/cc-base:v2.1.0
+FROM confluent-docker.jfrog.io/confluentinc/cc-base:v2.1.0
 
 ARG version
 ARG confluent_version
