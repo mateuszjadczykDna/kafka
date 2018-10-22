@@ -161,7 +161,7 @@ public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallback
     }
 
     callback.valid(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY);
-    log.info("Successfully authenticated for user: {} (cluster: {})",
+    log.debug("Successfully authenticated for user: {} (cluster: {})",
             token.principalName(), logicalCluster);
   }
 

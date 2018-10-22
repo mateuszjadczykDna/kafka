@@ -76,7 +76,7 @@ public class PlainSaslServer implements MultiTenantSaslServer {
     } catch (Exception e) {
       stats.incrFailed();
       String cause = e.getCause() == null ? "" : e.getCause().getMessage();
-      logger.info("SASL/PLAIN authentication failed: {}", cause, e);
+      logger.debug("SASL/PLAIN authentication failed: {}", cause, e);
       throw e;
     } finally {
       clearMdc();
@@ -140,7 +140,7 @@ public class PlainSaslServer implements MultiTenantSaslServer {
     MDC.put("tenant", tenantMetadata.tenantName);
     tenantStats.onSuccessfulAuthentication(principal);
 
-    logger.info("SASL/PLAIN authentication succeeded for user {}", username);
+    logger.debug("SASL/PLAIN authentication succeeded for user {}", username);
     complete = true;
     return new byte[0];
   }
