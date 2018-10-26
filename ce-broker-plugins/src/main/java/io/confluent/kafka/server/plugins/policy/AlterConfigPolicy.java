@@ -5,18 +5,15 @@ package io.confluent.kafka.server.plugins.policy;
 import java.util.Map;
 
 import org.apache.kafka.common.config.ConfigResource;
-import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.PolicyViolationException;
 
 public class AlterConfigPolicy implements org.apache.kafka.server.policy.AlterConfigPolicy {
-  private short requiredMinIsrs = 2;
+  TopicPolicyConfig policyConfig;
 
   @Override
   public void configure(Map<String, ?> cfgMap) {
-    TopicPolicyConfig policyConfig = new TopicPolicyConfig(cfgMap);
-    requiredMinIsrs = policyConfig.getShort(TopicPolicyConfig.MIN_IN_SYNC_REPLICAS_CONFIG);
+    this.policyConfig = new TopicPolicyConfig(cfgMap);
   }
-
 
   @Override
   public void validate(RequestMetadata reqMetadata) throws PolicyViolationException {
@@ -30,15 +27,7 @@ public class AlterConfigPolicy implements org.apache.kafka.server.policy.AlterCo
   }
 
   void validateTopicRequest(RequestMetadata reqMetadata) throws PolicyViolationException {
-    Map<String, String> configs = reqMetadata.configs();
-    if (configs != null && configs.containsKey(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG)) {
-      short minIsrsPassed = Short.parseShort(configs.get(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG));
-      if (minIsrsPassed != requiredMinIsrs) {
-        throw new PolicyViolationException(String.format("Topic config '%s' must be %s",
-            TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG,
-            requiredMinIsrs));
-      }
-    }
+    this.policyConfig.validateTopicConfigs(reqMetadata.configs());
   }
 
   @Override

@@ -31,6 +31,13 @@ import java.net.InetAddress;
 // the package to build without depending on the interceptor patch which is applied
 // during packaging.
 public interface BrokerInterceptor extends Configurable {
+
+  void onAuthenticatedConnection(String connectionId, InetAddress clientAddress,
+                                 KafkaPrincipal principal, Metrics metrics);
+
+  void onAuthenticatedDisconnection(String connectionId, InetAddress clientAddress,
+                                    KafkaPrincipal principal, Metrics metrics);
+
   RequestContext newContext(RequestHeader header,
                             String connectionId,
                             InetAddress clientAddress,

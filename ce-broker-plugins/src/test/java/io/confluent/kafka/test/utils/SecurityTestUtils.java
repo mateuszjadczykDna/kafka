@@ -1,8 +1,7 @@
 // (Copyright) [2018 - 2018] Confluent, Inc.
 
-package io.confluent.kafka.security.test.utils;
+package io.confluent.kafka.test.utils;
 
-import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService;
 import java.io.File;
 import java.util.Set;
 import javax.security.auth.login.Configuration;
@@ -11,15 +10,14 @@ import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
-import kafka.utils.TestUtils;
+import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.authenticator.LoginManager;
 import scala.collection.JavaConversions;
 
 public class SecurityTestUtils {
 
-  public static String createScramUser(String zkConnect, String userName) {
-    String password = userName + "-secret";
+  public static String createScramUser(String zkConnect, String userName, String password) {
     String credentials = String.format("SCRAM-SHA-256=[iterations=4096,password=%s]", password);
     String[] args = {
         "--zookeeper", zkConnect,
@@ -55,16 +53,6 @@ public class SecurityTestUtils {
     return builder.toString();
   }
 
-  public static File createPrincipal(MiniKdcWithLdapService miniKdcWithLdapService, String principal) {
-    try {
-      File keytabFile = TestUtils.tempFile();
-      miniKdcWithLdapService.createPrincipals(keytabFile, principal);
-      return keytabFile;
-    } catch (Exception e) {
-      throw new RuntimeException("Could not create keytab", e);
-    }
-  }
-
   public static void clearSecurityConfigs() {
     System.getProperties().stringPropertyNames().stream()
         .filter(name -> name.startsWith("java.security.krb5"))
@@ -93,20 +81,24 @@ public class SecurityTestUtils {
     };
   }
 
-  public static String[] produceAclArgs(String zkConnect, KafkaPrincipal principal, String topic) {
+  public static String[] produceAclArgs(String zkConnect, KafkaPrincipal principal, String topic,
+      PatternType patternType) {
     return new String[]{
         "--authorizer-properties", "zookeeper.connect=" + zkConnect,
         "--add",
+        "--resource-pattern-type=" + patternType.name(),
         "--topic=" + topic,
         "--producer",
         "--allow-principal=" + principal
     };
   }
 
-  public static String[] consumeAclArgs(String zkConnect, KafkaPrincipal principal, String topic, String consumerGroup) {
+  public static String[] consumeAclArgs(String zkConnect, KafkaPrincipal principal,
+      String topic, String consumerGroup, PatternType patternType) {
     return new String[]{
         "--authorizer-properties", "zookeeper.connect=" + zkConnect,
         "--add",
+        "--resource-pattern-type=" + patternType.name(),
         "--topic=" + topic,
         "--group=" + consumerGroup,
         "--consumer",
@@ -114,27 +106,32 @@ public class SecurityTestUtils {
     };
   }
 
-  public static String[] addConsumerGroupAclArgs(String zkConnect, KafkaPrincipal principal, String consumerGroup, String op) {
+  public static String[] addConsumerGroupAclArgs(String zkConnect, KafkaPrincipal principal,
+      String consumerGroup, Operation op, PatternType patternType) {
     return new String[]{
         "--authorizer-properties", "zookeeper.connect=" + zkConnect,
         "--add",
+        "--resource-pattern-type=" + patternType.name(),
         "--group=" + consumerGroup,
-        "--operation=" + op,
+        "--operation=" + op.name(),
         "--allow-principal=" + principal
     };
   }
 
-  public static String[] addTopicAclArgs(String zkConnect, KafkaPrincipal principal, String topic, String op) {
+  public static String[] addTopicAclArgs(String zkConnect, KafkaPrincipal principal,
+      String topic, Operation op, PatternType patternType) {
     return new String[]{
         "--authorizer-properties", "zookeeper.connect=" + zkConnect,
         "--add",
+        "--resource-pattern-type=" + patternType.name(),
         "--topic=" + topic,
-        "--operation=" + op,
+        "--operation=" + op.name(),
         "--allow-principal=" + principal
     };
   }
 
-  public static String[] deleteTopicAclArgs(String zkConnect, KafkaPrincipal principal, String topic, String op) {
+  public static String[] deleteTopicAclArgs(String zkConnect, KafkaPrincipal principal,
+      String topic, String op) {
     return new String[]{
         "--authorizer-properties", "zookeeper.connect=" + zkConnect,
         "--remove",
@@ -145,7 +142,8 @@ public class SecurityTestUtils {
     };
   }
 
-  public static void waitForAclUpdate(Authorizer authorizer, Resource resource, Operation op, boolean deleted) {
+  public static void waitForAclUpdate(Authorizer authorizer, Resource resource,
+      Operation op, boolean deleted) {
     try {
       org.apache.kafka.test.TestUtils.waitForCondition(() -> {
         Set<Acl> acls = JavaConversions.setAsJavaSet(authorizer.getAcls(resource));

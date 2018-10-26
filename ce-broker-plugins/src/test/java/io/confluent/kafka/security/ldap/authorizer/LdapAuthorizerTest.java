@@ -9,10 +9,10 @@ import com.yammer.metrics.core.MetricName;
 import io.confluent.kafka.security.ldap.license.InvalidLicenseException;
 import io.confluent.kafka.security.ldap.license.LicenseValidator.LicenseStatus;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService;
-import io.confluent.kafka.security.test.utils.EmbeddedKafkaCluster;
 import io.confluent.kafka.security.test.utils.LdapTestUtils;
 import io.confluent.kafka.security.test.utils.LicenseTestUtils;
-import io.confluent.kafka.security.test.utils.SecurityTestUtils;
+import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
+import io.confluent.kafka.test.utils.SecurityTestUtils;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Arrays;
@@ -45,6 +45,7 @@ import kafka.security.auth.SimpleAclAuthorizer;
 import kafka.security.auth.Topic$;
 import kafka.security.auth.Write$;
 import kafka.server.KafkaConfig$;
+import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.MockTime;
 import org.junit.After;
@@ -79,7 +80,7 @@ public class LdapAuthorizerTest {
     miniKdcWithLdapService = LdapTestUtils.createMiniKdcWithLdapService(null, null);
     ldapAuthorizer = new LdapAuthorizer();
     authorizerConfig = new HashMap<>();
-    authorizerConfig.put(KafkaConfig$.MODULE$.ZkConnectProp(), kafkaCluster.zkConnectString());
+    authorizerConfig.put(KafkaConfig$.MODULE$.ZkConnectProp(), kafkaCluster.zkConnect());
     authorizerConfig.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, 10));
   }
 
@@ -294,28 +295,28 @@ public class LdapAuthorizerTest {
   }
 
   private Void addTopicAcl(KafkaPrincipal principal, Resource topic, Operation op) {
-    AclCommand.main(SecurityTestUtils.addTopicAclArgs(kafkaCluster.zkConnectString(),
-        principal, topic.name(), op.name()));
+    AclCommand.main(SecurityTestUtils.addTopicAclArgs(kafkaCluster.zkConnect(),
+        principal, topic.name(), op, PatternType.LITERAL));
     SecurityTestUtils.waitForAclUpdate(ldapAuthorizer, topic, op, false);
     return null;
   }
 
   private Void addConsumerGroupAcl(KafkaPrincipal principal, Resource group, Operation op) {
-    AclCommand.main(SecurityTestUtils.addConsumerGroupAclArgs(kafkaCluster.zkConnectString(),
-        principal, group.name(), op.name()));
+    AclCommand.main(SecurityTestUtils.addConsumerGroupAclArgs(kafkaCluster.zkConnect(),
+        principal, group.name(), op, PatternType.LITERAL));
     SecurityTestUtils.waitForAclUpdate(ldapAuthorizer, group, op, false);
     return null;
   }
 
   private Void addClusterAcl(KafkaPrincipal principal, Operation op) {
-    AclCommand.main(SecurityTestUtils.clusterAclArgs(kafkaCluster.zkConnectString(),
+    AclCommand.main(SecurityTestUtils.clusterAclArgs(kafkaCluster.zkConnect(),
         principal, op.name()));
     SecurityTestUtils.waitForAclUpdate(ldapAuthorizer, CLUSTER_RESOURCE, op, false);
     return null;
   }
 
   private void deleteTopicAcl(KafkaPrincipal principal, Resource topic, Operation op) {
-    AclCommand.main(SecurityTestUtils.deleteTopicAclArgs(kafkaCluster.zkConnectString(),
+    AclCommand.main(SecurityTestUtils.deleteTopicAclArgs(kafkaCluster.zkConnect(),
         principal, topic.name(), op.name()));
     SecurityTestUtils.waitForAclUpdate(ldapAuthorizer, topic, op, true);
   }

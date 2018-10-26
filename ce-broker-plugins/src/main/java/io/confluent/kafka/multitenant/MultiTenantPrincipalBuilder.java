@@ -47,9 +47,10 @@ public class MultiTenantPrincipalBuilder implements KafkaPrincipalBuilder {
         String logicalCluster = (String) server.getNegotiatedProperty(
                 OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY);
 
+        // OAuth tokens are used only from UI, so this is a super-user.
         return new MultiTenantPrincipal(
                 token.principalName(),
-                new TenantMetadata(logicalCluster, logicalCluster)
+                new TenantMetadata.Builder(logicalCluster).superUser(true).build()
         );
       } else {
         return new KafkaPrincipal(KafkaPrincipal.USER_TYPE, authId);

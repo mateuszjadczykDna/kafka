@@ -7,39 +7,36 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
-import org.apache.kafka.common.metrics.stats.Meter;
 import org.apache.kafka.common.metrics.stats.Min;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 
 import io.confluent.kafka.multitenant.MultiTenantPrincipal;
 
-public class ApiSensorBuilder {
+import static io.confluent.kafka.multitenant.metrics.TenantMetrics.GROUP;
+import static io.confluent.kafka.multitenant.metrics.TenantMetrics.TENANT_TAG;
+import static io.confluent.kafka.multitenant.metrics.TenantMetrics.USER_TAG;
+
+public class ApiSensorBuilder extends AbstractSensorBuilder<ApiSensors> {
 
   public static final long EXPIRY_SECONDS = TimeUnit.DAYS.toSeconds(7);
-  private static final String GROUP = "tenant-metrics";
   private static final String REQUEST_TAG = "request";
   private static final String ERROR_TAG = "error";
-  private static final String TENANT_TAG = "tenant";
-  private static final String USER_TAG = "user";
 
+  private final ApiKeys apiKey;
   private static final String REQUEST_RATE = "request";
   private static final String REQUEST_BYTE_RATE = "request-byte";
   private static final String RESPONSE_BYTE_RATE = "response-byte";
   private static final String RESPONSE_TIME_NANOS = "response-time-ns";
   private static final String ERROR_COUNT = "error";
-  private static final Map<String, AbstractSensorCreator> requestResponseSensorCreators;
-  private static final EnumMap<Errors, AbstractSensorCreator> errorSensorCreators;
+  private static final Map<Errors, ErrorCountSensorCreator> errorSensorCreators;
+  private static final Map<String, AbstractApiSensorCreator> requestResponseSensorCreators;
 
-  private static final ReadWriteLock lock = new ReentrantReadWriteLock();
 
   static {
     requestResponseSensorCreators = new HashMap<>();
@@ -57,44 +54,46 @@ public class ApiSensorBuilder {
     }
   }
 
-  private final Metrics metrics;
-  private final MultiTenantPrincipal principal;
-  private final ApiKeys apiKey;
-
   public ApiSensorBuilder(Metrics metrics, MultiTenantPrincipal principal, ApiKeys apiKey) {
-    this.metrics = metrics;
-    this.principal = principal;
+    super(metrics, principal);
     this.apiKey = apiKey;
   }
 
+  @Override
   public ApiSensors build() {
-    Map<String, Sensor> sensors = getOrCreateRequestResponseSensors();
+    Map<String, Sensor> sensors = getOrCreateSuffixedSensors();
     return new ApiSensors(sensors.get(REQUEST_RATE),
         sensors.get(REQUEST_BYTE_RATE),
         sensors.get(RESPONSE_BYTE_RATE),
         sensors.get(RESPONSE_TIME_NANOS));
   }
 
+  @Override
+  protected String sensorSuffix(String unused, MultiTenantPrincipal principal) {
+    return String.format(":%s-%s:%s-%s:%s-%s", REQUEST_TAG, apiKey.name,
+            TENANT_TAG, principal.tenantMetadata().tenantName,
+            USER_TAG, principal.user());
+  }
+
+  @Override
+  protected Map<String, ? extends AbstractSensorCreator> sensorCreators() {
+    return ApiSensorBuilder.requestResponseSensorCreators;
+  }
+
+  @Override
+  <T> Sensor createSensor(Map<T, ? extends AbstractSensorCreator> sensorCreators,
+                          T sensorKey, String sensorName) {
+    AbstractApiSensorCreator sensorCreator =
+            (AbstractApiSensorCreator) sensorCreators.get(sensorKey);
+    return sensorCreator.createSensor(metrics, sensorName, principal, apiKey);
+  }
+
   public void addErrorSensors(ApiSensors apiSensors, Set<Errors> errors) {
     apiSensors.addErrorSensors(getOrCreateErrorSensors(errors));
   }
 
-  private String sensorSuffix(MultiTenantPrincipal principal, ApiKeys apiKey) {
-    return String.format(":%s-%s:%s-%s:%s-%s", REQUEST_TAG, apiKey.name,
-        TENANT_TAG, principal.tenantMetadata().tenantName, USER_TAG, principal.getName());
-  }
-
-  private Map<String, Sensor> getOrCreateRequestResponseSensors() {
-    String sensorSuffix = sensorSuffix(principal, apiKey);
-    Map<String, String> sensorsToFind = new HashMap<>();
-    for (String name : requestResponseSensorCreators.keySet()) {
-      sensorsToFind.put(name, name + sensorSuffix);
-    }
-    return getOrCreateSensors(sensorsToFind, requestResponseSensorCreators);
-  }
-
   private Map<Errors, Sensor> getOrCreateErrorSensors(Set<Errors> errors) {
-    String sensorSuffix = sensorSuffix(principal, apiKey);
+    String sensorSuffix = sensorSuffix("", principal);
     Map<Errors, String> sensorsToFind = new HashMap<>();
     for (Errors error: errors) {
       String sensorName = String.format("%s:%s-%s%s", ERROR_COUNT, ERROR_TAG, error.name(),
@@ -104,84 +103,22 @@ public class ApiSensorBuilder {
     return getOrCreateSensors(sensorsToFind, errorSensorCreators);
   }
 
-  private <T> Map<T, Sensor> getOrCreateSensors(Map<T, String> sensorsToFind,
-      Map<T, AbstractSensorCreator> sensorCreators) {
-    Map<T, Sensor> sensors;
-    lock.readLock().lock();
-    try {
-      sensors = findSensors(metrics, sensorsToFind);
-      sensorsToFind.keySet().removeAll(sensors.keySet());
-    } finally {
-      lock.readLock().unlock();
-    }
-
-    if (!sensorsToFind.isEmpty()) {
-      lock.writeLock().lock();
-      try {
-        Map<T, Sensor> existingSensors = findSensors(metrics, sensorsToFind);
-        sensorsToFind.keySet().removeAll(existingSensors.keySet());
-        sensors.putAll(existingSensors);
-
-        for (Map.Entry<T, String> entry : sensorsToFind.entrySet()) {
-          T key = entry.getKey();
-          String sensorName = entry.getValue();
-          Sensor sensor = sensorCreators.get(key).createSensor(metrics, sensorName,
-              principal, apiKey);
-          sensors.put(key, sensor);
-        }
-      } finally {
-        lock.writeLock().unlock();
-      }
-    }
-    return sensors;
-  }
-
-  private <T> Map<T, Sensor> findSensors(Metrics metrics, Map<T, String> sensorNames) {
-    Map<T, Sensor> existingSensors = new HashMap<>();
-    for (Map.Entry<T, String> entry : sensorNames.entrySet()) {
-      Sensor sensor = metrics.getSensor(entry.getValue());
-      if (sensor != null) {
-        existingSensors.put(entry.getKey(), sensor);
-      }
-    }
-    return existingSensors;
-  }
-
-  private abstract static class AbstractSensorCreator {
-    protected final String name;
-    protected final String descriptiveName;
-
-    AbstractSensorCreator(String name, String descriptiveName) {
-      this.name = name;
-      this.descriptiveName = descriptiveName;
+  private abstract static class AbstractApiSensorCreator extends AbstractSensorCreator {
+    AbstractApiSensorCreator(String name, String descriptiveName) {
+      super(name, descriptiveName);
     }
 
     abstract Sensor createSensor(Metrics metrics, String sensorName, MultiTenantPrincipal principal,
         ApiKeys apiKey);
 
-    protected Sensor createSensor(Metrics metrics, String sensorName) {
-      return metrics.sensor(sensorName, metrics.config(), EXPIRY_SECONDS);
-    }
-
     Map<String, String> metricTags(MultiTenantPrincipal principal, ApiKeys apiKey) {
-      Map<String, String> tags = new HashMap<>();
+      Map<String, String> tags = tenantTags(principal);
       tags.put(REQUEST_TAG, apiKey.name);
-      tags.put(TENANT_TAG, principal.tenantMetadata().tenantName);
-      tags.put(USER_TAG, principal.getName());
       return tags;
-    }
-
-    protected Meter createMeter(Metrics metrics, String groupName, Map<String, String> metricTags,
-        String baseName, String descriptiveName) {
-      MetricName rateMetricName = metrics.metricName(baseName + "-rate", groupName,
-          String.format("The number of %s per second", descriptiveName), metricTags);
-      MetricName totalMetricName = metrics.metricName(baseName + "-total", groupName,
-          String.format("The total number of %s", descriptiveName), metricTags);
-      return new Meter(rateMetricName, totalMetricName);
     }
   }
 
-  private static class RequestSensorCreator extends AbstractSensorCreator {
+  private static class RequestSensorCreator extends AbstractApiSensorCreator {
     private final boolean toCreateMinMaxAvgMetrics;
     private final boolean toCreateMeterMetrics;
 
@@ -229,7 +166,7 @@ public class ApiSensorBuilder {
   }
 
 
-  private static class ErrorCountSensorCreator extends AbstractSensorCreator {
+  private static class ErrorCountSensorCreator extends AbstractApiSensorCreator {
     private final Errors error;
 
     ErrorCountSensorCreator(Errors error) {

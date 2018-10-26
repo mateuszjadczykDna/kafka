@@ -11,7 +11,6 @@ import org.apache.kafka.clients.admin.ListTopicsOptions;
 import org.apache.kafka.clients.admin.ListTopicsResult;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.PolicyViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,18 +28,20 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
   private static final String LISTENER_SECURITY_PROTOCOL = "listener.security.protocol.map";
   private static final int TIMEOUT_MS = 500;
 
-  private short requiredRepFactor = 3;
-  private short requiredMinIsrs = 2;
-  private int maxPartitionsPerTenant = 512;
+  private short requiredRepFactor;
+  private int maxPartitionsPerTenant;
+  private TopicPolicyConfig policyConfig;
+
   Map<String, String> adminClientProps = new HashMap<>();
 
   @Override
   public void configure(Map<String, ?> cfgMap) {
-    TopicPolicyConfig policyConfig = new TopicPolicyConfig(cfgMap);
+    this.policyConfig = new TopicPolicyConfig(cfgMap);
+
     requiredRepFactor = policyConfig.getShort(TopicPolicyConfig.REPLICATION_FACTOR_CONFIG);
-    requiredMinIsrs = policyConfig.getShort(TopicPolicyConfig.MIN_IN_SYNC_REPLICAS_CONFIG);
     maxPartitionsPerTenant =
             policyConfig.getInt(TopicPolicyConfig.MAX_PARTITIONS_PER_TENANT_CONFIG);
+
     String listener = policyConfig.getString(TopicPolicyConfig.INTERNAL_LISTENER_CONFIG);
 
     // get bootstrap broker from internal listener config
@@ -62,23 +63,18 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
 
   @Override
   public void validate(RequestMetadata reqMetadata) throws PolicyViolationException {
-    //Only apply policy to tenant topics
+    // Only apply policy to tenant topics
     if (!TenantContext.isTenantPrefixed(reqMetadata.topic())) {
       return;
     }
+
     Short repFactorPassed = reqMetadata.replicationFactor();
     if (repFactorPassed != null && repFactorPassed != requiredRepFactor) {
       throw new PolicyViolationException("Topic replication factor must be " + requiredRepFactor);
     }
-    Map<String, String> configs = reqMetadata.configs();
-    if (configs != null && configs.containsKey(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG)) {
-      short minIsrsPassed = Short.parseShort(configs.get(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG));
-      if (minIsrsPassed != requiredMinIsrs) {
-        throw new PolicyViolationException(String.format("Topic config '%s' must be %s",
-            TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG,
-            requiredMinIsrs));
-      }
-    }
+
+    this.policyConfig.validateTopicConfigs(reqMetadata.configs());
+
     if (reqMetadata.numPartitions() != null) {
       Map<String, Object> adminConfig = new HashMap<>();
       adminConfig.putAll(adminClientProps);

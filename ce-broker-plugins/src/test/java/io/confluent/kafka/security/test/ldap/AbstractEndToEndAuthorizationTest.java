@@ -10,10 +10,10 @@ import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizerConfig;
 import io.confluent.kafka.security.ldap.authorizer.LdapGroupManager;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityProtocol;
-import io.confluent.kafka.security.test.utils.EmbeddedKafkaCluster;
-import io.confluent.kafka.security.test.utils.KafkaTestUtils;
-import io.confluent.kafka.security.test.utils.SecurityTestUtils;
 import io.confluent.kafka.security.test.utils.User;
+import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
+import io.confluent.kafka.test.utils.KafkaTestUtils;
+import io.confluent.kafka.test.utils.SecurityTestUtils;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +29,7 @@ import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.errors.AuthorizationException;
 import org.apache.kafka.common.network.ListenerName;
+import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.security.scram.internals.ScramMechanism;
@@ -102,7 +103,7 @@ public abstract class AbstractEndToEndAuthorizationTest {
   public void setUp() throws Throwable {
     kafkaCluster = new EmbeddedKafkaCluster();
     kafkaCluster.startZooKeeper();
-    zkConnect = kafkaCluster.zkConnectString();
+    zkConnect = kafkaCluster.zkConnect();
 
     users = createUsers();
     kafkaCluster.startBrokers(1, kafkaServerConfig());
@@ -181,21 +182,23 @@ public abstract class AbstractEndToEndAuthorizationTest {
 
   protected void addAcls(KafkaPrincipal principal, String topic, String consumerGroup)
       throws Exception {
-    AclCommand.main(SecurityTestUtils.produceAclArgs(zkConnect, principal, topic));
-    AclCommand.main(SecurityTestUtils.consumeAclArgs(zkConnect, principal, topic, consumerGroup));
+    AclCommand.main(SecurityTestUtils.produceAclArgs(zkConnect, principal, topic,
+        PatternType.LITERAL));
+    AclCommand.main(SecurityTestUtils.consumeAclArgs(zkConnect, principal, topic, consumerGroup,
+        PatternType.LITERAL));
   }
 
   protected void produceConsume(User user, String topic, String consumerGroup, boolean authorized)
       throws Throwable {
     try (KafkaProducer<String, String> producer = createProducer(user)) {
-      KafkaTestUtils.sendRecords(producer, topic, 10);
+      KafkaTestUtils.sendRecords(producer, topic, 0, 10);
       assertTrue("No authorization exception from unauthorized client", authorized);
     } catch (AuthorizationException e) {
       assertFalse("Authorization exception from authorized client", authorized);
     }
 
     try (KafkaConsumer<String, String> consumer = createConsumer(user, consumerGroup)) {
-      KafkaTestUtils.consumeRecords(consumer, topic, 10);
+      KafkaTestUtils.consumeRecords(consumer, topic, 0, 10);
       assertTrue("No authorization exception from unauthorized client", authorized);
     } catch (AuthorizationException e) {
       assertFalse("Authorization exception from authorized client", authorized);
@@ -264,7 +267,8 @@ public abstract class AbstractEndToEndAuthorizationTest {
   private User createUser(String name, String saslMechanism) {
     User user;
     if (ScramMechanism.isScram(saslMechanism)) {
-      String scramSecret = SecurityTestUtils.createScramUser(zkConnect, name);
+      String password = name + "-secret";
+      String scramSecret = SecurityTestUtils.createScramUser(zkConnect, name, password);
       user = User.scramUser(name, scramSecret);
     } else if (saslMechanism.equals("GSSAPI")) {
       String hostSuffix = KAFKA_SERVICE.equals(name) ? "/localhost" : "";

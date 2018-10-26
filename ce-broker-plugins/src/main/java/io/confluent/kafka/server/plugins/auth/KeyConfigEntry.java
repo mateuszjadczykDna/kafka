@@ -13,14 +13,20 @@ class KeyConfigEntry {
   @SerializedName("user_id") final String userId;
   // logical cluster ID (appears to be it's own cluster from customer's POV)
   @SerializedName("logical_cluster_id") final String logicalClusterId;
+  @SerializedName("is_service_account") final String isServiceAccount;
 
   KeyConfigEntry(String saslMechanism, String hashedSecret, String hashFunction, String userId,
-      String tenantId, String logicalClusterId) {
+      String tenantId, String logicalClusterId, String isServiceAccount) {
     this.saslMechanism = saslMechanism;
     this.hashedSecret = hashedSecret;
     this.hashFunction = hashFunction;
     this.userId = userId;
     this.logicalClusterId = logicalClusterId;
+    this.isServiceAccount = isServiceAccount;
+  }
+
+  public boolean isServiceAccount() {
+    return Boolean.parseBoolean(isServiceAccount);
   }
 
   @Override
@@ -36,13 +42,14 @@ class KeyConfigEntry {
         && Objects.equals(hashedSecret, that.hashedSecret)
         && Objects.equals(hashFunction, that.hashFunction)
         && Objects.equals(userId, that.userId)
+        && Objects.equals(isServiceAccount, that.isServiceAccount)
         && Objects.equals(logicalClusterId, that.logicalClusterId);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(
-        saslMechanism, hashedSecret, hashFunction, userId, logicalClusterId
+        saslMechanism, hashedSecret, hashFunction, userId, isServiceAccount, logicalClusterId
     );
   }
 }

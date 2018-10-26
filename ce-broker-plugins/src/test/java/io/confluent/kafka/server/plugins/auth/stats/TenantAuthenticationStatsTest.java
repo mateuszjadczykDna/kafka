@@ -57,7 +57,7 @@ public class TenantAuthenticationStatsTest {
     principals.add(createPrincipal("tenant*4", "user:2"));
     for (MultiTenantPrincipal principal : principals) {
       for (int i = 0; i < 5; i++) {
-        authenticate(principal.tenantMetadata().tenantName, principal.getName());
+        authenticate(principal.tenantMetadata().tenantName, principal.user());
       }
     }
     assertEquals(principals.size(), mbeanServer.getMBeanCount() - startMBeanCount);
@@ -91,7 +91,7 @@ public class TenantAuthenticationStatsTest {
 
   private ObjectName mbeanName(MultiTenantPrincipal principal) throws Exception {
     return mbeanName(tenantStats.quoteIfRequired(principal.tenantMetadata().tenantName),
-        tenantStats.quoteIfRequired(principal.getName()));
+        tenantStats.quoteIfRequired(principal.user()));
   }
 
   private ObjectName mbeanName(String tenant, String user) throws Exception {

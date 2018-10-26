@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package io.confluent.kafka.security.test.utils;
+package io.confluent.kafka.test.cluster;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 import kafka.api.Request;
 import kafka.server.KafkaConfig$;
 import kafka.server.KafkaServer;
 import kafka.utils.MockTime;
-import kafka.utils.ZkUtils;
 import kafka.zk.EmbeddedZookeeper;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.requests.UpdateMetadataRequest;
 import org.apache.kafka.common.requests.UpdateMetadataRequest.PartitionState;
-import org.apache.kafka.common.security.JaasUtils;
 import org.apache.kafka.test.TestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,10 +40,8 @@ public class EmbeddedKafkaCluster {
   private static final int DEFAULT_BROKER_PORT = 0; // 0 results in a random port being selected
 
   private final MockTime time;
-  private EmbeddedZookeeper zookeeper = null;
-  private ZkUtils zkUtils = null;
-  private Properties brokerConfig;
-  private KafkaEmbedded[] brokers;
+  private EmbeddedZookeeper zookeeper;
+  private EmbeddedKafka[] brokers;
 
   public EmbeddedKafkaCluster() {
     time = new MockTime(System.currentTimeMillis(), System.nanoTime());
@@ -53,23 +50,17 @@ public class EmbeddedKafkaCluster {
   public void startZooKeeper() {
     logger.debug("Starting a ZooKeeper instance");
     zookeeper = new EmbeddedZookeeper();
-    logger.debug("ZooKeeper instance is running at {}", zkConnectString());
-
+    logger.debug("ZooKeeper instance is running at {}", zkConnect());
   }
 
-  public void startBrokers(int numBrokers, Properties brokerConfig) throws Exception {
-    logger.debug("Initiating embedded Kafka cluster startup with config {}", brokerConfig);
-    brokers = new KafkaEmbedded[numBrokers];
-    this.brokerConfig = brokerConfig;
+  public void startBrokers(int numBrokers, Properties overrideProps) throws Exception {
+    logger.debug("Initiating embedded Kafka cluster startup with config {}", overrideProps);
+    brokers = new EmbeddedKafka[numBrokers];
 
-    zkUtils = ZkUtils.apply(
-        zkConnectString(),
-        30000,
-        30000,
-        JaasUtils.isZkSecurityEnabled());
-
-    brokerConfig.put(KafkaConfig$.MODULE$.ZkConnectProp(), zkConnectString());
+    Properties brokerConfig = new Properties();
+    brokerConfig.put(KafkaConfig$.MODULE$.ZkConnectProp(), zkConnect());
     brokerConfig.put(KafkaConfig$.MODULE$.PortProp(), DEFAULT_BROKER_PORT);
+    brokerConfig.putAll(overrideProps);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.GroupInitialRebalanceDelayMsProp(), 0);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.OffsetsTopicReplicationFactorProp(), (short) 1);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.AutoCreateTopicsEnableProp(), true);
@@ -78,27 +69,23 @@ public class EmbeddedKafkaCluster {
       brokerConfig.put(KafkaConfig$.MODULE$.BrokerIdProp(), i);
       logger.debug("Starting a Kafka instance on port {} ...",
           brokerConfig.get(KafkaConfig$.MODULE$.PortProp()));
-      brokers[i] = new KafkaEmbedded(brokerConfig, time);
+      brokers[i] = new EmbeddedKafka.Builder(time).addConfigs(brokerConfig).build();
 
-      logger.debug("Kafka instance is running at {}, connected to ZooKeeper at {}",
-          brokers[i].brokerList(), brokers[i].zookeeperConnect());
+      logger.debug("Kafka instance started: {}", brokers[i]);
     }
   }
 
-  private void putIfAbsent(Properties props, String propertyKey, Object propertyValue) {
-    if (!props.containsKey(propertyKey)) {
+  private void putIfAbsent(Properties brokerConfig, String propertyKey, Object propertyValue) {
+    if (!brokerConfig.containsKey(propertyKey)) {
       brokerConfig.put(propertyKey, propertyValue);
     }
   }
 
   public void shutdown() {
     if (brokers != null) {
-      for (KafkaEmbedded broker : brokers) {
-        broker.stop();
+      for (EmbeddedKafka broker : brokers) {
+        broker.shutdown();
       }
-    }
-    if (zkUtils != null) {
-      zkUtils.close();
     }
     if (zookeeper != null) {
       zookeeper.shutdown();
@@ -108,18 +95,36 @@ public class EmbeddedKafkaCluster {
   /**
    * The ZooKeeper connection string aka `zookeeper.connect` in `hostnameOrIp:port` format. Example:
    * `127.0.0.1:2181`. <p> You can use this to e.g. tell Kafka brokers how to connect to this
-   * instance.
+   * instance. </p>
    */
-  public String zkConnectString() {
+  public String zkConnect() {
     return "127.0.0.1:" + zookeeper.port();
   }
 
   /**
-   * This cluster's `bootstrap.servers` value.  Example: `127.0.0.1:9092`. <p> You can use this to
-   * tell Kafka producers how to connect to this cluster.
+   * This cluster's `bootstrap.servers` value.  Example: `127.0.0.1:9092` for the specified listener
+   * <p>You can use this to tell Kafka producers how to connect to this cluster. </p>
+   */
+  public String bootstrapServers(String listener) {
+    return Arrays.asList(brokers).stream()
+        .map(broker -> broker.brokerConnect(listener))
+        .collect(Collectors.joining(","));
+  }
+
+  /**
+   * Bootstrap server's for the external listener
    */
   public String bootstrapServers() {
-    return brokers[0].brokerList();
+    List<String> listeners = brokers[0].listeners();
+    if (listeners.size() > 2) {
+      throw new IllegalStateException("Listener name not specified for listeners " + listeners);
+    }
+    String listener = listeners.get(0);
+    if (listeners.size() > 1
+        && brokers[0].kafkaServer().config().interBrokerListenerName().value().equals(listener)) {
+      listener = listeners.get(1);
+    }
+    return bootstrapServers(listener);
   }
 
   public void createTopic(String topic, int partitions, int replication) {
@@ -141,23 +146,23 @@ public class EmbeddedKafkaCluster {
       String topic = tp.topic();
       int partition = tp.partition();
       TestUtils.waitForCondition(() ->
-        servers.stream().map(server -> server.apis().metadataCache())
-            .allMatch(metadataCache -> {
-              Option<PartitionState> partInfo = metadataCache.getPartitionInfo(topic, partition);
-              if (partInfo.isEmpty()) {
-                return false;
-              }
-              UpdateMetadataRequest.PartitionState metadataPartitionState = partInfo.get();
-              return Request.isValidBrokerId(metadataPartitionState.basePartitionState.leader);
-            }) , "Metadata for topic=" + topic + " partition=" + partition + " not propagated");
+          servers.stream().map(server -> server.apis().metadataCache())
+              .allMatch(metadataCache -> {
+                Option<PartitionState> partInfo = metadataCache.getPartitionInfo(topic, partition);
+                if (partInfo.isEmpty()) {
+                  return false;
+                }
+                PartitionState metadataPartitionState = partInfo.get();
+                return Request.isValidBrokerId(metadataPartitionState.basePartitionState.leader);
+              }), "Metadata for topic=" + topic + " partition=" + partition + " not propagated");
     } catch (InterruptedException e) {
       throw new RuntimeException("Interrupted", e);
     }
   }
 
-  private List<KafkaServer> brokers() {
+  public List<KafkaServer> brokers() {
     List<KafkaServer> servers = new ArrayList<>();
-    for (KafkaEmbedded broker : brokers) {
+    for (EmbeddedKafka broker : brokers) {
       servers.add(broker.kafkaServer());
     }
     return servers;

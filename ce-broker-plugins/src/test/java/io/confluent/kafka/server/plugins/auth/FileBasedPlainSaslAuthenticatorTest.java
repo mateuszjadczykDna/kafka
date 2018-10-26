@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class FileBasedPlainSaslAuthenticatorTest {
@@ -54,18 +56,34 @@ public class FileBasedPlainSaslAuthenticatorTest {
   @Test
   public void testHashedPasswordAuth() throws Exception {
     MultiTenantPrincipal principal = saslAuth.authenticate("bkey", bcryptPassword);
-    assertEquals("23", principal.getName());
+    assertEquals("rufus_23", principal.getName());
+    assertEquals("23", principal.user());
     assertEquals("rufus", principal.tenantMetadata().tenantName);
     assertEquals("rufus", principal.tenantMetadata().clusterId);
+    assertTrue(principal.tenantMetadata().isSuperUser);
   }
 
   @Test
   public void testPlainPasswordAuth() throws Exception {
     for (int i = 0; i < 3; i++) {
       MultiTenantPrincipal principal = saslAuth.authenticate("pkey", "no hash");
-      assertEquals("7", principal.getName());
+      assertEquals("confluent_7", principal.getName());
+      assertEquals("7", principal.user());
       assertEquals("confluent", principal.tenantMetadata().tenantName);
       assertEquals("confluent", principal.tenantMetadata().clusterId);
+      assertTrue(principal.tenantMetadata().isSuperUser);
+    }
+  }
+
+  @Test
+  public void testServiceAcoountAuth() throws Exception {
+    for (int i = 0; i < 3; i++) {
+      MultiTenantPrincipal principal = saslAuth.authenticate("skey", "service secret");
+      assertEquals("test_service_11", principal.getName());
+      assertEquals("11", principal.user());
+      assertEquals("test_service", principal.tenantMetadata().tenantName);
+      assertEquals("test_service", principal.tenantMetadata().clusterId);
+      assertFalse(principal.tenantMetadata().isSuperUser);
     }
   }
 

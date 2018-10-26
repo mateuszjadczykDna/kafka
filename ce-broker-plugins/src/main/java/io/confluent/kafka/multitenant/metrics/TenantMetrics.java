@@ -6,6 +6,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
@@ -13,8 +14,27 @@ import org.apache.kafka.common.protocol.Errors;
 import io.confluent.kafka.multitenant.MultiTenantPrincipal;
 
 public class TenantMetrics {
+  public static final String TENANT_TAG = "tenant";
+  static final String USER_TAG = "user";
+  static final String GROUP = "tenant-metrics";
 
   private EnumMap<ApiKeys, ApiSensors> apiSensors = new EnumMap<>(ApiKeys.class);
+  private ConnectionSensors connectionSensors;
+  private PartitionSensors partitionSensors;
+
+  public void recordAuthenticatedConnection(Metrics metrics, MultiTenantPrincipal principal) {
+    if (connectionSensors == null) {
+      connectionSensors = new ConnectionSensorBuilder(metrics, principal).build();
+      connectionSensors.recordAuthenticatedConnection();
+    }
+  }
+
+  public void recordAuthenticatedDisconnection() {
+    if (connectionSensors != null) {
+      connectionSensors.recordAuthenticatedDisconnection();
+      connectionSensors = null;
+    }
+  }
 
   public void recordRequest(Metrics metrics, MultiTenantPrincipal principal, ApiKeys apiKey,
       long requestSize) {
@@ -36,12 +56,34 @@ public class TenantMetrics {
     sensors.recordErrors(errorCounts);
   }
 
+  public void recordPartitionBytesIn(Metrics metrics,
+                                     MultiTenantPrincipal principal,
+                                     TopicPartition topicPartition,
+                                     int size) {
+    partitionSensors(metrics, principal).recordBytesIn(topicPartition, size);
+  }
+
+
+  public void recordPartitionBytesOut(Metrics metrics,
+                                      MultiTenantPrincipal principal,
+                                      TopicPartition topicPartition,
+                                      int size) {
+    partitionSensors(metrics, principal).recordBytesOut(topicPartition, size);
+  }
+
   private ApiSensors apiSensors(Metrics metrics, MultiTenantPrincipal principal, ApiKeys apiKey) {
     ApiSensors sensors = apiSensors.get(apiKey);
     if (sensors == null) {
-      sensors =  new ApiSensorBuilder(metrics, principal, apiKey).build();
+      sensors = new ApiSensorBuilder(metrics, principal, apiKey).build();
       apiSensors.put(apiKey, sensors);
     }
     return sensors;
+  }
+
+  private PartitionSensors partitionSensors(Metrics metrics, MultiTenantPrincipal principal) {
+    if (partitionSensors == null) {
+      partitionSensors = new PartitionSensorBuilder(metrics, principal).build();
+    }
+    return partitionSensors;
   }
 }

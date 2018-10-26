@@ -9,6 +9,7 @@ import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityProtocol;
 
+import io.confluent.kafka.test.utils.SecurityTestUtils;
 import java.util.HashMap;
 import kafka.server.KafkaConfig$;
 import kafka.utils.TestUtils;
@@ -91,5 +92,15 @@ public class LdapTestUtils {
       String user, String... groups) throws Exception {
     org.apache.kafka.test.TestUtils.waitForCondition(() ->
         Utils.mkSet(groups).equals(ldapGroupManager.groups(user)), "Groups not refreshed");
+  }
+
+  public static File createPrincipal(MiniKdcWithLdapService miniKdcWithLdapService, String principal) {
+    try {
+      File keytabFile = TestUtils.tempFile();
+      miniKdcWithLdapService.createPrincipals(keytabFile, principal);
+      return keytabFile;
+    } catch (Exception e) {
+      throw new RuntimeException("Could not create keytab", e);
+    }
   }
 }

@@ -34,18 +34,20 @@ import static org.mockito.Mockito.when;
 public class CreateTopicPolicyTest {
 
   private static final String CLUSTER_ID = "mockClusterId";
-  private static final String TOPIC = "xx_test-topic";
   private static final String TENANT_PREFIX= "xx_";
+
+  private static final String TOPIC = "xx_test-topic";
   private static final short REPLICATION_FACTOR = 5;
-  private static final int MAX_PARTITIONS = 21;
   private static final short MIN_IN_SYNC_REPLICAS = 4;
+  private static final int MAX_PARTITIONS = 21;
+  private static final int MAX_MESSAGE_BYTES = 4242;
 
   private CreateTopicPolicy policy;
   private RequestMetadata requestMetadata;
-  private Map<String, String> config = new HashMap<>();
 
   @Before
   public void setUp() throws Exception {
+    Map<String, String> config = new HashMap<>();
     config.put(TopicPolicyConfig.REPLICATION_FACTOR_CONFIG, String.valueOf(REPLICATION_FACTOR));
     config.put(TopicPolicyConfig.MIN_IN_SYNC_REPLICAS_CONFIG, String.valueOf(MIN_IN_SYNC_REPLICAS));
     config.put(TopicPolicyConfig.MAX_PARTITIONS_PER_TENANT_CONFIG, String.valueOf(MAX_PARTITIONS));
@@ -53,10 +55,11 @@ public class CreateTopicPolicyTest {
                "INTERNAL://broker-1:9071,REPLICATION://broker-1:9072,EXTERNAL://broker-1");
     config.put("listener.security.protocol.map",
                "INTERNAL:PLAINTEXT,REPLICATION:PLAINTEXT,EXTERNAL:SASL_PLAINTEXT");
-
     policy = new CreateTopicPolicy();
     policy.configure(config);
+
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, String.valueOf(MAX_MESSAGE_BYTES))
         .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, String.valueOf(MIN_IN_SYNC_REPLICAS))
         .build();
     requestMetadata = mock(RequestMetadata.class);
@@ -131,6 +134,37 @@ public class CreateTopicPolicyTest {
     policy.validate(requestMetadata);
   }
 
+  // will throw exception because of failure to use AdminClient without kafka cluster
+  @Test(expected = RuntimeException.class)
+  public void validateValidTopicConfigsOk() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.CLEANUP_POLICY_CONFIG, "delete")
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "100")
+        .put(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG, "100")
+        .put(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG, "CreateTime")
+        .put(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "100")
+        .put(TopicConfig.RETENTION_BYTES_CONFIG, "100")
+        .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")
+        .build();
+    when(requestMetadata.replicationFactor()).thenReturn(null);
+    when(requestMetadata.numPartitions()).thenReturn(10);
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void validateInvalidTopicConfigsNotOk() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.DELETE_RETENTION_MS_CONFIG, "100") // allowed
+        .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "5")  // disallowed
+        .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")  // allowed
+        .build();
+    when(requestMetadata.replicationFactor()).thenReturn(null);
+    when(requestMetadata.numPartitions()).thenReturn(10);
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
   @Test(expected = PolicyViolationException.class)
   public void rejectsNoPartitionCountGiven() throws Exception {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
@@ -159,6 +193,33 @@ public class CreateTopicPolicyTest {
   @Test(expected = RuntimeException.class)
   public void rejectsBadNumPartitions() throws Exception {
     when(requestMetadata.numPartitions()).thenReturn(22);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectDeleteRetentionMsTooHigh() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.DELETE_RETENTION_MS_CONFIG, "60566400001")
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectSegmentBytesTooLow() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.SEGMENT_BYTES_CONFIG, "" + (50 * 1024 * 1024 - 1))
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectSegmentBytesTooHigh() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.SEGMENT_BYTES_CONFIG, "1073741825")
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
     policy.validate(requestMetadata);
   }
 

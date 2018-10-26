@@ -11,9 +11,10 @@
         <dependencySet>
             <useProjectArtifact>true</useProjectArtifact>
             <useTransitiveFiltering>false</useTransitiveFiltering>
-            <useTransitiveDependencies>false</useTransitiveDependencies>
+            <useTransitiveDependencies>true</useTransitiveDependencies>
             <useStrictFiltering>true</useStrictFiltering>
             <scope>runtime</scope>
         </dependencySet>
     </dependencySets>
 </assembly>
+

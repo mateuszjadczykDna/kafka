@@ -2,7 +2,9 @@
 
 package io.confluent.kafka.multitenant.schema;
 
+import io.confluent.kafka.multitenant.MultiTenantPrincipal;
 import io.confluent.kafka.multitenant.utils.Optional;
+import kafka.security.auth.Acl$;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.CommonFields;
@@ -13,6 +15,8 @@ import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.protocol.types.Type;
 
 import java.util.EnumMap;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.utils.SecurityUtils;
 
 /**
  * A cache of {@link TransformableSchema} for Kafka APIs which apply the multi-tenant
@@ -87,6 +91,9 @@ public class MultiTenantApis {
       case DESCRIBE_CONFIGS:
       case ALTER_CONFIGS:
       case SASL_AUTHENTICATE:
+      case CREATE_ACLS:
+      case DESCRIBE_ACLS:
+      case DELETE_ACLS:
         return true;
 
       case CREATE_PARTITIONS: // Disallowed until it supports custom policies
@@ -96,9 +103,6 @@ public class MultiTenantApis {
       case STOP_REPLICA:
       case OFFSET_FOR_LEADER_EPOCH:
       case WRITE_TXN_MARKERS:
-      case CREATE_ACLS:
-      case DESCRIBE_ACLS:
-      case DELETE_ACLS:
       case ALTER_REPLICA_LOG_DIRS:
       case DESCRIBE_LOG_DIRS:
       case CREATE_DELEGATION_TOKEN:
@@ -184,7 +188,7 @@ public class MultiTenantApis {
 
         case FIND_COORDINATOR:
           if (field != null && field.name.equals("coordinator_key")) {
-            return Optional.<TransformableType<TenantContext>>some(
+            return Optional.some(
                 new StringTenantTransformer(type, TenantContext.ValueType.GROUP,
                     TenantTransform.ADD_PREFIX));
           }
@@ -193,30 +197,30 @@ public class MultiTenantApis {
         case DESCRIBE_CONFIGS:
         case ALTER_CONFIGS:
           if (field != null && field.name.equals("resources") && type instanceof Schema) {
-            return Optional.<TransformableType<TenantContext>>some(
+            return Optional.some(
                 new ConfigResourceTenantTransformer(type, TenantTransform.ADD_PREFIX));
           }
           break;
 
         case CREATE_ACLS:
           if (field != null && field.name.equals("creations") && type instanceof Schema) {
-            return Optional.<TransformableType<TenantContext>>some(
-                new AclResourceTenantTransformer(type, TenantTransform.ADD_PREFIX));
+            return Optional.some(
+                new AclTenantTransformer(type, TenantTransform.ADD_PREFIX, false));
           }
           break;
 
         case DELETE_ACLS:
           if (field != null && field.name.equals("filters") && type instanceof Schema) {
-            return Optional.<TransformableType<TenantContext>>some(
-                new AclResourceTenantTransformer(type, TenantTransform.ADD_PREFIX));
+            return Optional.some(
+                new AclTenantTransformer(type, TenantTransform.ADD_PREFIX, false));
           }
           break;
 
         case DESCRIBE_ACLS:
           // The resource type and name are located in the root schema, which has no field
           if (field == null) {
-            return Optional.<TransformableType<TenantContext>>some(
-                new AclResourceTenantTransformer(type, TenantTransform.ADD_PREFIX));
+            return Optional.some(
+                new AclTenantTransformer(type, TenantTransform.ADD_PREFIX, false));
           }
           break;
 
@@ -226,7 +230,7 @@ public class MultiTenantApis {
 
       TenantContext.ValueType valueType = commonTransformableType(field);
       if (valueType != null) {
-        return Optional.<TransformableType<TenantContext>>some(
+        return Optional.some(
             new StringTenantTransformer(type, valueType, TenantTransform.ADD_PREFIX));
       }
 
@@ -243,14 +247,14 @@ public class MultiTenantApis {
     }
 
     @Override
-    public Optional<TransformableType<TenantContext>> maybeAddTransformableType(
+    public Optional maybeAddTransformableType(
         Field field, Type type) {
       switch (api) {
         case METADATA:
           if (field != null && field.name.equals("cluster_id")) {
             // Unlike the usual paths, the cluster id actually needs the tenant prefix
             // added in the response to ensure that each tenant sees a different id.
-            return Optional.<TransformableType<TenantContext>>some(
+            return Optional.some(
                 new ClusterIdSubstitution(type));
           }
           break;
@@ -258,22 +262,22 @@ public class MultiTenantApis {
         case DESCRIBE_CONFIGS:
         case ALTER_CONFIGS:
           if (field != null && field.name.equals("resources") && type instanceof Schema) {
-            return Optional.<TransformableType<TenantContext>>some(
+            return Optional.some(
                 new ConfigResourceTenantTransformer(type, TenantTransform.REMOVE_PREFIX));
           }
           break;
 
         case DELETE_ACLS:
           if (field != null && field.name.equals("matching_acls") && type instanceof Schema) {
-            return Optional.<TransformableType<TenantContext>>some(
-                new AclResourceTenantTransformer(type, TenantTransform.REMOVE_PREFIX));
+            return Optional.some(
+                new AclTenantTransformer(type, TenantTransform.REMOVE_PREFIX, false));
           }
           break;
 
         case DESCRIBE_ACLS:
           if (field != null && field.name.equals("resources") && type instanceof Schema) {
-            return Optional.<TransformableType<TenantContext>>some(
-                new AclResourceTenantTransformer(type, TenantTransform.REMOVE_PREFIX));
+            return Optional.some(
+                new AclTenantTransformer(type, TenantTransform.REMOVE_PREFIX, true));
           }
           break;
 
@@ -283,12 +287,12 @@ public class MultiTenantApis {
 
       TenantContext.ValueType valueType = commonTransformableType(field);
       if (valueType != null) {
-        return Optional.<TransformableType<TenantContext>>some(
+        return Optional.some(
             new StringTenantTransformer(type, valueType, TenantTransform.REMOVE_PREFIX));
       }
 
       if (field == CommonFields.ERROR_MESSAGE) {
-        return Optional.<TransformableType<TenantContext>>some(new ErrorMessageSanitizer(type));
+        return Optional.some(new ErrorMessageSanitizer(type));
       }
 
       return Optional.none();
@@ -343,7 +347,7 @@ public class MultiTenantApis {
 
   private abstract static class AbstractTenantTransformer
       extends AbstractTransformableType<TenantContext> {
-    private final TenantTransform transform;
+    protected final TenantTransform transform;
 
     AbstractTenantTransformer(Type type, TenantTransform transform) {
       super(type);
@@ -369,6 +373,13 @@ public class MultiTenantApis {
           return -ctx.prefixSizeInBytes;
         default:
           throw new IllegalArgumentException("Unhandled transform type " + transform);
+      }
+    }
+
+    protected void ensureStructField(Schema schema, String fieldName) {
+      if (schema.get(fieldName) == null) {
+        throw new IllegalArgumentException("Expected type " + schema + " to have "
+            + fieldName + " field");
       }
     }
   }
@@ -400,14 +411,12 @@ public class MultiTenantApis {
   }
 
   private static class ArrayTenantTransformer extends AbstractTenantTransformer {
-    private final TenantContext.ValueType valueType;
 
     private ArrayTenantTransformer(Type type, TenantContext.ValueType valueType,
                                    TenantTransform transform) {
       super(type, transform);
       ensureArrayType(type);
       ensureStringType(((ArrayOf) type).type());
-      this.valueType = valueType;
     }
 
     @Override
@@ -445,22 +454,14 @@ public class MultiTenantApis {
       }
 
       Schema schema = (Schema) type;
-      if (schema.get(RESOURCE_NAME) == null) {
-        throw new IllegalArgumentException("Expected type " + type + " to have "
-            + RESOURCE_NAME + " field");
-      }
-
-      if (schema.get(RESOURCE_TYPE) == null) {
-        throw new IllegalArgumentException("Expected type " + type + " to have "
-            + RESOURCE_TYPE + " field");
-      }
+      ensureStructField(schema, RESOURCE_NAME);
+      ensureStructField(schema, RESOURCE_TYPE);
     }
 
     @Override
     public Object transform(Object value, TenantContext ctx) {
       Struct struct = (Struct) value;
-      TenantContext.ValueType valueType = valueTypeOrNull(struct);
-      if (valueType != null) {
+      if (prefixableResource(struct)) {
         String name = struct.getString(RESOURCE_NAME);
         struct.set(RESOURCE_NAME, name == null ? null : transformString(name, ctx));
       }
@@ -471,8 +472,7 @@ public class MultiTenantApis {
     public int sizeOf(Object value, TenantContext ctx) {
       int size = type.sizeOf(value);
       Struct struct = (Struct) value;
-      TenantContext.ValueType valueType = valueTypeOrNull((Struct) value);
-      if (valueType != null) {
+      if (prefixableResource(struct)) {
         String name = struct.getString(RESOURCE_NAME);
         if (name != null) {
           size += sizeDelta(ctx);
@@ -481,7 +481,7 @@ public class MultiTenantApis {
       return size;
     }
 
-    abstract TenantContext.ValueType valueTypeOrNull(Struct struct);
+    abstract boolean prefixableResource(Struct struct);
   }
 
   private static class ConfigResourceTenantTransformer extends ResourceTenantTransformer {
@@ -490,7 +490,7 @@ public class MultiTenantApis {
     }
 
     @Override
-    TenantContext.ValueType valueTypeOrNull(Struct struct) {
+    boolean prefixableResource(Struct struct) {
       if (!struct.hasField(RESOURCE_TYPE)) {
         throw new IllegalArgumentException("Unexpected transform type " + struct);
       }
@@ -498,20 +498,78 @@ public class MultiTenantApis {
       ConfigResource.Type resourceType = ConfigResource.Type.forId(struct.getByte(RESOURCE_TYPE));
       switch (resourceType) {
         case TOPIC:
-          return TenantContext.ValueType.TOPIC;
+          return true;
         default:
-          return null;
+          return false;
       }
     }
   }
 
-  private static class AclResourceTenantTransformer extends ResourceTenantTransformer {
-    public AclResourceTenantTransformer(Type type, TenantTransform transform) {
+  /**
+   * ACLs contain:
+   *   (resourceType, resourceName): Resource names are prefixed/unprefixed here
+   *       using common code from ResourceTenantTransformer.
+   *       Further transformation into prefixed form for wildcards are done separately
+   *       since the transformation relies on creating requests of version 1 or higher.
+   *   principal: These are transformed here from User:userId to TenantUser:clusterId_userId
+   */
+  private static class AclTenantTransformer extends ResourceTenantTransformer {
+    private static final String PRINCIPAL = "principal";
+    private static final String ACLS = "acls";
+    private final boolean isDescribeResponse;
+
+    public AclTenantTransformer(Type type, TenantTransform transform, boolean isDescribeResponse) {
       super(type, transform);
+      this.isDescribeResponse = isDescribeResponse;
+      Schema schema = (Schema) type;
+      ensureStructField(schema, isDescribeResponse ? ACLS : PRINCIPAL);
     }
 
     @Override
-    TenantContext.ValueType valueTypeOrNull(Struct struct) {
+    public Object transform(Object value, TenantContext ctx) {
+      Struct struct = (Struct) super.transform(value, ctx);
+      if (!isDescribeResponse) {
+        String principal = struct.getString(PRINCIPAL);
+        struct.set(PRINCIPAL, transformPrincipal(principal, ctx));
+      } else {
+        Object[] acls = struct.getArray(ACLS);
+        if (acls != null) {
+          for (Object acl : acls) {
+            Struct aclStruct = (Struct) acl;
+            String principal = aclStruct.getString(PRINCIPAL);
+            aclStruct.set(PRINCIPAL, transformPrincipal(principal, ctx));
+          }
+        }
+      }
+      return struct;
+    }
+
+    @Override
+    public int sizeOf(Object value, TenantContext ctx) {
+      int size = super.sizeOf(value, ctx);
+      Struct struct = (Struct) value;
+
+      if (!isDescribeResponse) {
+        String principal = struct.getString(PRINCIPAL);
+        if (principal != null) {
+          size += transformPrincipal(principal, ctx).length() - principal.length();
+        }
+      } else {
+        Object[] acls = struct.getArray(ACLS);
+        if (acls != null) {
+          for (Object acl : acls) {
+            Struct aclStruct = (Struct) acl;
+            String principal = aclStruct.getString(PRINCIPAL);
+            if (principal != null) {
+              size += transformPrincipal(principal, ctx).length() - principal.length();
+            }
+          }
+        }
+      }
+      return size;
+    }
+
+    protected boolean prefixableResource(Struct struct) {
       if (!struct.hasField(RESOURCE_TYPE)) {
         throw new IllegalArgumentException("Unexpected transform type " + struct);
       }
@@ -520,15 +578,50 @@ public class MultiTenantApis {
           org.apache.kafka.common.resource.ResourceType.fromCode(struct.getByte(RESOURCE_TYPE));
       switch (resourceType) {
         case TOPIC:
-          return TenantContext.ValueType.TOPIC;
         case GROUP:
-          return TenantContext.ValueType.GROUP;
         case TRANSACTIONAL_ID:
-          return TenantContext.ValueType.TRANSACTIONAL_ID;
+        case CLUSTER:
+        case ANY:
+          // Prefix if not null.
+          return true;
         default:
-          return null;
+          return false;
+      }
+    }
+
+    String transformPrincipal(String principal, TenantContext ctx) {
+      // since all resource names are prefixed, it is safe to match all principals in filters
+      if (principal == null) {
+        return null;
+      }
+      KafkaPrincipal kafkaPrincipal = SecurityUtils.parseKafkaPrincipal(principal);
+      switch (transform) {
+        case ADD_PREFIX:
+          if (kafkaPrincipal.equals(Acl$.MODULE$.WildCardPrincipal())) {
+            return MultiTenantPrincipal.TENANT_WILDCARD_USER_TYPE + ":" + ctx.prefix();
+          } else {
+            String transformed = ctx.addTenantPrefix(kafkaPrincipal.getName());
+            return MultiTenantPrincipal.TENANT_USER_TYPE + ":" + transformed;
+          }
+        case REMOVE_PREFIX:
+          String user = kafkaPrincipal.getName();
+          boolean tenantWildcard = kafkaPrincipal.getPrincipalType()
+              .equals(MultiTenantPrincipal.TENANT_WILDCARD_USER_TYPE);
+          if (user.equals("*")) {
+            throw new IllegalStateException("Non-tenant ACLs have not been filtered out");
+          } else if (tenantWildcard) {
+            if (!user.equals(ctx.prefix())) {
+              throw new IllegalStateException("Wildcard with different tenant not filtered out");
+            } else {
+              return Acl$.MODULE$.WildCardPrincipal().toString();
+            }
+          } else {
+            String transformed = ctx.removeTenantPrefix(kafkaPrincipal.getName());
+            return KafkaPrincipal.USER_TYPE + ":" + transformed;
+          }
+        default:
+          throw new IllegalArgumentException("Unhandled transform type " + transform);
       }
     }
   }
-
 }

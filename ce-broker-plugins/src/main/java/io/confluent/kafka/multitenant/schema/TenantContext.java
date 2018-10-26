@@ -9,12 +9,12 @@ import org.apache.kafka.common.internals.Topic;
 import org.apache.kafka.common.utils.Utils;
 
 public class TenantContext implements TransformContext {
-  static final String DELIMITER = "_";
+  public static final String DELIMITER = "_";
 
   public enum ValueType { TOPIC, GROUP, TRANSACTIONAL_ID }
 
   public final MultiTenantPrincipal principal;
-  protected final String prefix;
+  private final String prefix;
   protected final int prefixSizeInBytes;
 
   public static boolean isTenantPrefixed(String prefixedName) {
@@ -26,6 +26,13 @@ public class TenantContext implements TransformContext {
       throw new IllegalArgumentException("Name is not tenant-prefixed: " + prefixedName);
     }
     return prefixedName.substring(0, prefixedName.indexOf(DELIMITER) + 1);
+  }
+
+  public static String extractTenant(String prefixedName) {
+    if (!isTenantPrefixed(prefixedName)) {
+      throw new IllegalArgumentException("Name is not tenant-prefixed: " + prefixedName);
+    }
+    return prefixedName.substring(0, prefixedName.indexOf(DELIMITER));
   }
 
   public TenantContext(MultiTenantPrincipal principal) {
@@ -55,6 +62,10 @@ public class TenantContext implements TransformContext {
     return prefix + value;
   }
 
+  public String prefix() {
+    return prefix;
+  }
+
   public TopicPartition removeTenantPrefix(TopicPartition tp) {
     return new TopicPartition(removeTenantPrefix(tp.topic()), tp.partition());
   }
@@ -77,6 +88,10 @@ public class TenantContext implements TransformContext {
 
   public int sizeOfRemovedPrefixes(String message) {
     return message.length() - removeAllTenantPrefixes(message).length();
+  }
+
+  public String prefixedWildcard() {
+    return prefix + "*";
   }
 
 }

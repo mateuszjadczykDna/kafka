@@ -2,6 +2,7 @@
 
 package io.confluent.kafka.security.test.utils;
 
+import io.confluent.kafka.test.utils.SecurityTestUtils;
 import java.io.File;
 
 public class User {

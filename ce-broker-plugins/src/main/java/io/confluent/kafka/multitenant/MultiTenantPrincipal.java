@@ -6,16 +6,25 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 public class MultiTenantPrincipal extends KafkaPrincipal {
 
+  public static final String TENANT_USER_TYPE = "TenantUser";
+  public static final String TENANT_WILDCARD_USER_TYPE = MultiTenantPrincipal.TENANT_USER_TYPE
+      + "*";
+
+  private final String user;
   private final TenantMetadata tenantMetadata;
 
-  public MultiTenantPrincipal(String username, TenantMetadata tenantMetadata) {
-    super(KafkaPrincipal.USER_TYPE, username);
-
+  public MultiTenantPrincipal(String user, TenantMetadata tenantMetadata) {
+    super(TENANT_USER_TYPE, tenantMetadata.tenantPrefix()  + user);
+    this.user = user;
     this.tenantMetadata = tenantMetadata;
   }
 
   public TenantMetadata tenantMetadata() {
     return tenantMetadata;
+  }
+
+  public String user() {
+    return user;
   }
 
   @Override
@@ -46,7 +55,11 @@ public class MultiTenantPrincipal extends KafkaPrincipal {
   public String toString() {
     return "MultiTenantPrincipal("
         + "tenantMetadata=" + tenantMetadata + ", "
-        + "user=" + getName() + ")";
+        + "user=" + user + ")";
+  }
+
+  public static final boolean isTenantPrincipal(KafkaPrincipal principal) {
+    return principal.getPrincipalType().startsWith(TENANT_USER_TYPE);
   }
 
 }

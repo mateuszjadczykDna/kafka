@@ -13,8 +13,11 @@ import com.google.gson.stream.JsonReader;
 
 import io.confluent.kafka.multitenant.MultiTenantPrincipal;
 import io.confluent.kafka.multitenant.TenantMetadata;
+import io.confluent.kafka.multitenant.quota.QuotaConfig;
+import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
 import io.confluent.kafka.server.plugins.auth.stats.TenantAuthenticationStats;
 
+import java.util.stream.Collectors;
 import org.apache.kafka.common.config.ConfigException;
 
 import java.io.FileInputStream;
@@ -36,6 +39,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class SecretsLoader {
   static final String KEY = "key";
+  private static final String DEFAULT_QUOTA_KEY  = "";
   private final LoadingCache<String, Map<String, KeyConfigEntry>> cache;
 
   public SecretsLoader(String filePath, long refreshMs) {
@@ -53,15 +57,15 @@ public class SecretsLoader {
     return cache.get(KEY);
   }
 
-  static Map<String, KeyConfigEntry> loadFile(final String filePath) {
+  static TenantConfig loadFile(final String filePath) {
     final Gson gson = new Gson();
-    final Type collectionType =
-        new TypeToken<Map<String, Map<String, KeyConfigEntry>>>() { } .getType();
+    final Type collectionType = new TypeToken<TenantConfig>() { } .getType();
     try (final JsonReader reader = new JsonReader(
         new InputStreamReader(new FileInputStream(filePath), StandardCharsets.UTF_8)
     )) {
-      Map<String, Map<String, KeyConfigEntry>> config = gson.fromJson(reader, collectionType);
-      return validateConfig(config);
+      TenantConfig tenantConfig = gson.fromJson(reader, collectionType);
+      validateConfig(tenantConfig);
+      return tenantConfig;
     } catch (FileNotFoundException e) {
       throw new ConfigException("Config file not found: " + filePath, e);
     } catch (JsonSyntaxException e) {
@@ -71,17 +75,14 @@ public class SecretsLoader {
     }
   }
 
-  static Map<String, KeyConfigEntry> validateConfig(
-      Map<String, Map<String, KeyConfigEntry>> config
-  ) {
-    if (!config.containsKey("keys")) {
+  static void validateConfig(TenantConfig tenantConfig) {
+    if (tenantConfig.apiKeys == null) {
       throw new ConfigException("Missing top level \"keys\"");
     }
-    Map<String, KeyConfigEntry> keys = config.get("keys");
-    for (Map.Entry<String, KeyConfigEntry> entry : keys.entrySet()) {
-      validateKeyEntry(entry);
+    tenantConfig.apiKeys.entrySet().forEach(SecretsLoader::validateKeyEntry);
+    if (tenantConfig.quotas != null) {
+      tenantConfig.quotas.entrySet().forEach(SecretsLoader::validateQuotaEntry);
     }
-    return keys;
   }
 
   private static void validateKeyEntry(Map.Entry<String, KeyConfigEntry> entry) {
@@ -104,6 +105,19 @@ public class SecretsLoader {
     if (isEmpty(v.saslMechanism)) {
       throw new ConfigException("sasl_mechanism field is missing for key " + entry.getKey());
     }
+    if (v.isServiceAccount != null && !v.isServiceAccount.equalsIgnoreCase("true")
+        && !v.isServiceAccount.equalsIgnoreCase("false")) {
+      throw new ConfigException("is_service_account field is invalid for key " + entry.getKey()
+          + " value=" + v.isServiceAccount);
+    }
+  }
+
+  private static void validateQuotaEntry(Map.Entry<String, QuotaConfigEntry> entry) {
+    String tenant = entry.getKey();
+    QuotaConfigEntry v = entry.getValue();
+    if (v == null) {
+      throw new ConfigException("Missing quota value for tenant " + tenant);
+    }
   }
 
   private static boolean isEmpty(String str) {
@@ -122,7 +136,11 @@ public class SecretsLoader {
       if (!key.equals(KEY)) {
         throw new IllegalArgumentException("Unexpected key: " + key);
       }
-      Map<String, KeyConfigEntry> entries = SecretsLoader.loadFile(filePath);
+      TenantConfig tenantConfig = SecretsLoader.loadFile(filePath);
+      Map<String, KeyConfigEntry> entries = tenantConfig.apiKeys;
+      if (tenantConfig.quotas != null) {
+        notifyTenantQuotaCallback(tenantConfig.quotas);
+      }
       removeUnusedStatsMbeans(entries);
       return entries;
     }
@@ -130,10 +148,27 @@ public class SecretsLoader {
     private void removeUnusedStatsMbeans(Map<String, KeyConfigEntry> validEntries) {
       Set<MultiTenantPrincipal> validPrincipals = new HashSet<>();
       for (KeyConfigEntry entry : validEntries.values()) {
-        validPrincipals.add(new MultiTenantPrincipal(entry.userId,
-            new TenantMetadata(entry.logicalClusterId, entry.logicalClusterId)));
+        TenantMetadata tenantMetadata = new TenantMetadata.Builder(entry.logicalClusterId)
+            .superUser(!entry.isServiceAccount()).build();
+        validPrincipals.add(new MultiTenantPrincipal(entry.userId, tenantMetadata));
       }
       TenantAuthenticationStats.instance().removeUnusedMBeans(validPrincipals);
     }
+  }
+
+  private static void notifyTenantQuotaCallback(Map<String, QuotaConfigEntry> quotas) {
+    QuotaConfigEntry defaultQuotaEntry = quotas.get(DEFAULT_QUOTA_KEY);
+    QuotaConfig defaultQuota = defaultQuotaEntry == null ? QuotaConfig.UNLIMITED_QUOTA
+        : quotaConfig(defaultQuotaEntry, QuotaConfig.UNLIMITED_QUOTA);
+    Map<String, QuotaConfig> tenantQuotas = quotas.entrySet().stream()
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> quotaConfig(e.getValue(), defaultQuota)));
+    TenantQuotaCallback.updateQuotas(tenantQuotas, defaultQuota);
+  }
+
+  private static QuotaConfig quotaConfig(QuotaConfigEntry config, QuotaConfig defaultQuota) {
+    return new QuotaConfig(config.producerByteRate,
+                           config.consumerByteRate,
+                           config.requestPercentage,
+                           defaultQuota);
   }
 }

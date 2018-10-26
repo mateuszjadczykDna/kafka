@@ -77,7 +77,7 @@ public class TenantAuthenticationStats {
       throws MalformedObjectNameException {
     String name = String.format("%s,tenant=%s,user=%s", MBEAN_NAME,
         quoteIfRequired(principal.tenantMetadata().tenantName),
-        quoteIfRequired(principal.getName()));
+        quoteIfRequired(principal.user()));
     return new ObjectName(name);
   }
 

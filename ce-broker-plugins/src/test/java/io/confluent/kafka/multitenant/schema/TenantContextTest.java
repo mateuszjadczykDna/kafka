@@ -79,10 +79,10 @@ public class TenantContextTest {
     assertEquals("", context.removeTenantPrefix("tenant_"));
 
     String message = "This is a message referring to the empty group 'tenant_'";
-    assertTrue(message.contains(context.prefix));
+    assertTrue(message.contains(context.prefix()));
 
     String cleanedMessage = context.removeAllTenantPrefixes(message);
-    assertFalse(cleanedMessage.contains(context.prefix));
+    assertFalse(cleanedMessage.contains(context.prefix()));
   }
 
 }

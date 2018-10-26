@@ -1,6 +1,7 @@
 package io.confluent.kafka.server.plugins.auth.oauth;
 
 import io.confluent.kafka.clients.plugins.auth.oauth.OAuthBearerLoginCallbackHandler;
+
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.network.CertStores;
 import org.apache.kafka.common.network.ChannelBuilder;
@@ -109,11 +110,13 @@ public class OAuthSaslAuthenticatorTest {
             "\" cluster=\"" + allowedCluster + "\";");
 
     this.saslServerConfigs.put("sasl.enabled.mechanisms", serverMechanisms);
+    this.saslServerConfigs.put("listener.name.sasl_ssl.oauthbearer.sasl.login.callback.handler." +
+            "class", OAuthBearerServerLoginCallbackHandler.class.getName());
     this.saslServerConfigs.put("listener.name.sasl_ssl.oauthbearer.sasl.server.callback" +
             ".handler.class", OAuthBearerValidatorCallbackHandler.class.getName());
     this.saslServerConfigs.put("listener.name.sasl_ssl.oauthbearer.sasl.jaas.config",
             "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required " +
-                    "unsecuredLoginStringClaim_sub=\"Confluent\" publicKeyPath=\"" +
+                    "publicKeyPath=\"" +
                     jwsContainer.getPublicKeyFile().toPath() +  "\";");
 
     TestJaasConfig.createConfiguration(clientMechanism, serverMechanisms);
@@ -151,8 +154,7 @@ public class OAuthSaslAuthenticatorTest {
             new TestSecurityConfig(clientConfigs), (ListenerName) null, saslMechanism, mockTime, true);
     // Create the selector manually instead of using NetworkTestUtils so we can use a longer timeout
     this.selector = new Selector(25000L, new Metrics(), this.mockTime, "MetricGroup",
-    channelBuilder, new LogContext());
-
+        channelBuilder, new LogContext());
   }
 
   private NioEchoServer createEchoServer(SecurityProtocol securityProtocol) throws Exception {

@@ -25,16 +25,21 @@ public class AlterConfigPolicyTest {
     config.put(TopicPolicyConfig.REPLICATION_FACTOR_CONFIG, "5");
     config.put(TopicPolicyConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "4");
     config.put(TopicPolicyConfig.MAX_PARTITIONS_PER_TENANT_CONFIG, "21");
+    config.put(TopicPolicyConfig.MAX_MESSAGE_BYTES_MAX_CONFIG, "3145728");
+
     policy = new AlterConfigPolicy();
     policy.configure(config);
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "4")
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "4242")
         .build();
+
     requestMetadata = mock(RequestMetadata.class);
     when(requestMetadata.configs()).thenReturn(topicConfigs);
     ConfigResource cfgResource = new ConfigResource(ConfigResource.Type.TOPIC, "dummy");
     when(requestMetadata.resource()).thenReturn(cfgResource);
   }
+
   @Test
   public void validateParamsSetOk() throws Exception {
     policy.validate(requestMetadata);
@@ -49,9 +54,88 @@ public class AlterConfigPolicyTest {
   }
 
   @Test(expected = PolicyViolationException.class)
+  public void rejectDeleteRetentionMsTooHigh() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.DELETE_RETENTION_MS_CONFIG, "60566400001")
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectSegmentBytesTooLow() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.SEGMENT_BYTES_CONFIG, "" + (50 * 1024 * 1024 - 1))
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectSegmentBytesTooHigh() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.SEGMENT_BYTES_CONFIG, "1073741825")
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test
+  public void validateAllAllowedProperties() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.CLEANUP_POLICY_CONFIG, "delete")
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "100")
+        .put(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG, "100")
+        .put(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG, "CreateTime")
+        .put(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "100")
+        .put(TopicConfig.RETENTION_BYTES_CONFIG, "100")
+        .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
   public void rejectsBadMinIsrs() throws Exception {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3")
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectDissallowedConfigProperty2() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "100") // allowed
+        .put(TopicConfig.SEGMENT_MS_CONFIG, "100") // disallowed
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void rejectMaxMessageBytesOutOfRange() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "4123123") // above max configured limit.
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test
+  public void acceptMaxMessageBytesAtLimit() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "3145728") // equal to max limit.
+        .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
+  @Test
+  public void acceptMaxMessageBytesInRange() throws Exception {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+        .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "10000")
         .build();
     when(requestMetadata.configs()).thenReturn(topicConfigs);
     policy.validate(requestMetadata);

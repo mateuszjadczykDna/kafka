@@ -7,7 +7,6 @@ import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityProtocol;
 import io.confluent.kafka.security.test.utils.LdapTestUtils;
-import io.confluent.kafka.security.test.utils.SecurityTestUtils;
 import io.confluent.kafka.security.test.utils.User;
 import java.io.File;
 import java.util.ArrayList;
@@ -91,7 +90,7 @@ public class LdapGroupEndToEndAuthorizationTest extends AbstractEndToEndAuthoriz
 
   @Override
   protected User createGssapiUser(String name, String principal) {
-    File keytabFile = SecurityTestUtils.createPrincipal(miniKdcWithLdapService, principal);
+    File keytabFile = LdapTestUtils.createPrincipal(miniKdcWithLdapService, principal);
     String serviceName = KAFKA_SERVICE.equals(ldapUser) ? null : KAFKA_SERVICE;
     return User.gssapiUser(name, principal + "@EXAMPLE.COM", keytabFile, serviceName);
   }

@@ -12,7 +12,16 @@
       "hashed_secret": "no hash",
       "hash_function": "none",
       "user_id": "7",
-      "logical_cluster_id": "confluent"
+      "logical_cluster_id": "confluent",
+      "is_service_account": "false"
+    },
+    "skey": {
+      "sasl_mechanism": "PLAIN",
+      "hashed_secret": "service secret",
+      "hash_function": "none",
+      "user_id": "11",
+      "logical_cluster_id": "test_service",
+      "is_service_account": "true"
     }
   }
 }
