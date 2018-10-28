@@ -148,7 +148,7 @@ public class OAuthSaslAuthenticatorTest {
 
     String saslMechanism = (String) this.saslClientConfigs.get("sasl.mechanism");
     ChannelBuilder channelBuilder = ChannelBuilders.clientChannelBuilder(securityProtocol, JaasContext.Type.CLIENT,
-            new TestSecurityConfig(clientConfigs), (ListenerName) null, saslMechanism, true);
+            new TestSecurityConfig(clientConfigs), (ListenerName) null, saslMechanism, mockTime, true);
     // Create the selector manually instead of using NetworkTestUtils so we can use a longer timeout
     this.selector = new Selector(25000L, new Metrics(), this.mockTime, "MetricGroup",
     channelBuilder, new LogContext());
