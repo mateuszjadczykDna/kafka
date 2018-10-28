@@ -39,8 +39,6 @@ import org.apache.kafka.common.{KafkaException, Node, TopicPartition}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.collection.{Set, mutable}
-import org.apache.kafka.common.config.ClientDnsLookup
-
 
 object ControllerChannelManager {
   val QueueSizeMetricName = "QueueSize"
@@ -118,6 +116,7 @@ class ControllerChannelManager(controllerContext: ControllerContext, config: Kaf
         config,
         config.interBrokerListenerName,
         config.saslMechanismInterBrokerProtocol,
+        time,
         config.saslInterBrokerHandshakeRequestEnable
       )
       val selector = new Selector(
