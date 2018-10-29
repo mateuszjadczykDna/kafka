@@ -3,7 +3,6 @@
 package io.confluent.kafka.server.plugins.policy;
 
 import io.confluent.kafka.multitenant.schema.TenantContext;
-import kafka.security.auth.Create;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.DescribeTopicsOptions;
@@ -158,7 +157,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     try {
       ListTopicsResult result = adminClient.listTopics(listTopicsOptions);
       Collection<String> topicNames = result.names().get();
-      logger.debug("Topics: {}", (topicNames != null ? topicNames : "[]"));
+      logger.debug("Topics: {}", topicNames != null ? topicNames : "[]");
       if (topicNames != null) {
         DescribeTopicsResult topicsResult = adminClient.describeTopics(topicNames,
                 describeTopicsOptions);

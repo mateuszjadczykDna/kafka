@@ -56,7 +56,7 @@ public class SecretsLoader {
   static Map<String, KeyConfigEntry> loadFile(final String filePath) {
     final Gson gson = new Gson();
     final Type collectionType =
-        new TypeToken<Map<String, Map<String, KeyConfigEntry>>>(){}.getType();
+        new TypeToken<Map<String, Map<String, KeyConfigEntry>>>() { } .getType();
     try (final JsonReader reader = new JsonReader(
         new InputStreamReader(new FileInputStream(filePath), StandardCharsets.UTF_8)
     )) {

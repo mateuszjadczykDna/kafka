@@ -1746,8 +1746,8 @@ project(':ce-broker-plugins') {
     // because the checkstyle import-control plugin can't handle subprojects
     // where there is more than one root package.  See:
     // https://stackoverflow.com/questions/16142898/checkstyle-rule-to-limit-interactions-between-root-packages-with-importcontrol
+    ignoreFailures = true
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
-    sourceSets = []
   }
 }
 

@@ -220,4 +220,19 @@
 
     <suppress checks=".+"
               files="ce-serializers/build/generated/.+.java$"/>
+
+    <!-- ce-broker-plugins exclusions -->
+    <!--TODO: we dont use the same header-->
+    <suppress checks="RegexpHeader" files="."/>
+    <suppress checks="CyclomaticComplexity" files="(LdapGroupManager|MultiTenantApis|MultiTenantRequestContext|MultiTenantAuthorizer|TenantQuotaCallback|TenantPartitionAssignor).java"/>
+    <suppress checks="NPathComplexity" files="MultiTenantApis|LdapGroupManager|SecretsLoader|TenantPartitionAssignor"/>
+    <suppress checks="JavaNCSS" files="TenantPartitionAssignor"/>
+    <suppress checks="ClassDataAbstractionCoupling" files="(MultiTenantRequestContext|LdapGroupManager|OAuthBearerSecureTokenValidatorCallbackHandler|SecretsLoader).java"/>
+    <suppress checks="BooleanExpressionComplexity" files="LdapAuthorizer|MultiTenantAuthorizer|MultiTenantRequestContext"/>
+    <suppress checks="ConstantName" files="(CreateTopicPolicy|PlainSaslServer|FileBasedPlainSaslAuthenticator|LdapAuthorizer|LdapGroupManager|TopicPolicyConfig|AuthenticationStats|LicenseValidator|MultiTenantApis|ApiSensorBuilder).java"/>
+
+    <!-- Suppress checks for copy of Apache Kafka class PatternType.java -->
+    <suppress checks="[a-zA-Z0-9]*" files="PatternType" />
+
+
 </suppressions>

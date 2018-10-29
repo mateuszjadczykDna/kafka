@@ -25,7 +25,7 @@ public class AuthenticationStats implements AuthenticationStatsMBean {
     String objectName = "io.confluent.kafka.server.plugins:type=Authentication";
     try {
       ObjectName mbeanName = new ObjectName(objectName);
-      mbeanServer.registerMBean((AuthenticationStatsMBean)instance, mbeanName);
+      mbeanServer.registerMBean((AuthenticationStatsMBean) instance, mbeanName);
     } catch (InstanceAlreadyExistsException e) {
       logger.error("Auth stats MBean already exists", e);
     } catch (MBeanRegistrationException e) {
