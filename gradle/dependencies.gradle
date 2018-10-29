@@ -49,6 +49,7 @@ versions["baseScala"] = versions.scala.substring(0, versions.scala.lastIndexOf("
 versions += [
   activation: "1.1.1",
   apacheda: "1.0.2",
+  apachedaLdapCodec: "1.0.0",
   apacheds: "2.0.0-M24",
   argparse4j: "0.7.0",
   bcpkix: "1.60",
@@ -97,6 +98,7 @@ versions += [
 libs += [
   activation: "javax.activation:activation:$versions.activation",
   apacheda: "org.apache.directory.api:api-all:$versions.apacheda",
+  apachedaLdapCodec: "org.apache.directory.api:api-ldap-codec-standalone:$versions.apachedaLdapCodec",
   apachedsCoreApi: "org.apache.directory.server:apacheds-core-api:$versions.apacheds",
   apachedsInterceptorKerberos: "org.apache.directory.server:apacheds-interceptor-kerberos:$versions.apacheds",
   apachedsProtocolShared: "org.apache.directory.server:apacheds-protocol-shared:$versions.apacheds",

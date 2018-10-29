@@ -1574,6 +1574,7 @@ project(':ce-security') {
   dependencies {
     compile libs.bcpkix
     compile libs.jose4j
+    testCompile project(':clients').sourceSets.test.output
     testCompile libs.junit
   }
 
@@ -1609,6 +1610,7 @@ project(':ce-serializers') {
     compile libs.protobufUtil
     compile project(':clients')
     testCompile libs.junit
+    testCompile project(':clients').sourceSets.test.output
   }
 
   tasks.create(name: "copyDependantLibs", type: Copy) {
@@ -1711,6 +1713,7 @@ project(':ce-broker-plugins') {
     testCompile project(':clients').sourceSets.test.output
     testCompile project(':core').sourceSets.test.output
 
+    testCompile libs.apachedaLdapCodec
     testCompile libs.apachedsCoreApi
     testCompile libs.apachedsInterceptorKerberos
     testCompile libs.apachedsJdbmPartition
