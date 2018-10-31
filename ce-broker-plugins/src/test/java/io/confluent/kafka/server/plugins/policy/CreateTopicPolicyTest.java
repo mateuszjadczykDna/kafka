@@ -73,48 +73,54 @@ public class CreateTopicPolicyTest {
   public void testValidateOk() {
     final int currentPartitions = MAX_PARTITIONS / 2;
     final int requestedPartitions = MAX_PARTITIONS - currentPartitions - 1;
-    AdminClientUnitTestEnv mockClientEnv = getMockClientEnv();
-    prepareForOneValidateCall(mockClientEnv, ImmutableMap.of(TOPIC, currentPartitions));
-    policy.ensureValidPartitionCount(mockClientEnv.adminClient(), TENANT_PREFIX, requestedPartitions);
+    try (AdminClientUnitTestEnv clientEnv = getAdminClientEnv()) {
+      prepareForOneValidateCall(clientEnv, ImmutableMap.of(TOPIC, currentPartitions));
+      policy.ensureValidPartitionCount(clientEnv.adminClient(), TENANT_PREFIX, requestedPartitions);
+    }
   }
 
   @Test
   public void acceptsExactlyMaxPartitions() {
     final int currentPartitions = MAX_PARTITIONS / 2;
     final int requestedPartitions = MAX_PARTITIONS - currentPartitions;
-    AdminClientUnitTestEnv mockClientEnv = getMockClientEnv();
-    prepareForOneValidateCall(mockClientEnv, ImmutableMap.of(TOPIC, currentPartitions));
-    policy.ensureValidPartitionCount(mockClientEnv.adminClient(), TENANT_PREFIX, requestedPartitions);
+    try (AdminClientUnitTestEnv clientEnv = getAdminClientEnv()) {
+      prepareForOneValidateCall(clientEnv, ImmutableMap.of(TOPIC, currentPartitions));
+      policy.ensureValidPartitionCount(clientEnv.adminClient(), TENANT_PREFIX, requestedPartitions);
+    }
   }
 
   @Test
   public void testValidateDoesNotCountOtherTopicPartitions() {
-    AdminClientUnitTestEnv mockClientEnv = getMockClientEnv();
-    prepareForOneValidateCall(mockClientEnv, ImmutableMap.of(TOPIC, MAX_PARTITIONS));
-    policy.ensureValidPartitionCount(mockClientEnv.adminClient(), "badprefix_", MAX_PARTITIONS);
+    try (AdminClientUnitTestEnv clientEnv = getAdminClientEnv()) {
+      prepareForOneValidateCall(clientEnv, ImmutableMap.of(TOPIC, MAX_PARTITIONS));
+      policy.ensureValidPartitionCount(clientEnv.adminClient(), "badprefix_", MAX_PARTITIONS);
+    }
   }
 
   @Test(expected = PolicyViolationException.class)
   public void rejectsRequestOverMaxNumberOfPartitions() {
     final int currentPartitions = MAX_PARTITIONS / 2;
     final int requestedPartitions = MAX_PARTITIONS - currentPartitions + 1;
-    AdminClientUnitTestEnv mockClientEnv = getMockClientEnv();
-    prepareForOneValidateCall(mockClientEnv, ImmutableMap.of(TOPIC, currentPartitions));
-    policy.ensureValidPartitionCount(mockClientEnv.adminClient(), TENANT_PREFIX, requestedPartitions);
+    try (AdminClientUnitTestEnv clientEnv = getAdminClientEnv()) {
+      prepareForOneValidateCall(clientEnv, ImmutableMap.of(TOPIC, currentPartitions));
+      policy.ensureValidPartitionCount(clientEnv.adminClient(), TENANT_PREFIX, requestedPartitions);
+    }
   }
 
   @Test(expected = PolicyViolationException.class)
   public void rejectsCurrentExceedMaxNumberOfPartitions() {
     final int currentPartitions = MAX_PARTITIONS / 2;
-    AdminClientUnitTestEnv mockClientEnv = getMockClientEnv();
-    prepareForOneValidateCall(mockClientEnv, ImmutableMap.of(TOPIC, currentPartitions));
-    policy.ensureValidPartitionCount(mockClientEnv.adminClient(), TENANT_PREFIX, MAX_PARTITIONS + 1);
+    try (AdminClientUnitTestEnv clientEnv = getAdminClientEnv()) {
+      prepareForOneValidateCall(clientEnv, ImmutableMap.of(TOPIC, currentPartitions));
+      policy.ensureValidPartitionCount(clientEnv.adminClient(), TENANT_PREFIX, MAX_PARTITIONS + 1);
+    }
   }
 
   @Test(expected = RuntimeException.class)
   public void rejectsWhenNoResponse() {
-    AdminClientUnitTestEnv mockClientEnv = getMockClientEnv();
-    policy.ensureValidPartitionCount(mockClientEnv.adminClient(), TENANT_PREFIX, 1);
+    try (AdminClientUnitTestEnv clientEnv = getAdminClientEnv()) {
+      policy.ensureValidPartitionCount(clientEnv.adminClient(), TENANT_PREFIX, 1);
+    }
   }
 
   // will throw exception because of failure to use AdminClient without kafka cluster
@@ -344,7 +350,7 @@ public class CreateTopicPolicyTest {
     topicPolicy.configure(config);
   }
 
-  private static AdminClientUnitTestEnv getMockClientEnv(int numBrokers,
+  private static AdminClientUnitTestEnv getAdminClientEnv(int numBrokers,
                                                           Set<String> internalTopics) {
     HashMap<Integer, Node> nodes = new HashMap<>();
     for (int i = 0; i < numBrokers; i++) {
@@ -354,21 +360,21 @@ public class CreateTopicPolicyTest {
                                   Collections.<PartitionInfo>emptySet(), internalTopics,
                                   Collections.<String>emptySet(), nodes.get(0));
 
-    AdminClientUnitTestEnv mockClientEnv =
+    AdminClientUnitTestEnv clientEnv =
         new AdminClientUnitTestEnv(cluster, AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "10");
 
-    mockClientEnv.kafkaClient().setNodeApiVersions(NodeApiVersions.create());
-    mockClientEnv.kafkaClient().prepareMetadataUpdate(cluster, Collections.<String>emptySet());
-    mockClientEnv.kafkaClient().setNode(cluster.controller());
+    clientEnv.kafkaClient().setNodeApiVersions(NodeApiVersions.create());
+    clientEnv.kafkaClient().prepareMetadataUpdate(cluster, Collections.<String>emptySet());
+    clientEnv.kafkaClient().setNode(cluster.controller());
 
-    return mockClientEnv;
+    return clientEnv;
   }
 
-  private static AdminClientUnitTestEnv getMockClientEnv() {
-    return getMockClientEnv(3, Collections.<String>emptySet());
+  private static AdminClientUnitTestEnv getAdminClientEnv() {
+    return getAdminClientEnv(3, Collections.<String>emptySet());
   }
 
-  private static void prepareForOneValidateCall(AdminClientUnitTestEnv mockClientEnv,
+  private static void prepareForOneValidateCall(AdminClientUnitTestEnv clientEnv,
                                                 Set<String> internalTopics,
                                                 Map<String, Integer> topicPartitions) {
     List<MetadataResponse.TopicMetadata> topicMetadataList = new ArrayList<>();
@@ -376,35 +382,35 @@ public class CreateTopicPolicyTest {
       topicMetadataList.add(
           new MetadataResponse.TopicMetadata(Errors.NONE, topicPartition.getKey(),
                                              internalTopics.contains(topicPartition.getKey()),
-                                             partitionMetadatas(mockClientEnv, topicPartition.getValue()))
+                                             partitionMetadatas(clientEnv, topicPartition.getValue()))
       );
     }
 
     // each CreateTopicPolicy.ensureValidPartitionCount calls 3 admin client methods which expect
     // a response
-    mockClientEnv.kafkaClient().prepareResponse(
-        new MetadataResponse(mockClientEnv.cluster().nodes(), CLUSTER_ID, mockClientEnv.cluster().controller().id(), topicMetadataList));
-    mockClientEnv.kafkaClient().prepareResponse(
-        new MetadataResponse(mockClientEnv.cluster().nodes(), CLUSTER_ID, mockClientEnv.cluster().controller().id(), topicMetadataList));
-    mockClientEnv.kafkaClient().prepareResponse(
-        new MetadataResponse(mockClientEnv.cluster().nodes(), CLUSTER_ID, mockClientEnv.cluster().controller().id(), topicMetadataList));
+    clientEnv.kafkaClient().prepareResponse(
+        new MetadataResponse(clientEnv.cluster().nodes(), CLUSTER_ID, clientEnv.cluster().controller().id(), topicMetadataList));
+    clientEnv.kafkaClient().prepareResponse(
+        new MetadataResponse(clientEnv.cluster().nodes(), CLUSTER_ID, clientEnv.cluster().controller().id(), topicMetadataList));
+    clientEnv.kafkaClient().prepareResponse(
+        new MetadataResponse(clientEnv.cluster().nodes(), CLUSTER_ID, clientEnv.cluster().controller().id(), topicMetadataList));
   }
 
-  private static void prepareForOneValidateCall(AdminClientUnitTestEnv mockClientEnv,
+  private static void prepareForOneValidateCall(AdminClientUnitTestEnv clientEnv,
                                                 Map<String, Integer> topicPartitions) {
-    prepareForOneValidateCall(mockClientEnv, Collections.<String>emptySet(), topicPartitions);
+    prepareForOneValidateCall(clientEnv, Collections.<String>emptySet(), topicPartitions);
   }
 
-  private static List<MetadataResponse.PartitionMetadata> partitionMetadatas(AdminClientUnitTestEnv mockClientEnv, int numPartitions) {
+  private static List<MetadataResponse.PartitionMetadata> partitionMetadatas(AdminClientUnitTestEnv clientEnv, int numPartitions) {
     List<MetadataResponse.PartitionMetadata> metadatas = new ArrayList<>();
     for (int i = 0; i < numPartitions; i++) {
       metadatas.add(new MetadataResponse.PartitionMetadata(Errors.NONE,
                                                            i,
-                                                           mockClientEnv.cluster().nodes().get(0),
+                                                           clientEnv.cluster().nodes().get(0),
                                                            Optional.empty(),
-                                                           mockClientEnv.cluster().nodes(),
-                                                           mockClientEnv.cluster().nodes(),
-                                                           mockClientEnv.cluster().nodes()));
+                                                           clientEnv.cluster().nodes(),
+                                                           clientEnv.cluster().nodes(),
+                                                           clientEnv.cluster().nodes()));
     }
     return metadatas;
   }
