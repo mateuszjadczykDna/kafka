@@ -28,6 +28,14 @@ import java.net.InetAddress;
 
 public interface BrokerInterceptor extends Configurable {
 
+    // Used by ce-broker-plugins
+    void onAuthenticatedConnection(String connectionId, InetAddress clientAddress,
+                                   KafkaPrincipal principal, Metrics metrics);
+
+    // Used by ce-broker-plugins
+    void onAuthenticatedDisconnection(String connectionId, InetAddress clientAddress,
+                                      KafkaPrincipal principal, Metrics metrics);
+
     RequestContext newContext(RequestHeader header,
                               String connectionId,
                               InetAddress clientAddress,

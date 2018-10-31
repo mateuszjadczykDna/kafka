@@ -57,7 +57,7 @@ import org.slf4j.LoggerFactory;
 
 public class LdapGroupManager {
 
-  private static final Logger logger = LoggerFactory.getLogger(LdapGroupManager.class);
+  private static final Logger log = LoggerFactory.getLogger(LdapGroupManager.class);
 
   private static final int CLOSE_TIMEOUT_MS = 30000;
 
@@ -141,7 +141,7 @@ public class LdapGroupManager {
       return thread;
     });
 
-    logger.info("LDAP group manager created with config: {}", config);
+    log.info("LDAP group manager created with config: {}", config);
   }
 
   /**
@@ -185,14 +185,14 @@ public class LdapGroupManager {
     try {
       executorService.awaitTermination(CLOSE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     } catch (InterruptedException e) {
-      logger.debug("LdapGroupManager.close() was interrupted", e);
+      log.debug("LdapGroupManager.close() was interrupted", e);
     }
     try {
       if (context != null) {
         context.close();
       }
     } catch (NamingException e) {
-      logger.debug("Could not close LDAP context", e);
+      log.debug("Could not close LDAP context", e);
     }
   }
 
@@ -207,7 +207,7 @@ public class LdapGroupManager {
 
   private void resetFailure() {
     if (retryCount.getAndSet(0) != 0) {
-      logger.info("LDAP search succeeded, resetting failed status");
+      log.info("LDAP search succeeded, resetting failed status");
     }
     failureStartMs.set(0);
   }
@@ -216,13 +216,13 @@ public class LdapGroupManager {
     if (!alive.get()) {
       return 0;
     }
-    logger.error("LDAP search failed", exception);
+    log.error("LDAP search failed", exception);
     try {
       if (context != null) {
         context.close();
       }
     } catch (Exception e) {
-      logger.error("Context could not be closed", e);
+      log.error("Context could not be closed", e);
     }
     context = null;
     if (failureStartMs.get() == 0) {
@@ -282,10 +282,10 @@ public class LdapGroupManager {
             if (responseControl instanceof PagedResultsResponseControl) {
               PagedResultsResponseControl pc = (PagedResultsResponseControl) responseControl;
               cookie = pc.getCookie();
-              logger.debug("Search returned page, totalSize {}", pc.getResultSize());
+              log.debug("Search returned page, totalSize {}", pc.getResultSize());
               break;
             } else {
-              logger.debug("Ignoring response control {}", responseControl);
+              log.debug("Ignoring response control {}", responseControl);
             }
           }
         }
@@ -298,7 +298,7 @@ public class LdapGroupManager {
             .forEach(this::processSearchResultDelete);
         previousSearchEntries = currentSearchEntries;
       }
-      logger.debug("Search completed, group cache is {}", userGroupCache);
+      log.debug("Search completed, group cache is {}", userGroupCache);
 
     } catch (Throwable e) {
       if (searchFuture != null) {
@@ -312,11 +312,11 @@ public class LdapGroupManager {
   private NamingEnumeration<SearchResult> search(SearchControls searchControls)
       throws NamingException {
     if (config.searchMode == LdapAuthorizerConfig.SearchMode.GROUPS) {
-      logger.trace("Searching groups with base {} filter {}: ",
+      log.trace("Searching groups with base {} filter {}: ",
           config.groupSearchBase, config.groupSearchFilter);
       return context.search(config.groupSearchBase, config.groupSearchFilter, searchControls);
     } else {
-      logger.trace("Searching users with base {} filter {}: ",
+      log.trace("Searching users with base {} filter {}: ",
           config.userSearchBase, config.userSearchFilter);
       return context.search(config.userSearchBase, config.userSearchFilter, searchControls);
     }
@@ -340,7 +340,7 @@ public class LdapGroupManager {
     Set<String> currentSearchEntries = new HashSet<>();
     while (enumeration.hasMore()) {
       SearchResult searchResult = enumeration.next();
-      logger.trace("Processing search result {}", searchResult);
+      log.trace("Processing search result {}", searchResult);
       ResultEntry resultEntry = searchResultEntry(searchResult);
       if (resultEntry == null) {
         continue;
@@ -351,9 +351,9 @@ public class LdapGroupManager {
         for (Control control : controls) {
           if (persistentSearch.isEntryChangeResponseControl(control)) {
             changeResponseControl = control;
-            logger.debug("Entry change search response control {}", control);
+            log.debug("Entry change search response control {}", control);
           } else {
-            logger.debug("Ignoring search response control {}", control);
+            log.debug("Ignoring search response control {}", control);
           }
         }
       }
@@ -396,7 +396,7 @@ public class LdapGroupManager {
           throw new IllegalArgumentException("Unsupported response control type " + changeType);
       }
       if (config.persistentSearch) {
-        logger.debug("Group cache after change notification is {}", userGroupCache);
+        log.debug("Group cache after change notification is {}", userGroupCache);
       }
     }
     return currentSearchEntries;
@@ -471,13 +471,13 @@ public class LdapGroupManager {
         context.setRequestControls(new Control[]{control});
       }
     } catch (IOException | NamingException e) {
-      logger.warn("Paging control could not be set", e);
+      log.warn("Paging control could not be set", e);
     }
   }
 
   private String attributeValue(Object value, Pattern pattern, String parent, String attrDesc) {
     if (value == null) {
-      logger.error("Ignoring null {} in LDAP {} {}", attrDesc, config.searchMode, parent);
+      log.error("Ignoring null {} in LDAP {} {}", attrDesc, config.searchMode, parent);
       return null;
     }
     if (pattern == null) {
@@ -485,7 +485,7 @@ public class LdapGroupManager {
     }
     Matcher matcher = pattern.matcher(value.toString());
     if (!matcher.matches()) {
-      logger.error("Ignoring {} in LDAP {} {} that doesn't match pattern: {}",
+      log.error("Ignoring {} in LDAP {} {} that doesn't match pattern: {}",
           attrDesc, config.searchMode, parent, value);
       return null;
     }

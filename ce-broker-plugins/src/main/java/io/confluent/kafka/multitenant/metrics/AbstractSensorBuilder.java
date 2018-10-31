@@ -11,7 +11,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
 public abstract class AbstractSensorBuilder<S> {
-  private static final ReadWriteLock lock = new ReentrantReadWriteLock();
+  private static final ReadWriteLock LOCK = new ReentrantReadWriteLock();
 
   protected final Metrics metrics;
   protected final MultiTenantPrincipal principal;
@@ -41,16 +41,16 @@ public abstract class AbstractSensorBuilder<S> {
   <T> Map<T, Sensor> getOrCreateSensors(Map<T, String> sensorsToFind,
                                         Map<T, ? extends AbstractSensorCreator> sensorCreators) {
     Map<T, Sensor> sensors;
-    lock.readLock().lock();
+    LOCK.readLock().lock();
     try {
       sensors = findSensors(metrics, sensorsToFind);
       sensorsToFind.keySet().removeAll(sensors.keySet());
     } finally {
-      lock.readLock().unlock();
+      LOCK.readLock().unlock();
     }
 
     if (!sensorsToFind.isEmpty()) {
-      lock.writeLock().lock();
+      LOCK.writeLock().lock();
       try {
         Map<T, Sensor> existingSensors = findSensors(metrics, sensorsToFind);
         sensorsToFind.keySet().removeAll(existingSensors.keySet());
@@ -62,7 +62,7 @@ public abstract class AbstractSensorBuilder<S> {
           sensors.put(key, createSensor(sensorCreators, key, sensorName));
         }
       } finally {
-        lock.writeLock().unlock();
+        LOCK.writeLock().unlock();
       }
     }
     return sensors;

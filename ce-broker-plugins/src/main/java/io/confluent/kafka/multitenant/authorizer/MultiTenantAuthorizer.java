@@ -74,7 +74,7 @@ import scala.collection.JavaConversions;
  */
 public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
 
-  private static final Logger authorizerLogger = LoggerFactory.getLogger("kafka.authorizer.logger");
+  private static final Logger log = LoggerFactory.getLogger("kafka.authorizer.logger");
   public static final String MAX_ACLS_PER_TENANT_PROP = "max.acls.per.tenant";
   private static final int DEFAULT_MAX_ACLS_PER_TENANT = 10000;
 
@@ -188,7 +188,7 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
           && principalMatch(acl.principal(), principal, wildcardPrincipal)
           && (op.equals(acl.operation()) || acl.operation().equals(All$.MODULE$))
           && (acl.host().equals(host) || acl.host().equals(Acl.WildCardHost()))) {
-        authorizerLogger
+        log
             .debug("operation = {} on resource = {} from host = {} is {} based on acl = {}",
                 op, resource, host, permissionType, acl);
         return true;
@@ -205,7 +205,7 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
 
   private boolean isEmptyAclAndAuthorized(Resource resource, Set<Acl> acls) {
     if (acls.isEmpty()) {
-      authorizerLogger
+      log
           .debug("No acl found for resource {}, authorized = {}", resource, allowEveryoneIfNoAcl);
       return allowEveryoneIfNoAcl;
     } else {
@@ -217,7 +217,7 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
     boolean multiTenantSuperUser = (userPrincipal instanceof MultiTenantPrincipal)
         && ((MultiTenantPrincipal) userPrincipal).tenantMetadata().isSuperUser;
     if (multiTenantSuperUser || superUsers.contains(userPrincipal)) {
-      authorizerLogger
+      log
           .debug("principal = {} is a super user, allowing operation without checking acls.",
               userPrincipal);
       return true;
@@ -244,7 +244,7 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
     if (MultiTenantPrincipal.isTenantPrincipal(firstPrincipal)) {
       firstTenantPrefix = tenantPrefix(firstPrincipal.getName());
       if (!resource.name().startsWith(firstTenantPrefix)) {
-        authorizerLogger.error("Unexpected ACL request for resource {} without tenant prefix {}",
+        log.error("Unexpected ACL request for resource {} without tenant prefix {}",
             resource, firstTenantPrefix);
         throw new IllegalStateException("Internal error: Could not create ACLs for " + resource);
       }
@@ -258,7 +258,7 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
     final String tenantPrefix = firstTenantPrefix;
     Set<Acl> aclsToAdd = JavaConversions.setAsJavaSet(acls);
     if (aclsToAdd.stream().anyMatch(acl -> !inScope(acl.principal(), tenantPrefix))) {
-      authorizerLogger.error("ACL requests contain invalid tenant principal {}", aclsToAdd);
+      log.error("ACL requests contain invalid tenant principal {}", aclsToAdd);
       throw new IllegalStateException("Internal error: Could not create ACLs for " + resource);
     }
 
@@ -279,9 +279,9 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
       Resource resource, String host) {
     String logMessage = "Principal = {} is {} Operation = {} from host = {} on resource = {}";
     if (authorized) {
-      authorizerLogger.debug(logMessage, principal, "Allowed", op, host, resource);
+      log.debug(logMessage, principal, "Allowed", op, host, resource);
     } else {
-      authorizerLogger.info(logMessage, principal, "Denied", op, host, resource);
+      log.info(logMessage, principal, "Denied", op, host, resource);
     }
   }
 

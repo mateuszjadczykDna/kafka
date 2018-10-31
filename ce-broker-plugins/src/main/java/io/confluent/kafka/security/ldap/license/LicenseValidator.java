@@ -16,7 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class LicenseValidator {
-  private static final Logger logger = LoggerFactory.getLogger(LicenseValidator.class);
+  private static final Logger log = LoggerFactory.getLogger(LicenseValidator.class);
 
   private static final PublicKey PUBLIC_KEY;
   private static final long EXPIRY_LOG_INTERVAL_MS = 10000;
@@ -42,7 +42,7 @@ public class LicenseValidator {
     try {
       publicKey = License.loadPublicKey();
     } catch (Exception e) {
-      logger.error("Public key for license service could not be loaded", e);
+      log.error("Public key for license service could not be loaded", e);
     }
     PUBLIC_KEY = publicKey;
   }
@@ -64,7 +64,7 @@ public class LicenseValidator {
         licenseStatus = LicenseStatus.LICENSE_ACTIVE;
       } catch (Exception e) {
         String errorMessage = "Validation of configured license failed";
-        logger.error(errorMessage, e);
+        log.error(errorMessage, e);
         throw new InvalidLicenseException(errorMessage, e);
       }
     } else {
@@ -91,7 +91,7 @@ public class LicenseValidator {
         licenseStatus = LicenseStatus.TRIAL_EXPIRED;
       }
       if (failOnError || now - lastExpiryErrorLogMs > EXPIRY_LOG_INTERVAL_MS) {
-        logger.error(errorMessage);
+        log.error(errorMessage);
         lastExpiryErrorLogMs = now;
       }
       if (failOnError) {

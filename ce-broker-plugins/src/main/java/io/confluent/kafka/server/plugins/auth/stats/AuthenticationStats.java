@@ -15,30 +15,30 @@ import java.lang.management.ManagementFactory;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AuthenticationStats implements AuthenticationStatsMBean {
-  private static final AuthenticationStats instance;
-  private static final Logger logger =
+  private static final AuthenticationStats INSTANCE;
+  private static final Logger log =
       LoggerFactory.getLogger(AuthenticationStats.class);
 
   static {
-    instance = new AuthenticationStats();
+    INSTANCE = new AuthenticationStats();
     MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
     String objectName = "io.confluent.kafka.server.plugins:type=Authentication";
     try {
       ObjectName mbeanName = new ObjectName(objectName);
-      mbeanServer.registerMBean((AuthenticationStatsMBean) instance, mbeanName);
+      mbeanServer.registerMBean((AuthenticationStatsMBean) INSTANCE, mbeanName);
     } catch (InstanceAlreadyExistsException e) {
-      logger.error("Auth stats MBean already exists", e);
+      log.error("Auth stats MBean already exists", e);
     } catch (MBeanRegistrationException e) {
-      logger.error("Auth stats MBean registration failed", e);
+      log.error("Auth stats MBean registration failed", e);
     } catch (NotCompliantMBeanException e) {
-      logger.error("Auth stats MBean not compliant", e);
+      log.error("Auth stats MBean not compliant", e);
     } catch (MalformedObjectNameException e) {
-      logger.error("Auth stats MBean is malformed: " + objectName, e);
+      log.error("Auth stats MBean is malformed: " + objectName, e);
     }
   }
 
   public static AuthenticationStats getInstance() {
-    return instance;
+    return INSTANCE;
   }
 
   private AtomicLong succeeded = new AtomicLong(0);

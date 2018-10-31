@@ -26,9 +26,9 @@ import org.apache.kafka.common.utils.SecurityUtils;
  */
 public class MultiTenantApis {
 
-  private static final EnumMap<ApiKeys, TransformableType<TenantContext>[]> requestSchemas =
+  private static final EnumMap<ApiKeys, TransformableType<TenantContext>[]> REQUEST_SCHEMAS =
       new EnumMap<>(ApiKeys.class);
-  private static final EnumMap<ApiKeys, TransformableType<TenantContext>[]> responseSchemas =
+  private static final EnumMap<ApiKeys, TransformableType<TenantContext>[]> RESPONSE_SCHEMAS =
       new EnumMap<>(ApiKeys.class);
 
   static {
@@ -49,8 +49,8 @@ public class MultiTenantApis {
             api.responseSchema(version), responseSchemaSelector);
       }
 
-      requestSchemas.put(api, apiRequestSchemas);
-      responseSchemas.put(api, apiResponseSchemas);
+      REQUEST_SCHEMAS.put(api, apiRequestSchemas);
+      RESPONSE_SCHEMAS.put(api, apiResponseSchemas);
     }
   }
 
@@ -117,11 +117,11 @@ public class MultiTenantApis {
   }
 
   public static TransformableType<TenantContext> requestSchema(ApiKeys api, short version) {
-    return requestSchemas.get(api)[version];
+    return REQUEST_SCHEMAS.get(api)[version];
   }
 
   public static TransformableType<TenantContext> responseSchema(ApiKeys api, short version) {
-    return responseSchemas.get(api)[version];
+    return RESPONSE_SCHEMAS.get(api)[version];
   }
 
   private static TenantContext.ValueType commonTransformableType(Field field) {

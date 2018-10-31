@@ -51,10 +51,10 @@ public class PlainSaslServer implements MultiTenantSaslServer {
 
   public static final String PLAIN_MECHANISM = "PLAIN";
   private final SaslAuthenticator authenticator;
-  private static final AuthenticationStats stats = AuthenticationStats.getInstance();
-  private static final TenantAuthenticationStats tenantStats =
+  private static final AuthenticationStats STATS = AuthenticationStats.getInstance();
+  private static final TenantAuthenticationStats TENANT_STATS =
       TenantAuthenticationStats.instance();
-  private static final Logger logger =
+  private static final Logger log =
           LoggerFactory.getLogger(PlainSaslServer.class);
 
   private boolean complete;
@@ -71,12 +71,12 @@ public class PlainSaslServer implements MultiTenantSaslServer {
   public byte[] evaluateResponse(byte[] response) throws SaslException {
     try {
       byte[] result = doEvaluateResponse(response);
-      stats.incrSucceeded();
+      STATS.incrSucceeded();
       return result;
     } catch (Exception e) {
-      stats.incrFailed();
+      STATS.incrFailed();
       String cause = e.getCause() == null ? "" : e.getCause().getMessage();
-      logger.debug("SASL/PLAIN authentication failed: {}", cause, e);
+      log.debug("SASL/PLAIN authentication failed: {}", cause, e);
       throw e;
     } finally {
       clearMdc();
@@ -138,9 +138,9 @@ public class PlainSaslServer implements MultiTenantSaslServer {
     MDC.put("authorizationId", authorizationID);
     tenantMetadata = principal.tenantMetadata();
     MDC.put("tenant", tenantMetadata.tenantName);
-    tenantStats.onSuccessfulAuthentication(principal);
+    TENANT_STATS.onSuccessfulAuthentication(principal);
 
-    logger.debug("SASL/PLAIN authentication succeeded for user {}", username);
+    log.debug("SASL/PLAIN authentication succeeded for user {}", username);
     complete = true;
     return new byte[0];
   }

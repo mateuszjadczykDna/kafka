@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TenantQuotaCallback implements ClientQuotaCallback {
-  private static final Logger logger = LoggerFactory.getLogger(TenantQuotaCallback.class);
+  private static final Logger log = LoggerFactory.getLogger(TenantQuotaCallback.class);
 
   static final String MIN_PARTITIONS_CONFIG = "confluent.quota.min.partitions";
   public static final int DEFAULT_MIN_PARTITIONS = 8;
@@ -71,7 +71,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
       throw new ConfigException(MIN_PARTITIONS_CONFIG + " must be >= 1, but got "
           + minPartitionsForMaxQuota);
     }
-    logger.info("Configured tenant quota callback for broker {} with {}={}",
+    log.info("Configured tenant quota callback for broker {} with {}={}",
         brokerId, MIN_PARTITIONS_CONFIG, minPartitionsForMaxQuota);
   }
 
@@ -107,7 +107,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
       if (tenantQuota != null) {
         return tenantQuota.quotaLimit(quotaType);
       } else {
-        logger.warn("Quota not found for tenant {}, using default quota", tenant);
+        log.warn("Quota not found for tenant {}, using default quota", tenant);
         return defaultTenantQuota.quota(quotaType);
       }
     }
@@ -136,7 +136,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
    */
   @Override
   public synchronized boolean updateClusterMetadata(Cluster cluster) {
-    logger.debug("Updating cluster metadata {}", cluster);
+    log.debug("Updating cluster metadata {}", cluster);
     partitionAssignor.updateClusterMetadata(cluster);
 
     this.cluster = cluster;
@@ -164,7 +164,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
       updated |= tenantQuota.updatePartitions(partitionsOnThisBroker, total);
     }
     if (updated) {
-      logger.trace("Some tenant quotas have been updated, new quotas: {}", tenantQuotas);
+      log.trace("Some tenant quotas have been updated, new quotas: {}", tenantQuotas);
     }
     return updated;
   }
@@ -209,7 +209,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
     for (Map.Entry<String, QuotaConfig> entry : tenantClusterQuotas.entrySet()) {
       getOrCreateTenantQuota(entry.getKey(), entry.getValue(), true);
     }
-    logger.trace("Updated tenant quotas, new quotas: {}", tenantQuotas);
+    log.trace("Updated tenant quotas, new quotas: {}", tenantQuotas);
   }
 
   /**
@@ -218,7 +218,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
    */
   public static void updateQuotas(Map<String, QuotaConfig> tenantQuotas,
                                   QuotaConfig defaultTenantQuota) {
-    logger.debug("Update quotas: tenantQuotas={} default={}", tenantQuotas, defaultTenantQuota);
+    log.debug("Update quotas: tenantQuotas={} default={}", tenantQuotas, defaultTenantQuota);
     synchronized (INSTANCES) {
       INSTANCES.values()
           .forEach(callback -> callback.updateTenantQuotas(tenantQuotas, defaultTenantQuota));
@@ -233,7 +233,7 @@ public class TenantQuotaCallback implements ClientQuotaCallback {
       if (quotaCallback != null) {
         partitionAssignor = quotaCallback.partitionAssignor;
       } else {
-        logger.debug("Tenant quota callback not configured for broker {}", brokerId);
+        log.debug("Tenant quota callback not configured for broker {}", brokerId);
       }
     }
     return partitionAssignor;

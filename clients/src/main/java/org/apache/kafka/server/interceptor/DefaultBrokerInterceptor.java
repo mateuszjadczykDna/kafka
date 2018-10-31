@@ -27,6 +27,15 @@ import java.net.InetAddress;
 import java.util.Map;
 
 public class DefaultBrokerInterceptor implements BrokerInterceptor {
+
+    public void onAuthenticatedConnection(String connectionId, InetAddress clientAddress,
+                                          KafkaPrincipal principal, Metrics metrics) {
+    }
+
+    public void onAuthenticatedDisconnection(String connectionId, InetAddress clientAddress,
+                                             KafkaPrincipal principal, Metrics metrics) {
+    }
+
     @Override
     public RequestContext newContext(RequestHeader header,
                                      String connectionId,

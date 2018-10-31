@@ -18,13 +18,13 @@ import static io.confluent.kafka.multitenant.metrics.TenantMetrics.USER_TAG;
 public class ConnectionSensorBuilder extends AbstractSensorBuilder<ConnectionSensors> {
   private static final String AUTH_RATE = "successful-authentication";
   private static final String AUTH_CONNECTION_COUNT = "active-authenticated-connection";
-  private static final Map<String, AbstractSensorCreator> connectionSensorCreators;
+  private static final Map<String, AbstractSensorCreator> CONNECTION_SENSOR_CREATORS;
 
   static {
-    connectionSensorCreators = new HashMap<>();
-    connectionSensorCreators.put(AUTH_RATE,
+    CONNECTION_SENSOR_CREATORS = new HashMap<>();
+    CONNECTION_SENSOR_CREATORS.put(AUTH_RATE,
             new ConnectionMeterSensorCreator(AUTH_RATE, "successful-authentications"));
-    connectionSensorCreators.put(AUTH_CONNECTION_COUNT,
+    CONNECTION_SENSOR_CREATORS.put(AUTH_CONNECTION_COUNT,
             new ConnectionCountSensorCreator(AUTH_CONNECTION_COUNT,
                     "active-authenticated-connections"));
   }
@@ -59,7 +59,7 @@ public class ConnectionSensorBuilder extends AbstractSensorBuilder<ConnectionSen
 
   @Override
   protected Map<String, ? extends AbstractSensorCreator> sensorCreators() {
-    return ConnectionSensorBuilder.connectionSensorCreators;
+    return ConnectionSensorBuilder.CONNECTION_SENSOR_CREATORS;
   }
 
   abstract static class AbstractConnectionSensorCreator extends AbstractSensorCreator {

@@ -65,7 +65,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class MultiTenantRequestContext extends RequestContext {
-  private static final Logger logger = LoggerFactory.getLogger(MultiTenantRequestContext.class);
+  private static final Logger log = LoggerFactory.getLogger(MultiTenantRequestContext.class);
 
   private final TenantContext tenantContext;
   private static final int BASE_HEADER_SIZE;
@@ -233,7 +233,7 @@ public class MultiTenantRequestContext extends RequestContext {
       int partitions = topicDetails.numPartitions;
       short replication = topicDetails.replicationFactor;
       if (!topicDetails.replicasAssignments.isEmpty()) {
-        logger.debug("Overriding replica assignments provided in CreateTopicsRequest");
+        log.debug("Overriding replica assignments provided in CreateTopicsRequest");
         partitions = topicDetails.replicasAssignments.size();
         replication = (short) topicDetails.replicasAssignments.get(0).size();
       }
@@ -287,7 +287,7 @@ public class MultiTenantRequestContext extends RequestContext {
       totalPartitions.put(topic, newPartitionInfo.totalCount());
       List<List<Integer>> assignment = newPartitionInfo.newAssignments();
       if (assignment != null && !assignment.isEmpty()) {
-        logger.debug("Overriding replica assignments provided in CreatePartitionsRequest");
+        log.debug("Overriding replica assignments provided in CreatePartitionsRequest");
       }
     }
 

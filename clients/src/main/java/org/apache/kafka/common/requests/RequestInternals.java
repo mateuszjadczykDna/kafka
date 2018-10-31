@@ -6,6 +6,7 @@ import org.apache.kafka.common.network.Send;
 import org.apache.kafka.common.protocol.types.Struct;
 
 // Expose some stuff from org.apache.kafka.common.requests that wasn't meant to be exposed
+// Used by ce-broker-plugins
 public class RequestInternals {
 
   public static Struct toStruct(AbstractRequest request) {

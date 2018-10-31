@@ -34,23 +34,23 @@ public class ApiSensorBuilder extends AbstractSensorBuilder<ApiSensors> {
   private static final String RESPONSE_BYTE_RATE = "response-byte";
   private static final String RESPONSE_TIME_NANOS = "response-time-ns";
   private static final String ERROR_COUNT = "error";
-  private static final Map<Errors, ErrorCountSensorCreator> errorSensorCreators;
-  private static final Map<String, AbstractApiSensorCreator> requestResponseSensorCreators;
+  private static final Map<Errors, ErrorCountSensorCreator> ERROR_SENSOR_CREATORS;
+  private static final Map<String, AbstractApiSensorCreator> REQUEST_RESPONSE_SENSOR_CREATORS;
 
 
   static {
-    requestResponseSensorCreators = new HashMap<>();
-    requestResponseSensorCreators.put(REQUEST_RATE,
+    REQUEST_RESPONSE_SENSOR_CREATORS = new HashMap<>();
+    REQUEST_RESPONSE_SENSOR_CREATORS.put(REQUEST_RATE,
         new RequestMeterSensorCreator(REQUEST_RATE, "requests"));
-    requestResponseSensorCreators.put(REQUEST_BYTE_RATE,
+    REQUEST_RESPONSE_SENSOR_CREATORS.put(REQUEST_BYTE_RATE,
         new RequestSensorCreator(REQUEST_BYTE_RATE, "request bytes", true, true));
-    requestResponseSensorCreators.put(RESPONSE_BYTE_RATE,
+    REQUEST_RESPONSE_SENSOR_CREATORS.put(RESPONSE_BYTE_RATE,
         new RequestSensorCreator(RESPONSE_BYTE_RATE, "response bytes", true, true));
-    requestResponseSensorCreators.put(RESPONSE_TIME_NANOS,
+    REQUEST_RESPONSE_SENSOR_CREATORS.put(RESPONSE_TIME_NANOS,
         new RequestMinMaxAvgSensorCreator(RESPONSE_TIME_NANOS, "request processing time in nanos"));
-    errorSensorCreators = new EnumMap<>(Errors.class);
+    ERROR_SENSOR_CREATORS = new EnumMap<>(Errors.class);
     for (Errors error : Errors.values()) {
-      errorSensorCreators.put(error, new ErrorCountSensorCreator(error));
+      ERROR_SENSOR_CREATORS.put(error, new ErrorCountSensorCreator(error));
     }
   }
 
@@ -77,7 +77,7 @@ public class ApiSensorBuilder extends AbstractSensorBuilder<ApiSensors> {
 
   @Override
   protected Map<String, ? extends AbstractSensorCreator> sensorCreators() {
-    return ApiSensorBuilder.requestResponseSensorCreators;
+    return ApiSensorBuilder.REQUEST_RESPONSE_SENSOR_CREATORS;
   }
 
   @Override
@@ -100,7 +100,7 @@ public class ApiSensorBuilder extends AbstractSensorBuilder<ApiSensors> {
           sensorSuffix);
       sensorsToFind.put(error, sensorName);
     }
-    return getOrCreateSensors(sensorsToFind, errorSensorCreators);
+    return getOrCreateSensors(sensorsToFind, ERROR_SENSOR_CREATORS);
   }
 
   private abstract static class AbstractApiSensorCreator extends AbstractSensorCreator {

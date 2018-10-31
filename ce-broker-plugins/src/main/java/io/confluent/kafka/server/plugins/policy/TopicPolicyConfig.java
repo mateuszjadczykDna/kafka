@@ -72,10 +72,10 @@ public class TopicPolicyConfig extends AbstractConfig {
   protected static final String INTERNAL_LISTENER_CONFIG_DOC =
       "Internal listener to get bootstrap broker for AdminClient.";
 
-  private static final ConfigDef config;
+  private static final ConfigDef CONFIG;
 
   static {
-    config = new ConfigDef()
+    CONFIG = new ConfigDef()
         .define(REPLICATION_FACTOR_CONFIG,
             ConfigDef.Type.SHORT,
             ConfigDef.Importance.HIGH,
@@ -123,15 +123,15 @@ public class TopicPolicyConfig extends AbstractConfig {
   }
 
   public TopicPolicyConfig(Map<String, ?> clientConfigs) {
-    super(config, clientConfigs);
+    super(CONFIG, clientConfigs);
   }
 
   public TopicPolicyConfig(Properties props) {
-    super(config, props);
+    super(CONFIG, props);
   }
 
   public static void main(String[] args) {
-    System.out.println(config.toRst());
+    System.out.println(CONFIG.toRst());
   }
 
   void validateConfigsAreUpdatable(Map<String, String> configs) {

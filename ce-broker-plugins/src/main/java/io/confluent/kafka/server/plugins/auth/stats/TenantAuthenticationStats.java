@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 public class TenantAuthenticationStats {
-  private static final Logger logger =
+  private static final Logger log =
       LoggerFactory.getLogger(TenantAuthenticationStats.class);
 
   static final String MBEAN_NAME =
@@ -34,13 +34,13 @@ public class TenantAuthenticationStats {
   // string containing special characteres to be safe.
   private static final Pattern MBEAN_PATTERN = Pattern.compile("[\\w-%\\. \t]*");
 
-  private static final TenantAuthenticationStats instance = new TenantAuthenticationStats();
+  private static final TenantAuthenticationStats INSTANCE = new TenantAuthenticationStats();
 
   private final Map<MultiTenantPrincipal, TenantAuthStats> registeredMBeans =
       new HashMap<>();
 
   public static TenantAuthenticationStats instance() {
-    return instance;
+    return INSTANCE;
   }
 
   public void onSuccessfulAuthentication(MultiTenantPrincipal principal) {
@@ -93,10 +93,10 @@ public class TenantAuthenticationStats {
       mbeanServer.registerMBean(mbean, mbeanName);
       registeredMBeans.put(principal, mbean);
     } catch (InstanceAlreadyExistsException e) {
-      logger.error("Auth stats MBean already exists for " + principal, e);
+      log.error("Auth stats MBean already exists for " + principal, e);
     } catch (MBeanRegistrationException |  NotCompliantMBeanException
         | MalformedObjectNameException e) {
-      logger.error("Auth stats MBean could not be registered for " + principal, e);
+      log.error("Auth stats MBean could not be registered for " + principal, e);
     }
     return mbean;
   }
@@ -107,9 +107,9 @@ public class TenantAuthenticationStats {
       ObjectName mbeanName = mbeanName(principal);
       mbeanServer.unregisterMBean(mbeanName);
     } catch (InstanceNotFoundException e) {
-      logger.warn("Auth stats MBean not found for " + principal, e);
+      log.warn("Auth stats MBean not found for " + principal, e);
     } catch (MBeanRegistrationException | MalformedObjectNameException e) {
-      logger.error("Auth stats MBean could not be unregistered for " + principal, e);
+      log.error("Auth stats MBean could not be unregistered for " + principal, e);
     }
   }
 

@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  */
 class ClusterMetadata {
 
-  private static final Logger logger = LoggerFactory.getLogger(ClusterMetadata.class);
+  private static final Logger log = LoggerFactory.getLogger(ClusterMetadata.class);
 
   final Set<Integer> brokers;
   final Set<String> racks;
@@ -120,7 +120,7 @@ class ClusterMetadata {
             nodeMetadata.totalFollowers++;
           }
         } else {
-          logger.error("Inconsistent cluster metadata: replica node {} not found", replicaNode);
+          log.error("Inconsistent cluster metadata: replica node {} not found", replicaNode);
         }
       }
     }
@@ -158,7 +158,7 @@ class ClusterMetadata {
                 }
               }
             } else {
-              logger.error("Inconsistent cluster metadata: replica node {} not found", replicaNode);
+              log.error("Inconsistent cluster metadata: replica node {} not found", replicaNode);
             }
           }
         }

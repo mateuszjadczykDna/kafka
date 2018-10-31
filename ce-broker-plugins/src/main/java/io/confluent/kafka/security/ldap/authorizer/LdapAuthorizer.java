@@ -41,7 +41,7 @@ import scala.collection.JavaConversions;
 
 public class LdapAuthorizer extends SimpleAclAuthorizer {
 
-  private static final Logger authorizerLogger = LoggerFactory.getLogger("kafka.authorizer.logger");
+  private static final Logger log = LoggerFactory.getLogger("kafka.authorizer.logger");
   public static final String GROUP_PRINCIPAL_TYPE = "Group";
   private static final KafkaPrincipal WILDCARD_GROUP_PRINCIPAL =
       new KafkaPrincipal(GROUP_PRINCIPAL_TYPE, "*");
@@ -97,7 +97,7 @@ public class LdapAuthorizer extends SimpleAclAuthorizer {
     // If LDAP group manager has failed with an exception and hasn't recovered within
     // the retry timeout, deny all access
     if (groupManager.failed()) {
-      authorizerLogger.error("LDAP group manager has failed, denying all access");
+      log.error("LDAP group manager has failed, denying all access");
       return false;
     }
 
@@ -192,7 +192,7 @@ public class LdapAuthorizer extends SimpleAclAuthorizer {
           && (acl.principal().equals(principal) || acl.principal().equals(wildcardPrincipal))
           && (op.equals(acl.operation()) || acl.operation().equals(All$.MODULE$))
           && (acl.host().equals(host) || acl.host().equals(Acl.WildCardHost()))) {
-        authorizerLogger
+        log
             .debug("operation = {} on resource = {} from host = {} is {} based on acl = {}",
                 op, resource, host, permissionType, acl);
         return true;
@@ -204,7 +204,7 @@ public class LdapAuthorizer extends SimpleAclAuthorizer {
 
   private boolean isEmptyAclAndAuthorized(Resource resource, Set<Acl> acls) {
     if (acls.isEmpty()) {
-      authorizerLogger
+      log
           .debug("No acl found for resource {}, authorized = {}", resource, allowEveryoneIfNoAcl);
       return allowEveryoneIfNoAcl;
     } else {
@@ -214,14 +214,14 @@ public class LdapAuthorizer extends SimpleAclAuthorizer {
 
   private boolean isSuperUserOrGroup(KafkaPrincipal userPrincipal, Set<KafkaPrincipal> groups) {
     if (superUsers.contains(userPrincipal)) {
-      authorizerLogger
+      log
           .debug("principal = {} is a super user, allowing operation without checking acls.",
               userPrincipal);
       return true;
     } else {
       for (KafkaPrincipal group : groups) {
         if (superUsers.contains(group)) {
-          authorizerLogger.debug(
+          log.debug(
               "principal = {} belongs to super group {}, allowing operation without checking acls.",
               userPrincipal, group);
           return true;
@@ -245,9 +245,9 @@ public class LdapAuthorizer extends SimpleAclAuthorizer {
       Resource resource, String host) {
     String logMessage = "Principal = {} is {} Operation = {} from host = {} on resource = {}";
     if (authorized) {
-      authorizerLogger.debug(logMessage, principal, "Allowed", op, host, resource);
+      log.debug(logMessage, principal, "Allowed", op, host, resource);
     } else {
-      authorizerLogger.info(logMessage, principal, "Denied", op, host, resource);
+      log.info(logMessage, principal, "Denied", op, host, resource);
     }
   }
 }

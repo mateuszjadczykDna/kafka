@@ -229,10 +229,9 @@
     <suppress checks="JavaNCSS" files="TenantPartitionAssignor"/>
     <suppress checks="ClassDataAbstractionCoupling" files="(MultiTenantRequestContext|LdapGroupManager|OAuthBearerSecureTokenValidatorCallbackHandler|SecretsLoader).java"/>
     <suppress checks="BooleanExpressionComplexity" files="LdapAuthorizer|MultiTenantAuthorizer|MultiTenantRequestContext"/>
-    <suppress checks="ConstantName" files="(CreateTopicPolicy|PlainSaslServer|FileBasedPlainSaslAuthenticator|LdapAuthorizer|LdapGroupManager|TopicPolicyConfig|AuthenticationStats|LicenseValidator|MultiTenantApis|ApiSensorBuilder).java"/>
+    <suppress checks="ClassFanOutComplexity" files="MultiTenantRequestContext.java"/>
 
     <!-- Suppress checks for copy of Apache Kafka class PatternType.java -->
     <suppress checks="[a-zA-Z0-9]*" files="PatternType" />
-
 
 </suppressions>

@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  * tenant assignments are taken into account to achieve balanced allocation for tenants.</p>
  */
 public class TenantPartitionAssignor {
-  private static final Logger logger = LoggerFactory.getLogger(TenantPartitionAssignor.class);
+  private static final Logger log = LoggerFactory.getLogger(TenantPartitionAssignor.class);
 
   private volatile Cluster cluster;
 
@@ -87,13 +87,13 @@ public class TenantPartitionAssignor {
         if (startPartition < totalPartitions) {
           topicInfos.put(topic, new TopicInfo(totalPartitions, replication, startPartition));
         } else {
-          logger.debug("Topic metadata out-of-date for {}, using default assignment, "
+          log.debug("Topic metadata out-of-date for {}, using default assignment, "
               + " startPartition is {} and requested totalPartitions is {}",
               topic, startPartition, totalPartitions);
           result.put(topic, Collections.emptyList());
         }
       } else {
-        logger.debug("Topic metadata not available for {}, using default assignment", topic);
+        log.debug("Topic metadata not available for {}, using default assignment", topic);
         result.put(topic, Collections.emptyList());
       }
     }
@@ -138,7 +138,7 @@ public class TenantPartitionAssignor {
         clusterMetadata.updateNodeMetadata(assignment);
         result.put(topic, assignment);
       } else {
-        logger.info("Insufficient nodes {} for assignment of topic {}, with replication factor "
+        log.info("Insufficient nodes {} for assignment of topic {}, with replication factor "
             + "{} , using default assignment", cluster.nodes().size(),
             topic, topicInfo.replicationFactor);
         result.put(topic, Collections.emptyList());
@@ -154,7 +154,7 @@ public class TenantPartitionAssignor {
    */
   private Map<String, List<List<Integer>>> defaultAssignment(Set<String> topics,
       List<List<Integer>> defaultValue) {
-    logger.info("Cluster info not available, using default partition assignment for {}", topics);
+    log.info("Cluster info not available, using default partition assignment for {}", topics);
     return topics.stream()
         .collect(Collectors.toMap(Function.identity(), t -> defaultValue));
   }

@@ -21,7 +21,7 @@ import java.util.Map;
 
 public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateTopicPolicy {
 
-  private static final Logger logger =
+  private static final Logger log =
           LoggerFactory.getLogger(CreateTopicPolicy.class);
 
   private static final String ADVERTISED_LISTENERS_CONFIG = "advertised.listeners";
@@ -56,7 +56,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
                         listener, securityProtocol));
     }
 
-    logger.debug("Using bootstrap servers {} for retrieving tenant's broker and partitions counts",
+    log.debug("Using bootstrap servers {} for retrieving tenant's broker and partitions counts",
                  bootstrapBroker);
     adminClientProps.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapBroker);
   }
@@ -78,7 +78,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     if (reqMetadata.numPartitions() != null) {
       Map<String, Object> adminConfig = new HashMap<>();
       adminConfig.putAll(adminClientProps);
-      logger.debug("Checking partitions count with config: {}", adminClientProps);
+      log.debug("Checking partitions count with config: {}", adminClientProps);
       try (AdminClient adminClient = AdminClient.create(adminConfig)) {
         ensureValidPartitionCount(
             adminClient,
@@ -153,7 +153,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     try {
       ListTopicsResult result = adminClient.listTopics(listTopicsOptions);
       Collection<String> topicNames = result.names().get();
-      logger.debug("Topics: {}", topicNames != null ? topicNames : "[]");
+      log.debug("Topics: {}", topicNames != null ? topicNames : "[]");
       if (topicNames != null) {
         DescribeTopicsResult topicsResult = adminClient.describeTopics(topicNames,
                 describeTopicsOptions);
@@ -169,7 +169,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
       }
     } catch (Exception e) {
       // no retry here because AdminClient already retries several times
-      logger.error("Error getting topics descriptions for tenant prefix {}", tenantPrefix, e);
+      log.error("Error getting topics descriptions for tenant prefix {}", tenantPrefix, e);
       throw new PolicyViolationException("Failed to validate number of partitions.");
     }
     return totalCurrentPartitions;
@@ -201,7 +201,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
             maxPartitionsPerTenant - totalCurrentPartitions,
             maxPartitionsPerTenant, totalCurrentPartitions));
       }
-      logger.debug(
+      log.debug(
           "Validated adding {} partitions to {} current partitions (total={}, max={}) for {}",
           partitionsCount, totalCurrentPartitions, totalCurrentPartitions + partitionsCount,
           maxPartitionsPerTenant, tenantPrefix);

@@ -28,13 +28,13 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
   static final String JAAS_ENTRY_REFRESH_MS = "refresh_ms";
   private static final String AUTHENTICATION_FAILED_ERROR =
       "Authentication failed: Invalid username or password";
-  private static final Logger logger =
+  private static final Logger log =
       LoggerFactory.getLogger(FileBasedPlainSaslAuthenticator.class);
 
   private static final String SASL_MECHANISM_PLAIN = "PLAIN";
   private SecretsLoader loader;
   private static final int BCRYPT_PASSSWORD_CACHE_SIZE = 2048;
-  private static final LRUCache<String, String> bcryptPasswordCache =
+  private static final LRUCache<String, String> BCRYPT_PASSWORD_CACHE =
       new LRUCache<>(BCRYPT_PASSSWORD_CACHE_SIZE);
 
   @Override
@@ -71,7 +71,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
           switch (entry.hashFunction) {
             case "none":
               if (!entry.hashedSecret.equals(password)) {
-                logger.trace("Bad password for user {}", username);
+                log.trace("Bad password for user {}", username);
                 throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
               }
               break;
@@ -79,7 +79,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
               authenticateBcrypt(entry.hashedSecret, username, password);
               break;
             default:
-              logger.error("Unknown hash function: {} for user {}", entry.hashFunction,
+              log.error("Unknown hash function: {} for user {}", entry.hashFunction,
                   username);
               throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
           }
@@ -91,35 +91,35 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
               .superUser(!entry.isServiceAccount()).build();
           return new MultiTenantPrincipal(entry.userId, tenantMetadata);
         } else {
-          logger.error("Wrong SASL mechanism {} for user {}", entry.saslMechanism, username);
+          log.error("Wrong SASL mechanism {} for user {}", entry.saslMechanism, username);
           throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
         }
       } else {
-        logger.trace("Unknown user {}", username);
+        log.trace("Unknown user {}", username);
         throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
       }
     } catch (SaslAuthenticationException e) {
       throw e;
     } catch (Exception e) {
-      logger.error("Unexpected exception during authentication for user {}", username, e);
+      log.error("Unexpected exception during authentication for user {}", username, e);
       throw new SaslException("Authentication failed: Unexpected exception", e);
     }
   }
 
   private void authenticateBcrypt(String hashedSecret, String username, String password) {
     String hash = null;
-    synchronized (bcryptPasswordCache) {
-      hash = bcryptPasswordCache.get(password);
+    synchronized (BCRYPT_PASSWORD_CACHE) {
+      hash = BCRYPT_PASSWORD_CACHE.get(password);
     }
     if (hashedSecret.equals(hash)) {
       return;
     }
     if (!BCrypt.checkpw(password, hashedSecret)) {
-      logger.trace("Bad password for user {}", username);
+      log.trace("Bad password for user {}", username);
       throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
     }
-    synchronized (bcryptPasswordCache) {
-      bcryptPasswordCache.put(password, hashedSecret);
+    synchronized (BCRYPT_PASSWORD_CACHE) {
+      BCRYPT_PASSWORD_CACHE.put(password, hashedSecret);
     }
   }
 

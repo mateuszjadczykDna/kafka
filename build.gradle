@@ -398,7 +398,6 @@ subprojects {
       // 3.1.6 has a regression that breaks our build, seems to be https://github.com/spotbugs/spotbugs/pull/688
       toolVersion = '3.1.5'
       excludeFilter = file("$rootDir/gradle/spotbugs-exclude.xml")
-      ignoreFailures = false
     }
     test.dependsOn('spotbugsMain')
 
@@ -1745,11 +1744,6 @@ project(':ce-broker-plugins') {
   }
 
   checkstyle {
-    // Checkstyle is disabled for now on this subproject.  One reason is
-    // because the checkstyle import-control plugin can't handle subprojects
-    // where there is more than one root package.  See:
-    // https://stackoverflow.com/questions/16142898/checkstyle-rule-to-limit-interactions-between-root-packages-with-importcontrol
-    ignoreFailures = true
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
   }
 }

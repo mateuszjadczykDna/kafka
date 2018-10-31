@@ -3,6 +3,7 @@
 package org.apache.kafka.common.protocol.types;
 
 // Expose some stuff from org.apache.kafka.common.protocol.types that wasn't meant to be exposed
+// Used by ce-broker-plugins
 public class ProtocolInternals {
 
   public static Struct newStruct(Schema schema, Object[] values) {
