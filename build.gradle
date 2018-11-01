@@ -73,7 +73,7 @@ allprojects {
   repositories {
     mavenCentral()
   }
-  
+
   apply plugin: 'idea'
   apply plugin: 'org.owasp.dependencycheck'
   apply plugin: 'com.github.ben-manes.versions'
@@ -274,7 +274,7 @@ subprojects {
     useJUnit {
       excludeCategories 'org.apache.kafka.test.IntegrationTest'
     }
-    
+
   }
 
   jar {
@@ -459,8 +459,8 @@ def fineTuneEclipseClasspathFile(eclipse, project) {
       if (project.name.equals('core')) {
         cp.entries.findAll { it.kind == "src" && it.path.equals("src/test/scala") }*.excludes = ["integration/", "other/", "unit/"]
       }
-      /* 
-       * Set all eclipse build output to go to 'build_eclipse' directory. This is to ensure that gradle and eclipse use different 
+      /*
+       * Set all eclipse build output to go to 'build_eclipse' directory. This is to ensure that gradle and eclipse use different
        * build output directories, and also avoid using the eclpise default of 'bin' which clashes with some of our script directories.
        * https://discuss.gradle.org/t/eclipse-generated-files-should-be-put-in-the-same-place-as-the-gradle-generated-files/6986/2
        */
@@ -553,7 +553,7 @@ for ( sv in availableScalaVersions ) {
 }
 
 def connectPkgs = ['connect:api', 'connect:runtime', 'connect:transforms', 'connect:json', 'connect:file', 'connect:basic-auth-extension']
-def pkgs = ['clients', 'examples', 'log4j-appender', 'tools', 'streams', 'streams:streams-scala', 'streams:test-utils', 'streams:examples', 'ce-security', 'ce-serializers', 'ce-licensing', 'ce-broker-plugins'] + connectPkgs
+def pkgs = ['clients', 'examples', 'log4j-appender', 'tools', 'streams', 'streams:streams-scala', 'streams:test-utils', 'streams:examples', 'ce-security', 'ce-serializers', 'ce-licensing', 'ce-broker-plugins', 'ce-metrics'] + connectPkgs
 
 /** Create one task per default Scala version */
 def withDefScalaVersions(taskName) {
@@ -626,7 +626,7 @@ project(':core') {
     testCompile libs.slf4jlog4j
     testCompile libs.jfreechart
   }
-  
+
   configurations {
     // manually excludes some unnecessary dependencies
     compile.exclude module: 'javax'
@@ -777,6 +777,8 @@ project(':core') {
     from(project(':streams:examples').configurations.runtime) { into("libs/") }
     from(project(':ce-security').jar) { into("libs/") }
     from(project(':ce-security').configurations.runtime) { into("libs/") }
+    from(project(':ce-metrics').jar) { into("libs/") }
+    from(project(':ce-metrics').configurations.runtime) { into("libs/") }
     from(project(':ce-serializers').jar) { into("libs/") }
     from(project(':ce-serializers').configurations.runtime) { into("libs/") }
     from(project(':ce-licensing').jar) { into("libs/") }
@@ -1593,6 +1595,46 @@ project(':ce-security') {
   }
 
   checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+}
+
+
+project(':ce-metrics') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+  archivesBaseName = "ce-metrics"
+
+  dependencies {
+    compile libs.bcpkix
+    compile libs.jose4j
+    compile project(':ce-serializers')
+    compile project(':clients')
+    compile project(':core')
+    testCompile libs.junit
+    testCompile project(':clients').sourceSets.test.output
+    testCompile project(':core').sourceSets.test.output
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.testRuntime) {
+      include('slf4j-log4j12*')
+      include('log4j*jar')
+    }
+    from (configurations.runtime) {
+    }
+    into "$buildDir/dependant-libs"
+    duplicatesStrategy 'exclude'
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
+
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+
+  checkstyleTest {
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
   }
 }

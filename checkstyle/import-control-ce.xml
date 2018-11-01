@@ -49,6 +49,13 @@
 
   <subpackage name="metrics">
     <allow pkg="io.confluent.metrics" />
+    <allow pkg="io.confluent.monitoring" />
+    <allow pkg="io.confluent.serializers" />
+    <allow pkg="kafka" />
+    <allow pkg="scala" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+    <allow pkg="org.apache.kafka.test" />
   </subpackage>
 
   <subpackage name="monitoring">
@@ -95,7 +102,7 @@
      <allow pkg="org.apache.kafka.test" />
    </subpackage>
 
-   
+
    <subpackage name="security.minikdc">
      <allow pkg="org.apache.commons.lang.text" />
      <allow pkg="org.apache.directory" />

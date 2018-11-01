@@ -239,4 +239,10 @@
     <!-- Suppress checks for copy of Apache Kafka class PatternType.java -->
     <suppress checks="[a-zA-Z0-9]*" files="PatternType" />
 
+    <!-- ce-metrics exclusions -->
+    <suppress checks="NPathComplexity"
+              files="ConfluentMetricsReporter.java$"/>
+    <suppress checks="AvoidStarImport"
+              files="YammerMetricsTest.java$"/>
+
 </suppressions>
