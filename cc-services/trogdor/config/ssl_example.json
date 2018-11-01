@@ -1,0 +1,18 @@
+{
+  "compression.type": "lz4",
+  "acks": "all",
+  "linger.ms": 5000,
+  "max.in.flight.requests.per.connection": 2,
+  "retry.backoff.ms": 500,
+  "ssl.endpoint.identification.algorithm": "https",
+  "sasl.mechanism": "PLAIN",
+  "security.protocol": "SSL",
+  "ssl.protocol": "TLS",
+  "ssl.key.password": "aiven1",
+  "ssl.keystore.location": "/opt/caas/client.keystore.p12",
+  "ssl.keystore.password": "aiven1",
+  "ssl.keystore.type": "PKCS12",
+  "ssl.truststore.location": "/opt/caas/aiven.truststore.jks",
+  "ssl.truststore.password": "aiven1",
+  "ssl.truststore.type": "JKS"
+}
