@@ -36,7 +36,7 @@ import scala.Option;
 
 public class EmbeddedKafkaCluster {
 
-  private static final Logger logger = LoggerFactory.getLogger(EmbeddedKafkaCluster.class);
+  private static final Logger log = LoggerFactory.getLogger(EmbeddedKafkaCluster.class);
   private static final int DEFAULT_BROKER_PORT = 0; // 0 results in a random port being selected
 
   private final MockTime time;
@@ -48,13 +48,13 @@ public class EmbeddedKafkaCluster {
   }
 
   public void startZooKeeper() {
-    logger.debug("Starting a ZooKeeper instance");
+    log.debug("Starting a ZooKeeper instance");
     zookeeper = new EmbeddedZookeeper();
-    logger.debug("ZooKeeper instance is running at {}", zkConnect());
+    log.debug("ZooKeeper instance is running at {}", zkConnect());
   }
 
   public void startBrokers(int numBrokers, Properties overrideProps) throws Exception {
-    logger.debug("Initiating embedded Kafka cluster startup with config {}", overrideProps);
+    log.debug("Initiating embedded Kafka cluster startup with config {}", overrideProps);
     brokers = new EmbeddedKafka[numBrokers];
 
     Properties brokerConfig = new Properties();
@@ -67,11 +67,11 @@ public class EmbeddedKafkaCluster {
 
     for (int i = 0; i < brokers.length; i++) {
       brokerConfig.put(KafkaConfig$.MODULE$.BrokerIdProp(), i);
-      logger.debug("Starting a Kafka instance on port {} ...",
+      log.debug("Starting a Kafka instance on port {} ...",
           brokerConfig.get(KafkaConfig$.MODULE$.PortProp()));
       brokers[i] = new EmbeddedKafka.Builder(time).addConfigs(brokerConfig).build();
 
-      logger.debug("Kafka instance started: {}", brokers[i]);
+      log.debug("Kafka instance started: {}", brokers[i]);
     }
   }
 

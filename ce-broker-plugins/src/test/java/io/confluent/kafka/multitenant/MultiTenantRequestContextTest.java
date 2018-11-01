@@ -5,6 +5,8 @@ import io.confluent.kafka.multitenant.metrics.ApiSensorBuilder;
 import io.confluent.kafka.multitenant.metrics.TenantMetrics;
 import io.confluent.kafka.multitenant.quota.TenantPartitionAssignor;
 import io.confluent.kafka.multitenant.quota.TestCluster;
+
+import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.kafka.common.MetricName;
@@ -146,6 +148,7 @@ import static org.junit.Assert.assertTrue;
 
 public class MultiTenantRequestContextTest {
 
+  private final static Locale LOCALE = Locale.ENGLISH;
   private MultiTenantPrincipal principal = new MultiTenantPrincipal("user",
       new TenantMetadata("tenant", "tenant_cluster_id"));
   private ListenerName listenerName = new ListenerName("listener");
@@ -268,7 +271,7 @@ public class MultiTenantRequestContextTest {
 
       LinkedHashMap<TopicPartition, FetchResponse.PartitionData<MemoryRecords>> responsePartitions =
           new LinkedHashMap<>();
-      responsePartitions.put(new TopicPartition("tenant_foo", 0),new FetchResponse.PartitionData<>(
+      responsePartitions.put(new TopicPartition("tenant_foo", 0), new FetchResponse.PartitionData<>(
           Errors.NONE, 1330L, 1324L, 0L, Collections.<FetchResponse.AbortedTransaction>emptyList(), MemoryRecords.EMPTY));
       responsePartitions.put(new TopicPartition("tenant_bar", 0), new FetchResponse.PartitionData<>(
           Errors.NONE, 1330L, 1324L, 0L, Collections.<FetchResponse.AbortedTransaction>emptyList(), MemoryRecords.EMPTY));
@@ -937,7 +940,7 @@ public class MultiTenantRequestContextTest {
     }
 
     private String resourceName(ResourceType resourceType) {
-      String suffix = resourceType.name().toLowerCase();
+      String suffix = resourceType.name().toLowerCase(LOCALE);
       if (!hasResourceName) {
         return null;
       } else if (wildcard) {
@@ -952,7 +955,7 @@ public class MultiTenantRequestContextTest {
     }
 
     String tenantResourceName(ResourceType resourceType) {
-      String suffix = resourceType.name().toLowerCase();
+      String suffix = resourceType.name().toLowerCase(LOCALE);
       if (!hasResourceName) {
         return "tenant_";
       } else if (wildcard) {
@@ -1624,7 +1627,7 @@ public class MultiTenantRequestContextTest {
     return buffer;
   }
 
-  private <T> Set<T> asSet(T ... elems) {
+  private <T> Set<T> asSet(T... elems) {
     return new HashSet<>(Arrays.asList(elems));
   }
 

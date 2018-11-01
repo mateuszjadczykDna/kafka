@@ -22,7 +22,7 @@ public class TestCluster {
   public void setPartitionLeaders(String topic, int firstPartition, int count,
                                   Integer leaderBrokerId) {
     for (int i = firstPartition; i < firstPartition + count; i++) {
-      List<Integer> replicas = leaderBrokerId == null? Collections.emptyList()
+      List<Integer> replicas = leaderBrokerId == null ? Collections.emptyList()
           : Collections.singletonList(leaderBrokerId);
       topicPartitions.put(new TopicPartition(topic, i), replicas);
     }

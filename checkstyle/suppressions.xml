@@ -231,6 +231,11 @@
     <suppress checks="BooleanExpressionComplexity" files="LdapAuthorizer|MultiTenantAuthorizer|MultiTenantRequestContext"/>
     <suppress checks="ClassFanOutComplexity" files="MultiTenantRequestContext.java"/>
 
+    <!-- ce-broker-plugins test suppressions -->
+    <suppress checks="ClassDataAbstractionCoupling" files="MultiTenantRequestContextTest.java"/>
+    <suppress checks="ClassFanOutComplexity" files="MultiTenantRequestContextTest.java"/>
+    <suppress checks="ClassDataAbstractionCoupling" files="MiniKdcWithLdapService.java"/>
+
     <!-- Suppress checks for copy of Apache Kafka class PatternType.java -->
     <suppress checks="[a-zA-Z0-9]*" files="PatternType" />
 

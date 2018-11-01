@@ -29,7 +29,7 @@ public class OAuthBearerLoginCallbackHandlerTest {
 
     @Test(expected = IllegalStateException.class)
     public void testHandleRaisesExceptionIfNotConfigured() throws Exception {
-        callbackHandler.handle(new Callback[] { new SaslExtensionsCallback() });
+        callbackHandler.handle(new Callback[] {new SaslExtensionsCallback()});
     }
 
     @Test
@@ -39,7 +39,7 @@ public class OAuthBearerLoginCallbackHandlerTest {
         callbackHandler.configure(jaasConfig, OAuthBearerLoginModule.OAUTHBEARER_MECHANISM,
                 JaasContext.loadClientContext(jaasConfig).configurationEntries());
 
-        callbackHandler.handle(new Callback[] { tokenCallback });
+        callbackHandler.handle(new Callback[] {tokenCallback});
 
         assertEquals("Token", tokenCallback.token().value());
     }
@@ -51,7 +51,7 @@ public class OAuthBearerLoginCallbackHandlerTest {
         callbackHandler.configure(jaasConfig, OAuthBearerLoginModule.OAUTHBEARER_MECHANISM,
                 JaasContext.loadClientContext(jaasConfig).configurationEntries());
 
-        callbackHandler.handle(new Callback[] { extCallback });
+        callbackHandler.handle(new Callback[] {extCallback});
 
         assertEquals("Cluster1", extCallback.extensions().map().get(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY));
     }

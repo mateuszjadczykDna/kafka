@@ -1746,6 +1746,11 @@ project(':ce-broker-plugins') {
   checkstyle {
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
   }
+
+  checkstyleTest {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+
 }
 
 task aggregatedJavadoc(type: Javadoc) {

@@ -1,7 +1,6 @@
 // (Copyright) [2018 - 2018] Confluent, Inc.
 package io.confluent.kafka.multitenant.integration.test;
 
-import io.confluent.kafka.multitenant.authorizer.MultiTenantAuthorizer;
 import io.confluent.kafka.multitenant.integration.cluster.PhysicalCluster;
 import io.confluent.kafka.multitenant.integration.cluster.LogicalClusterUser;
 import io.confluent.kafka.test.utils.KafkaTestUtils;

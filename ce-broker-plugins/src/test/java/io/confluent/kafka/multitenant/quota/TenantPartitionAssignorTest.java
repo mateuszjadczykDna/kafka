@@ -608,7 +608,7 @@ public class TenantPartitionAssignorTest {
   private void addPartitions(String topic, int firstNewPartition, int newPartitions) {
     int totalPartitions = firstNewPartition + newPartitions;
     Map<String, Integer> partitions = Collections.singletonMap(topic, totalPartitions);
-    Map<String, List<List<Integer>>>assignment = assignNewPartitions(partitions);
+    Map<String, List<List<Integer>>> assignment = assignNewPartitions(partitions);
     testCluster.createPartitions(topic, firstNewPartition, assignment.get(topic));
   }
 

@@ -22,7 +22,7 @@ public class OAuthBearerValidatorCallbackHandlerTest {
   private OAuthUtils.JwsContainer jwsContainer;
   private String defaultIssuer = "Confluent";
   private String defaultSubject = "Lyft <3";
-  private String[] defaultAllowedClusters = new String[] { "cluster1" };
+  private String[] defaultAllowedClusters = new String[] {"cluster1"};
 
   @Test
   public void testAttachesJws() throws Exception {

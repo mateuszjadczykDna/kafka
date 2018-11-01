@@ -36,7 +36,7 @@ public class OAuthSaslAuthenticatorTest {
   private Map<String, Object> saslClientConfigs;
   private Map<String, Object> saslServerConfigs;
   private String allowedCluster = "audi";
-  private String[] allowedClusters = new String[] { allowedCluster };
+  private String[] allowedClusters = new String[] {allowedCluster};
   private MockTime mockTime;
 
   private CredentialCache credentialCache;

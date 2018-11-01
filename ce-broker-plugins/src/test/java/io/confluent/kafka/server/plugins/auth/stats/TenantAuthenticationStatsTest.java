@@ -14,7 +14,7 @@ import java.util.Set;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 public class TenantAuthenticationStatsTest {
 
@@ -39,7 +39,7 @@ public class TenantAuthenticationStatsTest {
   }
 
   @Test
-  public void testMBeanNames() throws Exception{
+  public void testMBeanNames() throws Exception {
     String tenant = "tenant\'{}\"!$:";
     String user = "user*?1";
     authenticate(tenant, user);

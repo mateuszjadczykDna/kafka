@@ -81,7 +81,7 @@ import org.apache.directory.server.protocol.shared.transport.TcpTransport;
 import org.apache.directory.server.protocol.shared.transport.UdpTransport;
 import org.apache.directory.server.xdbm.Index;
 import org.apache.directory.shared.kerberos.KerberosTime;
-import org.apache.kafka.common.config.types.Password;;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Java;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
@@ -114,7 +114,7 @@ import org.slf4j.LoggerFactory;
  */
 public class MiniKdcWithLdapService {
 
-  private static final Logger logger = LoggerFactory.getLogger(MiniKdcWithLdapService.class);
+  private static final Logger log = LoggerFactory.getLogger(MiniKdcWithLdapService.class);
 
   public static final String ORG_NAME = "org.name";
   public static final String ORG_DOMAIN = "org.domain";
@@ -133,8 +133,8 @@ public class MiniKdcWithLdapService {
   public static final String SASL_JAAS_CONFIG = "sasl.jaas.config";
   public static final String DEBUG = "debug";
 
-  private static final String JavaSecurityKrb5Conf = "java.security.krb5.conf";
-  private static final String SunSecurityKrb5Debug = "sun.security.krb5.debug";
+  private static final String JAVA_SECURITY_KRB_5_CONF = "java.security.krb5.conf";
+  private static final String SUN_SECURITY_KRB_5_DEBUG = "sun.security.krb5.debug";
 
   public enum LdapProtocol {
     LDAP,
@@ -160,7 +160,7 @@ public class MiniKdcWithLdapService {
     GSSAPI
   }
 
-  private static Set<String> RequiredProperties = Utils.mkSet(
+  final private static Set<String> REQUIRED_PROPERTIES = Utils.mkSet(
       ORG_NAME,
       ORG_DOMAIN,
       KDC_BIND_ADDRESS,
@@ -170,21 +170,21 @@ public class MiniKdcWithLdapService {
       INSTANCE,
       TRANSPORT);
 
-  private static Map<String, String> DefaultConfig;
+  final private static Map<String, String> DEFAULT_CONFIG;
 
   static {
-    DefaultConfig = new HashMap<>();
-    DefaultConfig.put(KDC_BIND_ADDRESS, "localhost");
-    DefaultConfig.put(KDC_PORT, "0");
-    DefaultConfig.put(LDAP_BIND_ADDRESS, "localhost");
-    DefaultConfig.put(LDAP_PORT, "0");
-    DefaultConfig.put(INSTANCE, "DefaultLdapServer");
-    DefaultConfig.put(ORG_NAME, "Example");
-    DefaultConfig.put(ORG_DOMAIN, "COM");
-    DefaultConfig.put(TRANSPORT, "TCP");
-    DefaultConfig.put(MAX_TICKET_LIFETIME, "86400000");
-    DefaultConfig.put(MAX_RENEWABLE_LIFETIME, "604800000");
-    DefaultConfig.put(DEBUG, "false");
+    DEFAULT_CONFIG = new HashMap<>();
+    DEFAULT_CONFIG.put(KDC_BIND_ADDRESS, "localhost");
+    DEFAULT_CONFIG.put(KDC_PORT, "0");
+    DEFAULT_CONFIG.put(LDAP_BIND_ADDRESS, "localhost");
+    DEFAULT_CONFIG.put(LDAP_PORT, "0");
+    DEFAULT_CONFIG.put(INSTANCE, "DefaultLdapServer");
+    DEFAULT_CONFIG.put(ORG_NAME, "Example");
+    DEFAULT_CONFIG.put(ORG_DOMAIN, "COM");
+    DEFAULT_CONFIG.put(TRANSPORT, "TCP");
+    DEFAULT_CONFIG.put(MAX_TICKET_LIFETIME, "86400000");
+    DEFAULT_CONFIG.put(MAX_RENEWABLE_LIFETIME, "604800000");
+    DEFAULT_CONFIG.put(DEBUG, "false");
   }
 
 
@@ -214,18 +214,18 @@ public class MiniKdcWithLdapService {
     this.config = config;
     this.workDir = workDir;
 
-    if (!config.stringPropertyNames().containsAll(RequiredProperties)) {
-      Set<String> missingProperties = new HashSet<>(RequiredProperties);
+    if (!config.stringPropertyNames().containsAll(REQUIRED_PROPERTIES)) {
+      Set<String> missingProperties = new HashSet<>(REQUIRED_PROPERTIES);
       missingProperties.removeAll(config.stringPropertyNames());
       throw new IllegalArgumentException("Missing configuration properties: " + missingProperties);
     }
 
-    logger.info("Configuration:");
-    logger.info("---------------------------------------------------------------");
+    log.info("Configuration:");
+    log.info("---------------------------------------------------------------");
     for (Map.Entry<Object, Object> entry : config.entrySet()) {
-      logger.info("\t{}: {}", entry.getKey(), entry.getValue());
+      log.info("\t{}: {}", entry.getKey(), entry.getValue());
     }
-    logger.info("---------------------------------------------------------------");
+    log.info("---------------------------------------------------------------");
 
     orgName = config.getProperty(ORG_NAME);
     orgDomain = config.getProperty(ORG_DOMAIN);
@@ -423,14 +423,14 @@ public class MiniKdcWithLdapService {
       kdcPort = ((InetSocketAddress) absTransport.getAcceptor().getLocalAddress()).getPort();
     }
 
-    logger.info("MiniKdc listening at port: {}", kdcPort);
+    log.info("MiniKdc listening at port: {}", kdcPort);
   }
 
   private void initJvmKerberosConfig() throws Exception {
     writeKrb5Conf();
-    System.setProperty(JavaSecurityKrb5Conf, krb5conf.getAbsolutePath());
-    System.setProperty(SunSecurityKrb5Debug, config.getProperty(DEBUG, "false"));
-    logger.info("Setting JVM krb5.conf to: {}", krb5conf.getAbsolutePath());
+    System.setProperty(JAVA_SECURITY_KRB_5_CONF, krb5conf.getAbsolutePath());
+    System.setProperty(SUN_SECURITY_KRB_5_DEBUG, config.getProperty(DEBUG, "false"));
+    log.info("Setting JVM krb5.conf to: {}", krb5conf.getAbsolutePath());
     refreshJvmKerberosConfig();
   }
 
@@ -471,13 +471,13 @@ public class MiniKdcWithLdapService {
         ldapServer.stop();
       }
       if (kdc != null) {
-        System.clearProperty(JavaSecurityKrb5Conf);
-        System.clearProperty(SunSecurityKrb5Debug);
+        System.clearProperty(JAVA_SECURITY_KRB_5_CONF);
+        System.clearProperty(SUN_SECURITY_KRB_5_DEBUG);
         kdc.stop();
         try {
           ds.shutdown();
         } catch (Exception ex) {
-          logger.error("Could not shutdown ApacheDS properly", ex);
+          log.error("Could not shutdown ApacheDS properly", ex);
         }
       }
     }
@@ -758,7 +758,7 @@ public class MiniKdcWithLdapService {
    */
   public static Properties createConfig() {
     Properties properties = new Properties();
-    properties.putAll(DefaultConfig);
+    properties.putAll(DEFAULT_CONFIG);
     return properties;
   }
 

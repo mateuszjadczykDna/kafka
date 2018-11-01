@@ -34,7 +34,7 @@ import static org.mockito.Mockito.when;
 public class CreateTopicPolicyTest {
 
   private static final String CLUSTER_ID = "mockClusterId";
-  private static final String TENANT_PREFIX= "xx_";
+  private static final String TENANT_PREFIX = "xx_";
 
   private static final String TOPIC = "xx_test-topic";
   private static final short REPLICATION_FACTOR = 5;
@@ -183,7 +183,7 @@ public class CreateTopicPolicyTest {
 
   @Test(expected = PolicyViolationException.class)
   public void rejectsBadRepFactor() throws Exception {
-    when(requestMetadata.replicationFactor()).thenReturn((short)6);
+    when(requestMetadata.replicationFactor()).thenReturn((short) 6);
     policy.validate(requestMetadata);
   }
 

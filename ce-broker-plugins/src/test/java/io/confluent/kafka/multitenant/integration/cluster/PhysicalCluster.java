@@ -47,7 +47,7 @@ public class PhysicalCluster {
   private static final Pattern SASL_USERNAME_PATTERN =
       Pattern.compile("(?<clusterId>[^_]*)_(?<apiKey>.*)");
   // We only create one physical cluster in a test, so it is safe to use a static instance.
-  private static PhysicalCluster INSTANCE;
+  private static PhysicalCluster instance;
 
   private final Properties overrideProps;
   private final EmbeddedKafkaCluster kafkaCluster;
@@ -73,7 +73,7 @@ public class PhysicalCluster {
   }
 
   public synchronized void start() throws Exception {
-    INSTANCE = this;
+    instance = this;
     kafkaCluster.startZooKeeper();
 
     overrideProps.setProperty(SimpleAclAuthorizer$.MODULE$.SuperUsersProp(),
@@ -88,7 +88,7 @@ public class PhysicalCluster {
       }
       kafkaCluster.shutdown();
     } finally {
-      INSTANCE = null;
+      instance = null;
     }
   }
 
@@ -161,7 +161,7 @@ public class PhysicalCluster {
       if (context.securityProtocol() == SecurityProtocol.SASL_PLAINTEXT) {
         SaslAuthenticationContext saslContext = (SaslAuthenticationContext) context;
         String authzId = saslContext.server().getAuthorizationID();
-        return INSTANCE.principal(authzId);
+        return instance.principal(authzId);
       } else if (context.securityProtocol() == SecurityProtocol.PLAINTEXT) {
         return BROKER_PRINCIPAL;
       } else {

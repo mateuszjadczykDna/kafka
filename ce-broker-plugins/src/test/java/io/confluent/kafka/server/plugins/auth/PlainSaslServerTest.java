@@ -80,7 +80,7 @@ public class PlainSaslServerTest {
     try {
       saslServer.evaluateResponse(authString.getBytes());
       fail();
-    } catch (SaslException e) {}
+    } catch (SaslException e) { }
     assertEquals(0L, stats.getSucceeded());
     assertEquals(1L, stats.getFailed());
     assertEquals(1L, stats.getTotal());
@@ -96,7 +96,7 @@ public class PlainSaslServerTest {
     try {
       saslServer.evaluateResponse(authString.getBytes());
       fail();
-    } catch (SaslException e) {}
+    } catch (SaslException e) { }
     assertEquals(0L, stats.getSucceeded());
     assertEquals(1L, stats.getFailed());
     assertEquals(1L, stats.getTotal());
@@ -107,7 +107,7 @@ public class PlainSaslServerTest {
     try {
       saslServer.evaluateResponse("garbage".getBytes());
       fail();
-    } catch (SaslException e) {}
+    } catch (SaslException e) { }
     assertEquals(0L, stats.getSucceeded());
     assertEquals(1L, stats.getFailed());
     assertEquals(1L, stats.getTotal());

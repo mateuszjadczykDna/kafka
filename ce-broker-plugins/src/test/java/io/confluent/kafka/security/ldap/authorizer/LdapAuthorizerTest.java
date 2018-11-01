@@ -283,7 +283,7 @@ public class LdapAuthorizerTest {
 
   private void verifyAuthorization(String user, Resource resource, boolean allowed) {
     scala.collection.Iterator<Operation> opsIter = Operation$.MODULE$.values().iterator();
-    while(opsIter.hasNext()) {
+    while (opsIter.hasNext()) {
       Operation op = opsIter.next();
       verifyAuthorization(user, resource, op, allowed);
     }

@@ -2,8 +2,6 @@ package io.confluent.kafka.multitenant.schema;
 
 import io.confluent.kafka.multitenant.MultiTenantPrincipal;
 import io.confluent.kafka.multitenant.TenantMetadata;
-import org.apache.kafka.common.errors.InvalidRequestException;
-import org.apache.kafka.common.errors.InvalidTopicException;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

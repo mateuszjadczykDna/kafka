@@ -50,10 +50,10 @@ public abstract class AbstractEndToEndAuthorizationTest {
   public static final String SRE = "kafkaSre";
   public static final String INTERN = "kafkaIntern";
 
-  public static String DEV_TOPIC = "dev-topic";
-  public static String DEV_CONSUMER_GROUP = "dev-consumer-group";
-  public static String TEST_TOPIC = "test-topic";
-  public static String TEST_CONSUMER_GROUP = "test-consumer-group";
+  public static final String DEV_TOPIC = "dev-topic";
+  public static final String DEV_CONSUMER_GROUP = "dev-consumer-group";
+  public static final String TEST_TOPIC = "test-topic";
+  public static final String TEST_CONSUMER_GROUP = "test-consumer-group";
 
   protected final SecurityProtocol kafkaSecurityProtocol = SecurityProtocol.SASL_PLAINTEXT;
   protected final String kafkaSaslMechanism;
