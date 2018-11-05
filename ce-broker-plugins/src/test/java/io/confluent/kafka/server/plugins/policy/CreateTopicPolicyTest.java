@@ -364,8 +364,6 @@ public class CreateTopicPolicyTest {
         new AdminClientUnitTestEnv(cluster, AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "10");
 
     clientEnv.kafkaClient().setNodeApiVersions(NodeApiVersions.create());
-    clientEnv.kafkaClient().prepareMetadataUpdate(cluster, Collections.<String>emptySet());
-    clientEnv.kafkaClient().setNode(cluster.controller());
 
     return clientEnv;
   }
