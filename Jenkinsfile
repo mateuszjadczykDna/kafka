@@ -17,7 +17,7 @@ def job = {
     // For non-PR build, Jenkins sets the BRANCH_NAME to the branch name.
     def kafkaBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME;
     stage("Run Gradle tests") {
-        kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true);
+        kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size());
         sh "gradle"
         sh "./gradlew ${gradlewParameters} clean test"
     }
