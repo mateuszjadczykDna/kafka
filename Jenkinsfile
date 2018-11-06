@@ -35,7 +35,7 @@ def job = {
                 [$class: 'StringParameterValue', name: 'KAFKA_REPO', value: kafkaRepo],
                 [$class: 'StringParameterValue', name: 'KAFKA_BRANCH', value: kafkaBranch],
                 [$class: 'StringParameterValue', name: 'NODE_LABEL', value: "docker-oraclejdk8"]],
-                propagate: true, wait: true
+                propagate: false, wait: false
     }
 }
 
