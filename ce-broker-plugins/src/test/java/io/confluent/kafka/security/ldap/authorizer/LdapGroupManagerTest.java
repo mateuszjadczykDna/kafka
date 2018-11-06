@@ -15,6 +15,7 @@ import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -77,6 +78,7 @@ public class LdapGroupManagerTest {
   }
 
   @Test
+  @Ignore
   public void testGroupChangeWithPersistentSearch() throws Exception {
     ldapGroupManager = LdapTestUtils.createLdapGroupManager(miniKdcWithLdapService,
         LdapAuthorizerConfig.PERSISTENT_REFRESH, time);
