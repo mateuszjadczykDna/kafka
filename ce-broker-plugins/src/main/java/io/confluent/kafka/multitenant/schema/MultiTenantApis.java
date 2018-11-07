@@ -594,7 +594,19 @@ public class MultiTenantApis {
       if (principal == null) {
         return null;
       }
-      KafkaPrincipal kafkaPrincipal = SecurityUtils.parseKafkaPrincipal(principal);
+      KafkaPrincipal kafkaPrincipal;
+      try {
+        kafkaPrincipal = SecurityUtils.parseKafkaPrincipal(principal);
+      } catch (IllegalArgumentException e) {
+        if (transform == TenantTransform.ADD_PREFIX) {
+          // If this exception is propagated, it will be handled as a SchemaException,
+          // causing the connection to be closed. So return untransformed invalid principal
+          // and error response will be generated later in MultiTenantRequestContext.
+          return principal;
+        } else {
+          throw e;
+        }
+      }
       switch (transform) {
         case ADD_PREFIX:
           if (kafkaPrincipal.equals(Acl$.MODULE$.WildCardPrincipal())) {

@@ -339,6 +339,25 @@ public class MultiTenantAuthorizerTest {
     testHarness.produceConsume(user1, user2, topic, consumerGroup, 0);
   }
 
+  @Test
+  public void testInvalidAcl() throws Throwable {
+    try (AdminClient adminClient = testHarness.createAdminClient(logicalCluster.adminUser())) {
+      List<String> invalidPrincipals = Arrays.asList("", "userWithoutPrincipalType");
+      invalidPrincipals.forEach(principal -> {
+        AclBinding acl = new AclBinding(
+            new ResourcePattern(ResourceType.TOPIC, topic, PatternType.LITERAL),
+            new AccessControlEntry(principal, "*", AclOperation.WRITE, AclPermissionType.ALLOW));
+        try {
+          adminClient.createAcls(Collections.singleton(acl)).all().get();
+          fail("createAcls didn't fail with invalid principal");
+        } catch (Exception e) {
+          assertTrue("Invalid exception: " + e, e instanceof ExecutionException
+              && e.getCause() instanceof InvalidRequestException);
+        }
+      });
+    }
+  }
+
   private Properties brokerProps() {
     Properties props = new Properties();
     props.put(KafkaConfig$.MODULE$.AuthorizerClassNameProp(), MultiTenantAuthorizer.class.getName());

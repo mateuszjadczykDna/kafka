@@ -48,6 +48,7 @@ import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
+import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 
@@ -78,6 +79,7 @@ public class MultiTenantRequestContext extends RequestContext {
   private boolean isMetadataFetchForAllTopics;
   private PatternType describeAclsPatternType;
   private boolean requestParsingFailed = false;
+  private ApiException tenantApiException;
 
   static {
     // Actual header size is this base size + length of client-id
@@ -117,25 +119,33 @@ public class MultiTenantRequestContext extends RequestContext {
 
     ApiKeys api = header.apiKey();
     short apiVersion = header.apiVersion();
+    if (!MultiTenantApis.isApiAllowed(header.apiKey())) {
+      tenantApiException = Errors.CLUSTER_AUTHORIZATION_FAILED.exception();
+    }
 
     try {
       TransformableType<TenantContext> schema = MultiTenantApis.requestSchema(api, apiVersion);
       Struct struct = (Struct) schema.read(buffer, tenantContext);
       AbstractRequest body = AbstractRequest.parseRequest(api, apiVersion, struct);
-      if (body instanceof MetadataRequest) {
-        isMetadataFetchForAllTopics = ((MetadataRequest) body).isAllTopics();
-      } else if (body instanceof CreateAclsRequest) {
-        body = transformCreateAclsRequest((CreateAclsRequest) body);
-      } else if (body instanceof DescribeAclsRequest) {
-        body = transformDescribeAclsRequest((DescribeAclsRequest) body);
-      } else if (body instanceof DeleteAclsRequest) {
-        body = transformDeleteAclsRequest((DeleteAclsRequest) body);
-      } else if (body instanceof CreateTopicsRequest && partitionAssignor != null) {
-        body = transformCreateTopicsRequest((CreateTopicsRequest) body, apiVersion);
-      } else if (body instanceof CreatePartitionsRequest && partitionAssignor != null) {
-        body = transformCreatePartitionsRequest((CreatePartitionsRequest) body, apiVersion);
-      } else if (body instanceof ProduceRequest) {
-        updatePartitionBytesInMetrics((ProduceRequest) body);
+      try {
+        if (body instanceof MetadataRequest) {
+          isMetadataFetchForAllTopics = ((MetadataRequest) body).isAllTopics();
+        } else if (body instanceof CreateAclsRequest) {
+          body = transformCreateAclsRequest((CreateAclsRequest) body);
+        } else if (body instanceof DescribeAclsRequest) {
+          body = transformDescribeAclsRequest((DescribeAclsRequest) body);
+        } else if (body instanceof DeleteAclsRequest) {
+          body = transformDeleteAclsRequest((DeleteAclsRequest) body);
+        } else if (body instanceof CreateTopicsRequest && partitionAssignor != null) {
+          body = transformCreateTopicsRequest((CreateTopicsRequest) body, apiVersion);
+        } else if (body instanceof CreatePartitionsRequest && partitionAssignor != null) {
+          body = transformCreatePartitionsRequest((CreatePartitionsRequest) body, apiVersion);
+        } else if (body instanceof ProduceRequest) {
+          updatePartitionBytesInMetrics((ProduceRequest) body);
+        }
+      } catch (InvalidRequestException e) {
+        // We couldn't transform the request. Save the tenant request exception and intercept later
+        tenantApiException = e;
       }
       return new RequestAndSize(body, struct.sizeOf());
     } catch (ApiException e) {
@@ -151,17 +161,14 @@ public class MultiTenantRequestContext extends RequestContext {
     }
   }
 
-  // Should be @Override, but this API is added in the packaging patch which is not
-  // currently available while building
+  @Override
   public boolean shouldIntercept() {
-    return !MultiTenantApis.isApiAllowed(header.apiKey());
+    return tenantApiException != null;
   }
 
-  // Should be @Override, but this API is added in the packaging patch which is not
-  // currently available while building
+  @Override
   public AbstractResponse intercept(AbstractRequest request, int throttleTimeMs) {
-    return request.getErrorResponse(throttleTimeMs,
-        Errors.CLUSTER_AUTHORIZATION_FAILED.exception());
+    return request.getErrorResponse(throttleTimeMs, tenantApiException);
   }
 
   @Override
@@ -452,6 +459,7 @@ public class MultiTenantRequestContext extends RequestContext {
       ensureResourceNameNonEmpty(pattern.name());
       ensureSupportedResourceType(pattern.resourceType());
       ensureValidRequestPatternType(pattern.patternType());
+      ensureValidPrincipal(acl.entry().principal());
       if (pattern.patternType() == PatternType.LITERAL
           && prefixedWildcard.equals(pattern.name())) {
         ResourcePattern prefixed = new ResourcePattern(pattern.resourceType(),
@@ -466,6 +474,7 @@ public class MultiTenantRequestContext extends RequestContext {
   private AbstractRequest transformDescribeAclsRequest(DescribeAclsRequest request) {
     this.describeAclsPatternType = request.filter().patternFilter().patternType();
     AclBindingFilter transformedFilter = transformAclFilter(request.filter());
+    ensureValidPrincipal(request.filter().entryFilter().principal());
     return new DescribeAclsRequest.Builder(transformedFilter).build(minAclsRequestVersion(request));
   }
 
@@ -473,6 +482,7 @@ public class MultiTenantRequestContext extends RequestContext {
     List<AclBindingFilter> transformedFilters = request.filters().stream()
         .map(this::transformAclFilter)
         .collect(Collectors.toList());
+    request.filters().forEach(filter -> ensureValidPrincipal(filter.entryFilter().principal()));
     return new DeleteAclsRequest.Builder(transformedFilters)
         .build(minAclsRequestVersion(request));
   }
@@ -494,6 +504,16 @@ public class MultiTenantRequestContext extends RequestContext {
   private void ensureValidRequestPatternType(PatternType patternType) {
     if (patternType.isTenantPrefixed()) {
       throw new InvalidRequestException("Unsupported pattern type specified: " + patternType);
+    }
+  }
+
+  private void ensureValidPrincipal(String principal) {
+    try {
+      if (principal != null) { // null principals are supported in filters
+        SecurityUtils.parseKafkaPrincipal(principal);
+      }
+    } catch (IllegalArgumentException e) {
+      throw new InvalidRequestException(e.getMessage());
     }
   }
 

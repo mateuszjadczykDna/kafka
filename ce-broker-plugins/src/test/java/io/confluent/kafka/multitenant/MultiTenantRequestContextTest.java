@@ -20,7 +20,6 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.errors.InvalidGroupIdException;
-import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.metrics.KafkaMetric;
@@ -138,7 +137,6 @@ import java.util.NoSuchElementException;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toList;
-import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -1050,19 +1048,19 @@ public class MultiTenantRequestContextTest {
           throw new RuntimeException("CreateAclsRequest test failed with " + params, e);
         }
       });
-    }
-    try {
       AclBinding acl = new AclBinding(
           new ResourcePattern(ResourceType.DELEGATION_TOKEN, "123", PatternType.LITERAL),
           new AccessControlEntry("User:1", "*", AclOperation.WRITE, AclPermissionType.ALLOW));
-      AclCreation aclCreation = new AclCreation(acl);
-      short version = 1;
-      CreateAclsRequest inbound = new CreateAclsRequest.Builder(Collections.singletonList(aclCreation)).build(version);
-      MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_ACLS, version);
-      parseRequest(context, inbound);
-      fail("Invalid request exception not thrown for delegation tokens");
-    } catch (InvalidRequestException e) {
-      // Expected exception
+      verifyInvalidCreateAclsRequest(acl, version);
+
+      List<String> invalidPrincipals = Arrays.asList("", "userWithoutPrincipalType");
+      invalidPrincipals.forEach(principal -> {
+        AclBinding invalidAcl = new AclBinding(
+            new ResourcePattern(ResourceType.TOPIC, "topic1", PatternType.LITERAL),
+            new AccessControlEntry(principal, "*", AclOperation.WRITE,
+                AclPermissionType.ALLOW));
+        verifyInvalidCreateAclsRequest(invalidAcl, version);
+      });
     }
   }
 
@@ -1090,6 +1088,16 @@ public class MultiTenantRequestContextTest {
 
     assertFalse(context.shouldIntercept());
     verifyRequestMetrics(ApiKeys.CREATE_ACLS);
+  }
+
+  private void verifyInvalidCreateAclsRequest(AclBinding acl, short version) {
+    AclCreation aclCreation = new AclCreation(acl);
+    CreateAclsRequest inbound = new CreateAclsRequest.Builder(
+        Collections.singletonList(aclCreation)).build(version);
+    MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_ACLS, version);
+    parseRequest(context, inbound);
+    assertTrue(context.shouldIntercept());
+    assertEquals(Collections.singleton(Errors.INVALID_REQUEST), context.intercept(inbound, 0).errorCounts().keySet());
   }
 
   @Test
