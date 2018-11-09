@@ -88,7 +88,6 @@ public class LdapGroupManager {
   private final AtomicBoolean alive;
   private final PersistentSearch persistentSearch;
 
-  private Set<String> previousSearchEntries;
   private volatile LdapContext context;
   private volatile Future<?> searchFuture;
 
@@ -97,7 +96,6 @@ public class LdapGroupManager {
     this.time = time;
     this.subject = login();
     this.userGroupCache = new ConcurrentHashMap<>();
-    this.previousSearchEntries = new HashSet<>();
     persistentSearch = config.persistentSearch ? new PersistentSearch() : null;
 
     this.searchControls = new SearchControls();
@@ -167,10 +165,28 @@ public class LdapGroupManager {
    * </p>
    */
   public void start() {
-    // Do one search synchronously to initialize the cache
-    searchAndProcessResults();
+    log.trace("Starting LDAP group manager");
+    // Do one search synchronously to initialize the cache, retrying if necessary
+    boolean done = false;
+    do {
+      try {
+        searchAndProcessResults();
+        done = true;
+      } catch (Throwable e) {
+        try {
+          if (failed()) {
+            throw e;
+          }
+          int backoffMs = processFailureAndGetBackoff(e);
+          Thread.sleep(backoffMs);
+        } catch (Throwable t) {
+          throw new LdapAuthorizerException("Ldap group manager initialization failed", t);
+        }
+      }
+    } while (!done);
+
     if (config.persistentSearch) {
-      schedulePersistentSearch(0);
+      schedulePersistentSearch(0, false);
     } else {
       schedulePeriodicSearch(config.refreshIntervalMs, config.refreshIntervalMs);
     }
@@ -218,6 +234,9 @@ public class LdapGroupManager {
     }
     log.error("LDAP search failed", exception);
     try {
+      if (searchFuture != null) {
+        searchFuture.cancel(false);
+      }
       if (context != null) {
         context.close();
       }
@@ -231,87 +250,112 @@ public class LdapGroupManager {
     return retryBackoff.backoffMs(retryCount.getAndIncrement());
   }
 
-  private void persistentSearch() {
+  private void persistentSearch() throws NamingException, IOException {
+    if (context == null) {
+      createLdapContext();
+    }
     try {
-      if (context == null) {
-        createLdapContext();
-      }
-      try {
-        context.setRequestControls(new Control[]{persistentSearch.control});
-        searchControls.setTimeLimit(0);
-      } catch (Exception e) {
-        throw new LdapAuthorizerException("Request controls could not be created");
-      }
-      NamingEnumeration<SearchResult> enumeration = search(searchControls);
-      resetFailure();
+      context.setRequestControls(new Control[]{persistentSearch.control});
+      searchControls.setTimeLimit(0);
+    } catch (Exception e) {
+      throw new LdapAuthorizerException("Request controls could not be created");
+    }
+    log.trace("Starting persistent search");
+    NamingEnumeration<SearchResult> enumeration = search(searchControls);
+    resetFailure();
 
-      while (alive.get()) {
-        processSearchResults(enumeration);
-      }
-    } catch (Throwable e) {
-      int backoffMs = processFailureAndGetBackoff(e);
-      schedulePersistentSearch(backoffMs);
+    // Process persistent search results until read times out due to no LDAP modifications
+    // or connection fails.
+    while (alive.get()) {
+      processSearchResults(enumeration);
     }
   }
 
-  private void schedulePersistentSearch(long initialDelayMs) {
-    searchFuture = executorService.schedule(this::persistentSearch,
-        initialDelayMs, TimeUnit.MILLISECONDS);
+  /**
+   * Schedules a new persistent search that processes changes until read times out due
+   * to no modifications or the connection to the LDAP server is lost. A new search is
+   * initiated whenever a search fails.
+   * <p>
+   * Apache DS has a timing window between processing existing entries and setting up
+   * the persistent listener to process modifications. To workaround this issue, we always
+   * process existing entries using a non-persistent search whenever a new search is started.
+   * </p>
+   */
+  private void schedulePersistentSearch(long initialDelayMs, boolean initializeCache) {
+    log.trace("Scheduling persistent search, initialDelayMs={}, initializeCache={}",
+        initialDelayMs, initializeCache);
+    searchFuture = executorService.schedule(() -> {
+      try {
+        if (initializeCache) {
+          searchAndProcessResults();
+        }
+        persistentSearch();
+      } catch (Throwable e) {
+        int backoffMs = processFailureAndGetBackoff(e);
+        schedulePersistentSearch(backoffMs, true);
+      }
+    }, initialDelayMs, TimeUnit.MILLISECONDS);
   }
 
   private void schedulePeriodicSearch(long initialDelayMs, long refreshIntervalMs) {
-    searchFuture = executorService.scheduleWithFixedDelay(this::searchAndProcessResults,
-        initialDelayMs, refreshIntervalMs, TimeUnit.MILLISECONDS);
+    log.trace("Scheduling periodic search with initialDelayMs={}, refreshIntervalMs {}",
+        initialDelayMs, refreshIntervalMs);
+    searchFuture = executorService.scheduleWithFixedDelay(() -> {
+      try {
+        searchAndProcessResults();
+      } catch (Throwable e) {
+        int backoffMs = processFailureAndGetBackoff(e);
+        schedulePeriodicSearch(backoffMs, config.refreshIntervalMs);
+      }
+    }, initialDelayMs, refreshIntervalMs, TimeUnit.MILLISECONDS);
   }
 
-  void searchAndProcessResults() {
-    try {
-      if (context == null) {
-        createLdapContext();
-        maybeSetPagingControl(null);
-      }
-      Set<String> currentSearchEntries = new HashSet<>();
-      byte[] cookie = null;
-      do {
-        NamingEnumeration<SearchResult> enumeration = search(searchControls);
-        currentSearchEntries.addAll(processSearchResults(enumeration));
-        resetFailure();
-        Control[] responseControls = context.getResponseControls();
-        if (config.searchPageSize > 0 && responseControls != null) {
-          for (Control responseControl : responseControls) {
-            if (responseControl instanceof PagedResultsResponseControl) {
-              PagedResultsResponseControl pc = (PagedResultsResponseControl) responseControl;
-              cookie = pc.getCookie();
-              log.debug("Search returned page, totalSize {}", pc.getResultSize());
-              break;
-            } else {
-              log.debug("Ignoring response control {}", responseControl);
-            }
+  void searchAndProcessResults() throws NamingException, IOException {
+    if (context == null) {
+      createLdapContext();
+      maybeSetPagingControl(null);
+    }
+    Set<String> currentSearchEntries = new HashSet<>();
+    byte[] cookie = null;
+    do {
+      NamingEnumeration<SearchResult> enumeration = search(searchControls);
+      currentSearchEntries.addAll(processSearchResults(enumeration));
+      resetFailure();
+      Control[] responseControls = context.getResponseControls();
+      if (config.searchPageSize > 0 && responseControls != null) {
+        for (Control responseControl : responseControls) {
+          if (responseControl instanceof PagedResultsResponseControl) {
+            PagedResultsResponseControl pc = (PagedResultsResponseControl) responseControl;
+            cookie = pc.getCookie();
+            log.debug("Search returned page, totalSize {}", pc.getResultSize());
+            break;
+          } else {
+            log.debug("Ignoring response control {}", responseControl);
           }
         }
-        maybeSetPagingControl(cookie);
-      } while (cookie != null);
-
-      if (!config.persistentSearch) {
-        previousSearchEntries.stream()
-            .filter(name -> !currentSearchEntries.contains(name))
-            .forEach(this::processSearchResultDelete);
-        previousSearchEntries = currentSearchEntries;
       }
-      log.debug("Search completed, group cache is {}", userGroupCache);
+      maybeSetPagingControl(cookie);
+    } while (cookie != null);
 
-    } catch (Throwable e) {
-      if (searchFuture != null) {
-        searchFuture.cancel(false);
-      }
-      int backoffMs = processFailureAndGetBackoff(e);
-      schedulePeriodicSearch(backoffMs, config.refreshIntervalMs);
+    removeDeletedEntries(currentSearchEntries);
+    log.debug("Search completed, group cache is {}", userGroupCache);
+  }
+
+  private void removeDeletedEntries(Set<String> currentSearchEntries) {
+    Set<String> prevSearchEntries = new HashSet<>();
+    if (config.searchMode == SearchMode.USERS) {
+      prevSearchEntries.addAll(userGroupCache.keySet());
+    } else {
+      userGroupCache.values().forEach(prevSearchEntries::addAll);
     }
+    prevSearchEntries.stream()
+        .filter(name -> !currentSearchEntries.contains(name))
+        .forEach(this::processSearchResultDelete);
   }
 
   private NamingEnumeration<SearchResult> search(SearchControls searchControls)
       throws NamingException {
-    if (config.searchMode == LdapAuthorizerConfig.SearchMode.GROUPS) {
+    if (config.searchMode == SearchMode.GROUPS) {
       log.trace("Searching groups with base {} filter {}: ",
           config.groupSearchBase, config.groupSearchFilter);
       return context.search(config.groupSearchBase, config.groupSearchFilter, searchControls);
@@ -404,7 +448,7 @@ public class LdapGroupManager {
 
   private void processSearchResultModify(ResultEntry resultEntry) {
     if (resultEntry != null) {
-      if (config.searchMode == LdapAuthorizerConfig.SearchMode.GROUPS) {
+      if (config.searchMode == SearchMode.GROUPS) {
         String group = resultEntry.name;
         Set<String> members = resultEntry.members;
         for (String user : members) {
@@ -430,7 +474,7 @@ public class LdapGroupManager {
   }
 
   private void processSearchResultDelete(String name) {
-    if (config.searchMode == LdapAuthorizerConfig.SearchMode.GROUPS) {
+    if (config.searchMode == SearchMode.GROUPS) {
       processSearchResultModify(new ResultEntry(name, Collections.emptySet()));
     } else {
       userGroupCache.remove(name);

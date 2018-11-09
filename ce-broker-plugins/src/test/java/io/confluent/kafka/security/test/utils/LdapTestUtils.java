@@ -85,13 +85,22 @@ public class LdapTestUtils {
     }
     props.put(LdapAuthorizerConfig.CONFIG_PREFIX + SaslConfigs.SASL_KERBEROS_SERVICE_NAME, "ldap");
     props.put(LdapAuthorizerConfig.LICENSE_PROP, LicenseTestUtils.generateLicense());
+
+    // Due a to timing issue in Apache DS persistent search (https://issues.apache.org/jira/browse/DIRSERVER-2257),
+    // some updates made while the persistent search is initialized may not be returned by the search. Use a read
+    // timeout that is high enough to avoid unnecessary timeouts in tests, but low enough to trigger a second search
+    // in cases where the timing window resulted in missing entries.
+    if (refreshIntervalMs == LdapAuthorizerConfig.PERSISTENT_REFRESH) {
+      props.put(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "5000");
+    }
+
     return props;
   }
 
   public static void waitForUserGroups(LdapGroupManager ldapGroupManager,
       String user, String... groups) throws Exception {
     org.apache.kafka.test.TestUtils.waitForCondition(() ->
-        Utils.mkSet(groups).equals(ldapGroupManager.groups(user)), "Groups not refreshed");
+        Utils.mkSet(groups).equals(ldapGroupManager.groups(user)), "Groups not refreshed for user " + user);
   }
 
   public static File createPrincipal(MiniKdcWithLdapService miniKdcWithLdapService, String principal) {

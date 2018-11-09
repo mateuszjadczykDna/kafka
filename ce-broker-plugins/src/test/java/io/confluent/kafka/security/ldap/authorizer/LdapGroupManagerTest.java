@@ -15,10 +15,10 @@ import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class LdapGroupManagerTest {
 
@@ -78,7 +78,6 @@ public class LdapGroupManagerTest {
   }
 
   @Test
-  @Ignore
   public void testGroupChangeWithPersistentSearch() throws Exception {
     ldapGroupManager = LdapTestUtils.createLdapGroupManager(miniKdcWithLdapService,
         LdapAuthorizerConfig.PERSISTENT_REFRESH, time);
@@ -138,17 +137,8 @@ public class LdapGroupManagerTest {
   }
 
   private void verifyLdapServerFailure(int refreshIntervalMs) throws Exception {
-    Properties props = new Properties();
-    props.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, refreshIntervalMs));
-    props.setProperty(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, "100");
-    props.setProperty(LdapAuthorizerConfig.RETRY_BACKOFF_MS_PROP, "1");
-    props.setProperty(LdapAuthorizerConfig.RETRY_BACKOFF_MAX_MS_PROP, "100");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.connect.timeout", "1000");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "1000");
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
-    ldapGroupManager = new LdapGroupManager(ldapConfig, time);
+    createLdapGroupManagerWithRetries(refreshIntervalMs, 100);
     ldapGroupManager.start();
-
     miniKdcWithLdapService.createGroup("groupA", "user1", "user2");
     waitForUserGroups("user1", "groupA");
     miniKdcWithLdapService.stopLdap();
@@ -159,6 +149,86 @@ public class LdapGroupManagerTest {
     miniKdcWithLdapService.createGroup("groupB", "user1", "user3");
     waitForUserGroups("user1", "groupA", "groupB");
     waitForUserGroups("user3", "groupB");
+  }
+
+  private void createLdapGroupManagerWithRetries(int refreshIntervalMs, int retryTimeoutMs) {
+    Properties props = new Properties();
+    props.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, refreshIntervalMs));
+    props.setProperty(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, String.valueOf(retryTimeoutMs));
+    props.setProperty(LdapAuthorizerConfig.RETRY_BACKOFF_MS_PROP, "1");
+    props.setProperty(LdapAuthorizerConfig.RETRY_BACKOFF_MAX_MS_PROP, "100");
+    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.connect.timeout", "1000");
+    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "1000");
+    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    ldapGroupManager = new LdapGroupManager(ldapConfig, time);
+  }
+
+  @Test
+  public void testLdapServerFailureDuringStartup() throws Exception {
+    miniKdcWithLdapService.createGroup("groupA", "user1", "user2");
+    miniKdcWithLdapService.stopLdap();
+
+    createLdapGroupManagerWithRetries(10, 5000);
+    Thread startThread = new Thread(() -> ldapGroupManager.start());
+    startThread.start();
+    Thread.sleep(100); // just to make sure group manager is starting
+    assertTrue(startThread.isAlive());
+    LdapTestUtils.restartLdapServer(miniKdcWithLdapService);
+    waitForUserGroups("user1", "groupA");
+
+    miniKdcWithLdapService.createGroup("groupB", "user1", "user3");
+    waitForUserGroups("user1", "groupA", "groupB");
+    waitForUserGroups("user3", "groupB");
+  }
+
+  /**
+   * Apache DS has a timing window in persistent search handling. Entries created
+   * just after the persistent search is started, but before the listener is created
+   * to notify changes may never to returned to the client even if PersistentSearchControl
+   * is created with changesOnly=false. See https://issues.apache.org/jira/browse/DIRSERVER-2257
+   * for details.
+   *
+   * This test verifies that cache is updated in the next iteration of the search
+   * when read times out after processing all changes.
+   */
+  @Test
+  public void testGroupCreateDuringPersistentSearchStartup() throws Exception {
+    startLdapGroupManagerWithPersistentSearch(2000);
+
+    for (int i = 0; i < 50; i++) {
+      miniKdcWithLdapService.createGroup("group" + i, "user" + i);
+    }
+    for (int i = 0; i < 50; i++) {
+      waitForUserGroups("user" + i, "group" + i);
+    }
+  }
+
+  @Test
+  public void testGroupDeleteDuringPersistentSearchStartup() throws Exception {
+    for (int i = 0; i < 50; i++) {
+      miniKdcWithLdapService.createGroup("group" + i, "user" + i);
+    }
+    startLdapGroupManagerWithPersistentSearch(2000);
+
+    for (int i = 0; i < 20; i++) {
+      miniKdcWithLdapService.deleteGroup("group" + i);
+    }
+    for (int i = 20; i < 50; i++) {
+      waitForUserGroups("user" + i, "group" + i);
+    }
+    for (int i = 0; i < 20; i++) {
+      waitForUserGroups("user" + i);
+    }
+  }
+
+  private void startLdapGroupManagerWithPersistentSearch(long readTimeoutMs) {
+    Properties props = new Properties();
+    props.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService,
+        LdapAuthorizerConfig.PERSISTENT_REFRESH));
+    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", String.valueOf(readTimeoutMs));
+    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    ldapGroupManager = new LdapGroupManager(ldapConfig, time);
+    ldapGroupManager.start();
   }
 
   @Test
