@@ -10,15 +10,20 @@ def config = jobConfig {
 
 
 def job = {
-    // Gradle test
     def gradlewParameters = "--no-daemon -Dorg.gradle.project.maxParallelForks=4 -Dorg.gradle.project.testLoggingEvents=started,passed,skipped,failed --stacktrace -Dorg.gradle.project.skipSigning=true"
+
+    // Per KAFKA-7524, Scala 2.12 is the default, yet we currently support the previous minor version.
+    stage("Check compilation compatibility with Scala 2.11") {
+        sh "gradle"
+        sh "./gradlew -PscalaVersion=2.11 ${gradlewParameters} clean assemble"
+    }
+
     def kafkaRepo
     // For PR build, Jenkins sets the CHANGE_BRANCH to the branch name of the source repo, THE BRANCH_NAME to PR-changeid
     // For non-PR build, Jenkins sets the BRANCH_NAME to the branch name.
     def kafkaBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME;
     stage("Run Gradle tests") {
         kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size());
-        sh "gradle"
         sh "./gradlew ${gradlewParameters} clean test"
     }
 
