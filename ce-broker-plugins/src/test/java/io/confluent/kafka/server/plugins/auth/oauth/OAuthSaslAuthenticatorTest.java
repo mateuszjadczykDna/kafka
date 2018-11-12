@@ -18,7 +18,7 @@ import org.apache.kafka.common.security.authenticator.CredentialCache;
 import org.apache.kafka.common.security.authenticator.LoginManager;
 import org.apache.kafka.common.security.authenticator.TestJaasConfig;
 import org.apache.kafka.common.utils.LogContext;
-import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.common.utils.Time;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,7 +37,7 @@ public class OAuthSaslAuthenticatorTest {
   private Map<String, Object> saslServerConfigs;
   private String allowedCluster = "audi";
   private String[] allowedClusters = new String[] {allowedCluster};
-  private MockTime mockTime;
+  private static Time time = Time.SYSTEM;
 
   private CredentialCache credentialCache;
 
@@ -49,7 +49,6 @@ public class OAuthSaslAuthenticatorTest {
     this.saslServerConfigs = serverCertStores.getTrustingConfig(clientCertStores);
     this.saslClientConfigs = clientCertStores.getTrustingConfig(serverCertStores);
     this.credentialCache = new CredentialCache();
-    this.mockTime = new MockTime(1);
   }
 
   @After
@@ -151,16 +150,16 @@ public class OAuthSaslAuthenticatorTest {
 
     String saslMechanism = (String) this.saslClientConfigs.get("sasl.mechanism");
     ChannelBuilder channelBuilder = ChannelBuilders.clientChannelBuilder(securityProtocol, JaasContext.Type.CLIENT,
-            new TestSecurityConfig(clientConfigs), (ListenerName) null, saslMechanism, mockTime, true);
+            new TestSecurityConfig(clientConfigs), (ListenerName) null, saslMechanism, time, true);
     // Create the selector manually instead of using NetworkTestUtils so we can use a longer timeout
-    this.selector = new Selector(25000L, new Metrics(), this.mockTime, "MetricGroup",
+    this.selector = new Selector(25000L, new Metrics(), time, "MetricGroup",
         channelBuilder, new LogContext());
   }
 
   private NioEchoServer createEchoServer(SecurityProtocol securityProtocol) throws Exception {
     return NetworkTestUtils.createEchoServer(
             ListenerName.forSecurityProtocol(securityProtocol), securityProtocol,
-            new TestSecurityConfig(this.saslServerConfigs), this.credentialCache, this.mockTime
+            new TestSecurityConfig(this.saslServerConfigs), this.credentialCache, time
     );
   }
 }
