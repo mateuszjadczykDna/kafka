@@ -307,7 +307,6 @@ subprojects {
   task systemTestLibs(dependsOn: jar)
 
   artifacts {
-    archives srcJar
     archives javadocJar
   }
 
@@ -328,7 +327,6 @@ subprojects {
 
     artifacts {
       archives testJar
-      archives testSrcJar
     }
   }
 
