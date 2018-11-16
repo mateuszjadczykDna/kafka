@@ -19,9 +19,7 @@ def job = {
     }
 
     def kafkaRepo
-    // For PR build, Jenkins sets the CHANGE_BRANCH to the branch name of the source repo, THE BRANCH_NAME to PR-changeid
-    // For non-PR build, Jenkins sets the BRANCH_NAME to the branch name.
-    def kafkaBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME;
+    def kafkaBranch = env.BRANCH_NAME;
     stage("Run Gradle tests") {
         kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size());
         sh "./gradlew ${gradlewParameters} clean test"
@@ -33,9 +31,9 @@ def job = {
     ];
     def muckrakeBranch = kafkaMuckrakeVersionMap[kafkaBranch] ?: "master";
     // Start the downstream job.
-    stage("Trigger test-cp-downstream-builds") {
-        echo "Schedule test-cp-downstream-builds with muckrake branch ${muckrakeBranch} and Apache Kafka branch ${kafkaRepo}:${kafkaBranch}."
-        buildResult = build job: 'test-cp-downstream-builds', parameters: [
+    stage("Trigger test-cp-downstream-builds-cekafka") {
+        echo "Schedule test-cp-downstream-builds-cekafka with muckrake branch ${muckrakeBranch} and Apache Kafka branch ${kafkaRepo}:${kafkaBranch}."
+        buildResult = build job: 'test-cp-downstream-builds-cekafka', parameters: [
                 [$class: 'StringParameterValue', name: 'BRANCH', value: muckrakeBranch],
                 [$class: 'StringParameterValue', name: 'KAFKA_REPO', value: kafkaRepo],
                 [$class: 'StringParameterValue', name: 'KAFKA_BRANCH', value: kafkaBranch],
