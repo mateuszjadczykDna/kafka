@@ -28,12 +28,12 @@ buildscript {
   dependencies {
     // For Apache Rat plugin to ignore non-Git files
     classpath "org.ajoberstar:grgit:1.9.3"
-    classpath 'com.github.ben-manes:gradle-versions-plugin:0.17.0'
-    classpath 'org.scoverage:gradle-scoverage:2.3.0'
-    classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.4'
-    classpath 'org.owasp:dependency-check-gradle:3.2.1'
-    classpath "com.diffplug.spotless:spotless-plugin-gradle:3.10.0"
-    classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:1.6.3"
+    classpath 'com.github.ben-manes:gradle-versions-plugin:0.20.0'
+    classpath 'org.scoverage:gradle-scoverage:2.5.0'
+    classpath 'com.github.jengelman.gradle.plugins:shadow:4.0.2'
+    classpath 'org.owasp:dependency-check-gradle:3.3.4'
+    classpath "com.diffplug.spotless:spotless-plugin-gradle:3.16.0"
+    classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:1.6.5"
     classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.6'
   }
 }
@@ -73,7 +73,7 @@ allprojects {
   repositories {
     mavenCentral()
   }
-
+  
   apply plugin: 'idea'
   apply plugin: 'org.owasp.dependencycheck'
   apply plugin: 'com.github.ben-manes.versions'
@@ -154,7 +154,7 @@ if (false) {
         'gradlew',
         'gradlew.bat',
         'TROGDOR.md',
-        '**/README.md',
+        '**/*README.md',
         '**/id_rsa',
         '**/id_rsa.pub',
         'checkstyle/suppressions.xml',
@@ -180,9 +180,14 @@ subprojects {
   sourceCompatibility = minJavaVersion
   targetCompatibility = minJavaVersion
 
-  compileJava {
+  tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
-    options.compilerArgs << "-Xlint:deprecation,unchecked"
+    options.compilerArgs << "-Xlint:all"
+    // temporary exclusions until all the warnings are fixed
+    options.compilerArgs << "-Xlint:-rawtypes"
+    options.compilerArgs << "-Xlint:-serial"
+    options.compilerArgs << "-Xlint:-try"
+    //options.compilerArgs << "-Werror"
     // --release is the recommended way to select the target release, but it's only supported in Java 9 so we also
     // set --source and --target via `sourceCompatibility` and `targetCompatibility`. If/when Gradle supports `--release`
     // natively (https://github.com/gradle/gradle/issues/2510), we should switch to that.
@@ -274,7 +279,7 @@ subprojects {
     useJUnit {
       excludeCategories 'org.apache.kafka.test.IntegrationTest'
     }
-
+    
   }
 
   jar {
@@ -307,6 +312,8 @@ subprojects {
   task systemTestLibs(dependsOn: jar)
 
   artifacts {
+    // Note: the srcJar target is not included here.  We do not want to build source jars
+    // for ce-kafka, since it contains proprietary code that we don't want to redistribute.
     archives javadocJar
   }
 
@@ -393,9 +400,9 @@ subprojects {
 
   if (!JavaVersion.current().isJava11Compatible()) {
     spotbugs {
-      // 3.1.6 has a regression that breaks our build, seems to be https://github.com/spotbugs/spotbugs/pull/688
-      toolVersion = '3.1.5'
+      toolVersion = '3.1.8'
       excludeFilter = file("$rootDir/gradle/spotbugs-exclude.xml")
+      ignoreFailures = false
     }
     test.dependsOn('spotbugsMain')
 
@@ -457,8 +464,8 @@ def fineTuneEclipseClasspathFile(eclipse, project) {
       if (project.name.equals('core')) {
         cp.entries.findAll { it.kind == "src" && it.path.equals("src/test/scala") }*.excludes = ["integration/", "other/", "unit/"]
       }
-      /*
-       * Set all eclipse build output to go to 'build_eclipse' directory. This is to ensure that gradle and eclipse use different
+      /* 
+       * Set all eclipse build output to go to 'build_eclipse' directory. This is to ensure that gradle and eclipse use different 
        * build output directories, and also avoid using the eclpise default of 'bin' which clashes with some of our script directories.
        * https://discuss.gradle.org/t/eclipse-generated-files-should-be-put-in-the-same-place-as-the-gradle-generated-files/6986/2
        */
@@ -624,7 +631,7 @@ project(':core') {
     testCompile libs.slf4jlog4j
     testCompile libs.jfreechart
   }
-
+  
   configurations {
     // manually excludes some unnecessary dependencies
     compile.exclude module: 'javax'
