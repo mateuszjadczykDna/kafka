@@ -165,7 +165,7 @@ public class LdapAuthorizer extends SimpleAclAuthorizer {
   }
 
   // Only for testing
-  LdapGroupManager ldapGroupManager() {
+  public LdapGroupManager ldapGroupManager() {
     return groupManager;
   }
 

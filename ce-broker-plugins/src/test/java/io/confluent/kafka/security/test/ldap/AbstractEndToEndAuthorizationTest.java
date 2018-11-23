@@ -231,7 +231,7 @@ public abstract class AbstractEndToEndAuthorizationTest {
     return consumer;
   }
 
-  private Properties kafkaServerConfig() throws Exception {
+  protected Properties kafkaServerConfig() throws Exception {
     Properties serverConfig = new Properties();
     serverConfig.setProperty(KafkaConfig$.MODULE$.ListenersProp(),
         kafkaSecurityProtocol + "://localhost:0");

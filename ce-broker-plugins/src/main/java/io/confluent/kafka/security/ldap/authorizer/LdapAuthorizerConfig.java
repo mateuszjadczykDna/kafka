@@ -206,7 +206,7 @@ public class LdapAuthorizerConfig extends AbstractConfig {
 
   // JNDI configs com.sun.jndi.ldap.connect.timeout and com.sun.jndi.ldap.read.timeout
   private static final String JNDI_CONNECT_TIMEOUT_MS_PROP = "com.sun.jndi.ldap.connect.timeout";
-  private static final String JNDI_READ_TIMEOUT_MS_PROP = "com.sun.jndi.ldap.read.timeout";
+  public static final String JNDI_READ_TIMEOUT_MS_PROP = "com.sun.jndi.ldap.read.timeout";
   public static final long JNDI_CONNECT_TIMEOUT_MS_DEFAULT = 30000;
   public static final long JNDI_READ_TIMEOUT_MS_DEFAULT = 30000;
 

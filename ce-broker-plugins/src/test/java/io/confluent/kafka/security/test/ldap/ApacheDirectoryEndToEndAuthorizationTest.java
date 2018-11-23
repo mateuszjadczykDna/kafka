@@ -2,7 +2,9 @@
 
 package io.confluent.kafka.security.test.ldap;
 
+import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizer;
 import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizerConfig;
+import io.confluent.kafka.security.ldap.authorizer.LdapGroupManager;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
 import io.confluent.kafka.security.minikdc.MiniKdcWithLdapService.LdapSecurityProtocol;
@@ -14,8 +16,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import java.util.Set;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.errors.AuthorizationException;
+import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
@@ -24,11 +28,11 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(value = Parameterized.class)
-public class LdapGroupEndToEndAuthorizationTest extends AbstractEndToEndAuthorizationTest {
+public class ApacheDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAuthorizationTest {
 
   private MiniKdcWithLdapService miniKdcWithLdapService;
 
-  public LdapGroupEndToEndAuthorizationTest(String kafkaSaslMechanism,
+  public ApacheDirectoryEndToEndAuthorizationTest(String kafkaSaslMechanism,
       LdapSecurityProtocol ldapSecurityProtocol,
       LdapSecurityAuthentication ldapSecurityAuthentication,
       String ldapUser,
@@ -42,12 +46,53 @@ public class LdapGroupEndToEndAuthorizationTest extends AbstractEndToEndAuthoriz
   public void setUp() throws Throwable {
     createLdapServer();
     super.setUp();
+    maybeWaitForUserGroups();
   }
 
   @After
   public void tearDown() throws Exception {
     super.tearDown();
     miniKdcWithLdapService.shutdown();
+  }
+
+  /**
+   * Due a to timing issue in Apache DS persistent search (https://issues.apache.org/jira/browse/DIRSERVER-2257),
+   * some updates made while the persistent search is initialized may not be returned by the search. Use a small
+   * read timeout to wait for LDAP initialization using {@link #maybeWaitForUserGroups} before executing tests.
+   */
+  @Override
+  protected Properties kafkaServerConfig() throws Exception {
+    Properties serverConfig = super.kafkaServerConfig();
+    if (ldapRefreshIntervalMs == LdapAuthorizerConfig.PERSISTENT_REFRESH)
+      serverConfig.put(LdapAuthorizerConfig.JNDI_READ_TIMEOUT_MS_PROP, "5000");
+    return serverConfig;
+  }
+
+  // When using persistent search, wait until the search is initialized and existing
+  // groups are loaded into cache. This can be removed once DIRSERVER-2257 is fixed.
+  private void maybeWaitForUserGroups() {
+    if (ldapRefreshIntervalMs != LdapAuthorizerConfig.PERSISTENT_REFRESH)
+      return;
+
+    kafkaCluster.brokers().forEach(broker -> {
+      LdapAuthorizer authorizer = (LdapAuthorizer) broker.authorizer().get();
+      LdapGroupManager ldapGroupManager = authorizer.ldapGroupManager();
+      waitForUserGroups(ldapGroupManager, KAFKA_SERVICE, ADMIN_GROUP);
+      waitForUserGroups(ldapGroupManager, DEVELOPER, DEV_GROUP);
+      waitForUserGroups(ldapGroupManager, SRE, DEV_GROUP, TEST_GROUP);
+      waitForUserGroups(ldapGroupManager, TESTER, TEST_GROUP);
+    });
+  }
+
+  private void waitForUserGroups(LdapGroupManager groupManager, String user, String... userGroups) {
+    try {
+      Set<String> groups = Utils.mkSet(userGroups);
+      TestUtils.waitForCondition(
+          () -> groups.equals(groupManager.groups(user)),
+          "Group not updated for user " + user);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @Test
