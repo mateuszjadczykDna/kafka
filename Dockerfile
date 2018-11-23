@@ -20,7 +20,7 @@ RUN tar -xzvf /home/gradle/core/build/distributions/kafka_*-SNAPSHOT.tgz --strip
 
 ##########
 
-FROM confluent-docker.jfrog.io/confluentinc/cc-base:v2.1.0
+FROM confluent-docker.jfrog.io/confluentinc/cc-base:v2.2.0
 
 ARG version
 ARG confluent_version
@@ -50,7 +50,7 @@ WORKDIR /
 RUN mkdir -p /opt/caas/lib \
   && curl -o /opt/caas/lib/jmx_prometheus_javaagent-0.1.0.jar -O https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.1.0/jmx_prometheus_javaagent-0.1.0.jar \
   && apt update \
-  && apt install -y --force-yes cc-rollingupgrade-ctl vim-tiny \
+  && apt install -y --force-yes cc-rollingupgrade-ctl=0.4.0 vim-tiny \
   && apt-get autoremove -y \
   && mkdir -p  "${KAFKA_SECRETS_DIR}" "${KAFKA_LOG4J_DIR}" /opt/caas/config/kafka \
   && chmod -R ag+w "${KAFKA_SECRETS_DIR}" "${KAFKA_LOG4J_DIR}"
