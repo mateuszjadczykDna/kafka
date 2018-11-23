@@ -30,6 +30,8 @@ TAGS
 Vagrantfile.local
 /logs
 .DS_Store
+.ssh
+.netrc
 
 config/server-*
 config/zookeeper-*
