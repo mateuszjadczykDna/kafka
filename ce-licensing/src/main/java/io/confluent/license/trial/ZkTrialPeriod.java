@@ -11,13 +11,14 @@ import org.apache.zookeeper.data.Stat;
 
 import java.util.concurrent.TimeUnit;
 
-import kafka.utils.ZkUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Keeps track of a users trial period, with the state information stored on zookeeper.
  */
+// Suppress warnings about using ZkUtils until we migrate to KafkaZkClient
+@SuppressWarnings("deprecation")
 public class ZkTrialPeriod {
 
   private static final Logger log = LoggerFactory.getLogger(ZkTrialPeriod.class);
@@ -46,7 +47,7 @@ public class ZkTrialPeriod {
    * @return the time remaining on the trial in milliseconds, or 0 if the trial has expired.
    */
   public long startOrVerify(long now) {
-    ZkUtils zkUtils = ZkUtils.apply(
+    kafka.utils.ZkUtils zkUtils = kafka.utils.ZkUtils.apply(
         zkConnect,
         ZK_SESSION_TIMEOUT_MS,
         ZK_CONNECT_TIMEOUT_MS,
@@ -59,7 +60,7 @@ public class ZkTrialPeriod {
     }
   }
 
-  private long startOrVerifyTrial(ZkUtils zkUtils, long now) {
+  private long startOrVerifyTrial(kafka.utils.ZkUtils zkUtils, long now) {
     try {
       zkUtils.createPersistentPath(licensePath, "", zkUtils.defaultAcls(licensePath));
       log.info("Registered trial license with a validity period of {} days",

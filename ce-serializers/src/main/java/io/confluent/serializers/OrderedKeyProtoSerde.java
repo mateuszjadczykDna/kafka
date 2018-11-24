@@ -59,6 +59,7 @@ public class OrderedKeyProtoSerde<T extends Message> implements OrderedKeyUberSe
     }
   }
 
+  @SuppressWarnings("unchecked")
   public static <T extends Message> T readProto(
       ByteBuffer buffer,
       T instance,
@@ -177,6 +178,7 @@ public class OrderedKeyProtoSerde<T extends Message> implements OrderedKeyUberSe
     return size;
   }
 
+  @SuppressWarnings("unchecked")
   public static <T extends Message> T jsonToProto(String json, T instance) {
     Message.Builder builder = instance.newBuilderForType();
     try {

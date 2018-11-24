@@ -31,11 +31,13 @@ public class ProtoSerde<T extends Message> implements
   private final Parser<T> parser;
   private final T instance;
 
+  @SuppressWarnings("unchecked")
   public ProtoSerde(T instance) {
     this.instance = instance;
     this.parser = (Parser<T>) instance.getParserForType();
   }
 
+  @SuppressWarnings("unchecked")
   public Class<T> type() {
     return (Class<T>) instance.getClass();
   }

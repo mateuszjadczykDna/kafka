@@ -219,15 +219,16 @@ public class PlainSaslServer implements MultiTenantSaslServer {
       // Note: This is a temporary fix to obtain JAAS configuration entries in PlainSaslServer
       // This should be replaced with a custom callback handler that is configured by Kafka with
       // the JAAS configuration entries.
-      List<AppConfigurationEntry> jaasContextEntries;
       try {
         Field field = PlainServerCallbackHandler.class.getDeclaredField("jaasConfigEntries");
         field.setAccessible(true);
-        jaasContextEntries = (List<AppConfigurationEntry>) field.get(cbh);
+        @SuppressWarnings("unchecked")
+        List<AppConfigurationEntry> jaasContextEntries =
+            (List<AppConfigurationEntry>) field.get(cbh);
+        return saslServerSupplier.get(jaasContextEntries);
       } catch (Throwable e) {
         throw new SaslException("Could not obtain JAAS context", e);
       }
-      return saslServerSupplier.get(jaasContextEntries);
     }
 
     @Override

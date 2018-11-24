@@ -66,7 +66,7 @@ public class LdapAuthorizerTest {
       Create$.MODULE$, ClusterAction$.MODULE$, DescribeConfigs$.MODULE$, AlterConfigs$.MODULE$,
       IdempotentWrite$.MODULE$, Alter$.MODULE$, Describe$.MODULE$);
   private static final Resource CLUSTER_RESOURCE =
-      new Resource(Cluster$.MODULE$, Resource.ClusterResourceName());
+      new Resource(Cluster$.MODULE$, Resource.ClusterResourceName(), PatternType.LITERAL);
 
   private EmbeddedKafkaCluster kafkaCluster;
   private MiniKdcWithLdapService miniKdcWithLdapService;
@@ -130,7 +130,8 @@ public class LdapAuthorizerTest {
     addTopicAcl(adminGroupPrincipal, topicResource, All$.MODULE$);
     Resource consumerGroup = randomResource(Group$.MODULE$);
     addConsumerGroupAcl(adminGroupPrincipal, consumerGroup, All$.MODULE$);
-    Resource clusterResource = new Resource(Cluster$.MODULE$, Resource.ClusterResourceName());
+    Resource clusterResource =
+        new Resource(Cluster$.MODULE$, Resource.ClusterResourceName(), PatternType.LITERAL);
     addClusterAcl(adminGroupPrincipal, All$.MODULE$);
 
     TOPIC_OPS.forEach(op -> verifyAuthorization("anotherUser", topicResource, op, false));
@@ -278,7 +279,7 @@ public class LdapAuthorizerTest {
   }
 
   private Resource randomResource(ResourceType resourceType) {
-    return new Resource(resourceType, UUID.randomUUID().toString());
+    return new Resource(resourceType, UUID.randomUUID().toString(), PatternType.LITERAL);
   }
 
   private void verifyAuthorization(String user, Resource resource, boolean allowed) {

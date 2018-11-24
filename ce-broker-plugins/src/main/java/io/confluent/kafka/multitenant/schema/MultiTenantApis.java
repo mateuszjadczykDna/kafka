@@ -247,7 +247,7 @@ public class MultiTenantApis {
     }
 
     @Override
-    public Optional maybeAddTransformableType(
+    public Optional<TransformableType<TenantContext>> maybeAddTransformableType(
         Field field, Type type) {
       switch (api) {
         case METADATA:

@@ -142,7 +142,8 @@ public class LicenseStoreTest {
 
   @Before
   public void setUp() throws Exception {
-    licenseLog = PowerMock.createPartialMock(
+    @SuppressWarnings("unchecked")
+    KafkaBasedLog<CommandKey, CommandMessage> log = PowerMock.createPartialMock(
         KafkaBasedLog.class,
         new String[]{"createConsumer", "createProducer"},
         TOPIC,
@@ -152,6 +153,7 @@ public class LicenseStoreTest {
         time,
         initializer
     );
+    licenseLog = log;
     consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
     consumer.updatePartitions(TOPIC, Arrays.asList(LICENSE_TPINFO));
     Map<TopicPartition, Long> beginningOffsets = new HashMap<>();

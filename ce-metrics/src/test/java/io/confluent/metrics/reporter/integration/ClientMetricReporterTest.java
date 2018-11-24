@@ -1,6 +1,10 @@
 // (Copyright) [2016 - 2016] Confluent, Inc.
 package io.confluent.metrics.reporter.integration;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -10,17 +14,19 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Properties;
 
 import io.confluent.metrics.record.ConfluentMetric;
-import kafka.utils.TestUtils;
 import scala.collection.JavaConversions;
 
 import static io.confluent.metrics.record.ConfluentMetric.MetricType.CONSUMER;
@@ -33,17 +39,19 @@ public class ClientMetricReporterTest extends MetricsReporterTest {
 
     private Producer<String, String> testProducer;
     private static final String TOPIC = "testtopic";
-    private KafkaConsumer<byte[], byte[]> testConsumer;
+    private KafkaConsumer<String, String> testConsumer;
 
     @Before
     public void setUp() throws Exception {
         enableMetricsReporterOnBroker = false;
         super.setUp();
-        TestUtils.createTopic(this.zkClient, TOPIC, 2, 1, JavaConversions.asScalaBuffer(servers).seq(), new Properties());
+        kafka.utils.TestUtils.createTopic(this.zkClient, TOPIC, 2, 1,
+            JavaConversions.asScalaBuffer(servers), new Properties());
         testProducer = createProducer();
-        produceTestData(testProducer, TOPIC, 50);
+        int numRecords = 50;
+        produceTestData(testProducer, TOPIC, numRecords);
         testConsumer = createConsumer();
-        consumeTestData(testConsumer, TOPIC);
+        consumeTestData(testConsumer, TOPIC, numRecords);
     }
 
     @After
@@ -63,7 +71,7 @@ public class ClientMetricReporterTest extends MetricsReporterTest {
         int kafkaMeasurables = 0;
         int yammerMetrics = 0;
         while (System.currentTimeMillis() - startMs < 20000) {
-            ConsumerRecords<byte[], byte[]> records = consumer.poll(200);
+            ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofMillis(200));
             for (ConsumerRecord<byte[], byte[]> record : records) {
                 ConfluentMetric.MetricsMessage metricsMessage = serdes.deserialize(record.value());
                 if (metricsMessage.getMetricType() == CONSUMER) {
@@ -103,25 +111,34 @@ public class ClientMetricReporterTest extends MetricsReporterTest {
         return new KafkaProducer<>(properties, new StringSerializer(), new StringSerializer());
     }
 
-    private KafkaConsumer<byte[], byte[]> createConsumer() {
+    private KafkaConsumer<String, String> createConsumer() {
         Properties properties = new Properties();
         properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
         properties.put(ConsumerConfig.GROUP_ID_CONFIG, "test-group");
         properties.put(ConsumerConfig.CLIENT_ID_CONFIG, "test-consumer");
+        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         injectMetricReporterProperties(properties, brokerList);
-        return new KafkaConsumer<>(properties, new ByteArrayDeserializer(), new ByteArrayDeserializer());
+        return new KafkaConsumer<>(properties, new StringDeserializer(), new StringDeserializer());
     }
 
-    private void produceTestData(Producer<String, String> producer, String topic, int numRecords) {
+    private void produceTestData(Producer<String, String> producer, String topic, int numRecords)
+        throws ExecutionException, InterruptedException {
+        List<Future<RecordMetadata>> futures = new ArrayList<>();
         for (int i = 0; i < numRecords; i++)
-            producer.send(new ProducerRecord<>(topic, Integer.toString(i), Integer.toString(i)));
+            futures.add(producer.send(new ProducerRecord<>(topic, Integer.toString(i), Integer.toString(i))));
+        for (Future<RecordMetadata> future : futures)
+            future.get();
     }
 
-    private void consumeTestData(KafkaConsumer<byte[], byte[]> consumer, String topic) {
+    private void consumeTestData(KafkaConsumer<String, String> consumer, String topic, int numRecords)
+        throws InterruptedException {
+
         consumer.subscribe(Collections.singleton(topic));
-        ConsumerRecords<byte[], byte[]> records = consumer.poll(200);
-        for (ConsumerRecord<byte[], byte[]> record : records) {
-            // pass
-        }
+        List<ConsumerRecord<String, String>> records = new ArrayList<>();
+        TestUtils.waitForCondition(() -> {
+            for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(200)))
+                records.add(record);
+            return records.size() == numRecords;
+        }, () -> "Expected to consume " + numRecords + ", but consumed " + records.size());
     }
 }

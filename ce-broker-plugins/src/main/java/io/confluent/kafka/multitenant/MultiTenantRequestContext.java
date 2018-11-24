@@ -21,6 +21,7 @@ import org.apache.kafka.common.network.Send;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Struct;
+import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.AbstractResponse;
 import org.apache.kafka.common.requests.CreateAclsRequest;
@@ -193,13 +194,15 @@ public class MultiTenantRequestContext extends RequestContext {
       // Fetch responses are unique in that they skip the usual path through the Struct object in
       // order to enable zero-copy transfer. We obviously don't want to lose this, so we do an
       // in-place transformation of the returned topic partitions.
-      Send response = transformFetchResponse((FetchResponse) body, apiVersion, responseHeader);
+      @SuppressWarnings("unchecked")
+      Send response = transformFetchResponse((FetchResponse<MemoryRecords>) body, apiVersion, responseHeader);
       updateResponseMetrics(body, response);
       updatePartitionBytesOutMetrics((FetchResponse) body);
       return response;
     } else {
       // Since the Metadata and ListGroups APIs allow users to fetch metadata for all topics or
       // groups in the cluster, we have to filter out the metadata from other tenants.
+      @SuppressWarnings("unchecked")
       AbstractResponse filteredResponse = body;
       if (body instanceof MetadataResponse && isMetadataFetchForAllTopics) {
         filteredResponse = filteredMetadataResponse((MetadataResponse) body);
@@ -314,17 +317,17 @@ public class MultiTenantRequestContext extends RequestContext {
   }
 
 
-  private Send transformFetchResponse(FetchResponse fetchResponse, short version,
+  private Send transformFetchResponse(FetchResponse<MemoryRecords> fetchResponse, short version,
                                       ResponseHeader header) {
-    LinkedHashMap<TopicPartition, FetchResponse.PartitionData> partitionData =
+    LinkedHashMap<TopicPartition, FetchResponse.PartitionData<MemoryRecords>> partitionData =
         fetchResponse.responseData();
-    LinkedHashMap<TopicPartition, FetchResponse.PartitionData> transformedPartitionData =
+    LinkedHashMap<TopicPartition, FetchResponse.PartitionData<MemoryRecords>> transformedPartitionData =
         new LinkedHashMap<>(partitionData.size());
-    for (Map.Entry<TopicPartition, FetchResponse.PartitionData> entry : partitionData.entrySet()) {
+    for (Map.Entry<TopicPartition, FetchResponse.PartitionData<MemoryRecords>> entry : partitionData.entrySet()) {
       TopicPartition partition = entry.getKey();
       transformedPartitionData.put(tenantContext.removeTenantPrefix(partition), entry.getValue());
     }
-    FetchResponse copy = new FetchResponse(fetchResponse.error(), transformedPartitionData,
+    FetchResponse<MemoryRecords> copy = new FetchResponse<>(fetchResponse.error(), transformedPartitionData,
         fetchResponse.throttleTimeMs(), fetchResponse.sessionId());
     return RequestInternals.toSend(copy, version, connectionId, header);
   }

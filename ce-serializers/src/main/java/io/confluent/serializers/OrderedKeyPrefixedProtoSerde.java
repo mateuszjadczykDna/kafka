@@ -94,10 +94,11 @@ public class OrderedKeyPrefixedProtoSerde<
     if (num == null) {
       return null;
     }
-    return (E) E.valueOf(
+    @SuppressWarnings("unchecked")
+    E value = (E) E.valueOf(
         prefix.getClass(),
-        prefix.getDescriptorForType().findValueByNumber(num).getName()
-    );
+        prefix.getDescriptorForType().findValueByNumber(num).getName());
+    return value;
   }
 
   @Override
@@ -176,6 +177,7 @@ public class OrderedKeyPrefixedProtoSerde<
       JsonElement protoJson = root.get("proto");
       String protoJsonStr = gson.toJson(protoJson);
       String prefixStr = root.get("prefix").getAsString();
+      @SuppressWarnings("unchecked")
       E msgPrefix = (E) E.valueOf(prefix.getClass(), prefixStr);
       ImmutableList<FieldDescriptor> msgFields = fieldMap.get(msgPrefix);
       T msg = jsonToProto(protoJsonStr, instance);

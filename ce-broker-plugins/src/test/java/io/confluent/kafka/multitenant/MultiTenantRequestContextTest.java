@@ -25,7 +25,6 @@ import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
-import org.apache.kafka.common.metrics.MetricsReporter;
 import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.network.Send;
@@ -115,7 +114,6 @@ import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.common.utils.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -137,6 +135,7 @@ import java.util.NoSuchElementException;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toList;
+import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -152,8 +151,7 @@ public class MultiTenantRequestContextTest {
   private ListenerName listenerName = new ListenerName("listener");
   private SecurityProtocol securityProtocol = SecurityProtocol.SASL_PLAINTEXT;
   private Time time = new MockTime();
-  private Metrics metrics = new Metrics(new MetricConfig(),
-      Collections.<MetricsReporter>emptyList(), time, true);
+  private Metrics metrics = new Metrics(new MetricConfig(), Collections.emptyList(), time, true);
   private TenantMetrics tenantMetrics = new TenantMetrics();
   private TenantPartitionAssignor partitionAssignor;
   private TestCluster testCluster;
@@ -189,7 +187,7 @@ public class MultiTenantRequestContextTest {
 
     Map<TopicPartition, MemoryRecords> requestRecords = intercepted.partitionRecordsOrFail();
     assertEquals(2, requestRecords.size());
-    assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+    assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
         requestRecords.keySet());
     assertEquals("tenant_tr", intercepted.transactionalId());
     verifyRequestMetrics(ApiKeys.PRODUCE);
@@ -240,7 +238,7 @@ public class MultiTenantRequestContextTest {
     Struct struct = parseResponse(ApiKeys.PRODUCE, ApiKeys.PRODUCE.latestVersion(), context.buildResponse(outbound));
     ProduceResponse intercepted = new ProduceResponse(struct);
 
-    assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+    assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
         intercepted.responses().keySet());
     verifyResponseMetrics(ApiKeys.PRODUCE, Errors.NOT_LEADER_FOR_PARTITION);
   }
@@ -306,7 +304,7 @@ public class MultiTenantRequestContextTest {
       ListOffsetRequest inbound = bldr.build(ver);
       ListOffsetRequest intercepted = (ListOffsetRequest) parseRequest(context, inbound);
 
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
           intercepted.partitionTimestamps().keySet());
       verifyRequestMetrics(ApiKeys.LIST_OFFSETS);
     }
@@ -331,7 +329,7 @@ public class MultiTenantRequestContextTest {
       Struct struct = parseResponse(ApiKeys.LIST_OFFSETS, ver, context.buildResponse(outbound));
       ListOffsetResponse intercepted = new ListOffsetResponse(struct);
 
-      assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+      assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
           intercepted.responseData().keySet());
       verifyResponseMetrics(ApiKeys.LIST_OFFSETS, Errors.NONE);
     }
@@ -435,7 +433,7 @@ public class MultiTenantRequestContextTest {
       OffsetCommitRequest inbound = new OffsetCommitRequest.Builder(groupId, requestPartitions).build(ver);
       OffsetCommitRequest intercepted = (OffsetCommitRequest) parseRequest(context, inbound);
       assertEquals("tenant_group", intercepted.groupId());
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
           intercepted.offsetData().keySet());
       verifyRequestMetrics(ApiKeys.OFFSET_COMMIT);
     }
@@ -451,7 +449,7 @@ public class MultiTenantRequestContextTest {
       OffsetCommitResponse outbound = new OffsetCommitResponse(0, partitionErrors);
       Struct struct = parseResponse(ApiKeys.OFFSET_COMMIT, ver, context.buildResponse(outbound));
       OffsetCommitResponse intercepted = new OffsetCommitResponse(struct);
-      assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+      assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
           intercepted.responseData().keySet());
       verifyResponseMetrics(ApiKeys.OFFSET_COMMIT, Errors.NONE);
     }
@@ -466,7 +464,7 @@ public class MultiTenantRequestContextTest {
           new TopicPartition("bar", 0))).build(ver);
       OffsetFetchRequest intercepted = (OffsetFetchRequest) parseRequest(context, inbound);
       assertEquals("tenant_group", intercepted.groupId());
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
           new HashSet<>(intercepted.partitions()));
       verifyRequestMetrics(ApiKeys.OFFSET_FETCH);
     }
@@ -482,7 +480,7 @@ public class MultiTenantRequestContextTest {
       OffsetFetchResponse outbound = new OffsetFetchResponse(0, Errors.NONE, responsePartitions);
       Struct struct = parseResponse(ApiKeys.OFFSET_FETCH, ver, context.buildResponse(outbound));
       OffsetFetchResponse intercepted = new OffsetFetchResponse(struct);
-      assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+      assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
           intercepted.responseData().keySet());
       verifyResponseMetrics(ApiKeys.OFFSET_FETCH, Errors.NONE);
     }
@@ -599,7 +597,7 @@ public class MultiTenantRequestContextTest {
       DescribeGroupsResponse outbound = new DescribeGroupsResponse(0, groupMetadata);
       Struct struct = parseResponse(ApiKeys.DESCRIBE_GROUPS, ver, context.buildResponse(outbound));
       DescribeGroupsResponse intercepted = new DescribeGroupsResponse(struct);
-      assertEquals(asSet("foo", "bar"), intercepted.groups().keySet());
+      assertEquals(mkSet("foo", "bar"), intercepted.groups().keySet());
       verifyResponseMetrics(ApiKeys.DESCRIBE_GROUPS, Errors.NONE);
     }
   }
@@ -626,9 +624,9 @@ public class MultiTenantRequestContextTest {
   public void testDeleteGroupsRequest() {
     for (short ver = ApiKeys.DELETE_GROUPS.oldestVersion(); ver <= ApiKeys.DELETE_GROUPS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DELETE_GROUPS, ver);
-      DeleteGroupsRequest inbound = new DeleteGroupsRequest.Builder(asSet("foo", "bar")).build();
+      DeleteGroupsRequest inbound = new DeleteGroupsRequest.Builder(mkSet("foo", "bar")).build();
       DeleteGroupsRequest intercepted = (DeleteGroupsRequest) parseRequest(context, inbound);
-      assertEquals(asSet("tenant_foo", "tenant_bar"), intercepted.groups());
+      assertEquals(mkSet("tenant_foo", "tenant_bar"), intercepted.groups());
       verifyRequestMetrics(ApiKeys.DELETE_GROUPS);
     }
   }
@@ -643,7 +641,7 @@ public class MultiTenantRequestContextTest {
       DeleteGroupsResponse outbound = new DeleteGroupsResponse(0, groupErrors);
       Struct struct = parseResponse(ApiKeys.DELETE_GROUPS, ver, context.buildResponse(outbound));
       DeleteGroupsResponse intercepted = new DeleteGroupsResponse(struct);
-      assertEquals(asSet("foo", "bar"), intercepted.errors().keySet());
+      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
       verifyResponseMetrics(ApiKeys.DELETE_GROUPS, Errors.NONE);
     }
   }
@@ -661,7 +659,7 @@ public class MultiTenantRequestContextTest {
       requestTopics.put("invalid", new CreateTopicsRequest.TopicDetails(3, (short) 5));
       CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(requestTopics, 30000, false).build(ver);
       CreateTopicsRequest intercepted = (CreateTopicsRequest) parseRequest(context, inbound);
-      assertEquals(asSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
+      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
       assertEquals(4, intercepted.topics().get("tenant_foo").replicasAssignments.size());
       assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
       assertNotEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
@@ -686,7 +684,7 @@ public class MultiTenantRequestContextTest {
       requestTopics.put("invalid", new CreateTopicsRequest.TopicDetails(3, (short) 5));
       CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(requestTopics, 30000, false).build(ver);
       CreateTopicsRequest intercepted = (CreateTopicsRequest) parseRequest(context, inbound);
-      assertEquals(asSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
+      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
       assertTrue(intercepted.topics().get("tenant_foo").replicasAssignments.isEmpty());
       assertEquals(4, intercepted.topics().get("tenant_foo").numPartitions);
       assertEquals(1, intercepted.topics().get("tenant_foo").replicationFactor);
@@ -733,7 +731,7 @@ public class MultiTenantRequestContextTest {
       CreateTopicsResponse outbound = new CreateTopicsResponse(partitionErrors);
       Struct struct = parseResponse(ApiKeys.CREATE_TOPICS, ver, context.buildResponse(outbound));
       CreateTopicsResponse intercepted = new CreateTopicsResponse(struct);
-      assertEquals(asSet("foo", "bar"), intercepted.errors().keySet());
+      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
       verifyResponseMetrics(ApiKeys.CREATE_TOPICS, Errors.NONE);
     }
   }
@@ -748,7 +746,7 @@ public class MultiTenantRequestContextTest {
       CreateTopicsResponse outbound = new CreateTopicsResponse(partitionErrors);
       Struct struct = parseResponse(ApiKeys.CREATE_TOPICS, ver, context.buildResponse(outbound));
       CreateTopicsResponse intercepted = new CreateTopicsResponse(struct);
-      assertEquals(asSet("foo", "bar"), intercepted.errors().keySet());
+      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
       assertEquals(Errors.NONE, intercepted.errors().get("bar").error());
 
       ApiError apiError = intercepted.errors().get("foo");
@@ -763,9 +761,9 @@ public class MultiTenantRequestContextTest {
   public void testDeleteTopicsRequest() {
     for (short ver = ApiKeys.DELETE_TOPICS.oldestVersion(); ver <= ApiKeys.DELETE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DELETE_TOPICS, ver);
-      DeleteTopicsRequest inbound = new DeleteTopicsRequest.Builder(asSet("foo", "bar"), 30000).build(ver);
+      DeleteTopicsRequest inbound = new DeleteTopicsRequest.Builder(mkSet("foo", "bar"), 30000).build(ver);
       DeleteTopicsRequest intercepted = (DeleteTopicsRequest) parseRequest(context, inbound);
-      assertEquals(asSet("tenant_foo", "tenant_bar"), intercepted.topics());
+      assertEquals(mkSet("tenant_foo", "tenant_bar"), intercepted.topics());
       verifyRequestMetrics(ApiKeys.DELETE_TOPICS);
     }
   }
@@ -780,7 +778,7 @@ public class MultiTenantRequestContextTest {
       DeleteTopicsResponse outbound = new DeleteTopicsResponse(0, partitionErrors);
       Struct struct = parseResponse(ApiKeys.DELETE_TOPICS, ver, context.buildResponse(outbound));
       DeleteTopicsResponse intercepted = new DeleteTopicsResponse(struct);
-      assertEquals(asSet("foo", "bar"), intercepted.errors().keySet());
+      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
       verifyResponseMetrics(ApiKeys.DELETE_TOPICS, Errors.NONE);
     }
   }
@@ -887,7 +885,7 @@ public class MultiTenantRequestContextTest {
       OffsetsForLeaderEpochRequest inbound = new OffsetsForLeaderEpochRequest.Builder(
               ver, Collections.singletonMap(partition, new OffsetsForLeaderEpochRequest.PartitionData(Optional.empty(), 0))).build(ver);
       OffsetsForLeaderEpochRequest request = (OffsetsForLeaderEpochRequest) parseRequest(context, inbound);
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0)), request.epochsByTopicPartition().keySet());
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0)), request.epochsByTopicPartition().keySet());
       assertTrue(context.shouldIntercept());
       OffsetsForLeaderEpochResponse response = (OffsetsForLeaderEpochResponse) context.intercept(request, 0);
       Struct struct = parseResponse(ApiKeys.OFFSET_FOR_LEADER_EPOCH, ver, context.buildResponse(response));
@@ -1284,7 +1282,7 @@ public class MultiTenantRequestContextTest {
       AddPartitionsToTxnRequest inbound = new AddPartitionsToTxnRequest.Builder("tr", 23L, (short) 15,
           Arrays.asList(new TopicPartition("foo", 0), new TopicPartition("bar", 0))).build(ver);
       AddPartitionsToTxnRequest intercepted = (AddPartitionsToTxnRequest) parseRequest(context, inbound);
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
           new HashSet<>(intercepted.partitions()));
       assertEquals("tenant_tr", intercepted.transactionalId());
       verifyRequestMetrics(ApiKeys.ADD_PARTITIONS_TO_TXN);
@@ -1301,7 +1299,7 @@ public class MultiTenantRequestContextTest {
       AddPartitionsToTxnResponse outbound = new AddPartitionsToTxnResponse(0, partitionErrors);
       Struct struct = parseResponse(ApiKeys.ADD_PARTITIONS_TO_TXN, ver, context.buildResponse(outbound));
       AddPartitionsToTxnResponse intercepted = new AddPartitionsToTxnResponse(struct);
-      assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+      assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
           intercepted.errors().keySet());
       verifyResponseMetrics(ApiKeys.ADD_PARTITIONS_TO_TXN, Errors.NONE);
     }
@@ -1342,7 +1340,7 @@ public class MultiTenantRequestContextTest {
       TxnOffsetCommitRequest intercepted = (TxnOffsetCommitRequest) parseRequest(context, inbound);
       assertEquals("tenant_tr", intercepted.transactionalId());
       assertEquals("tenant_group", intercepted.consumerGroupId());
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
           intercepted.offsets().keySet());
       verifyRequestMetrics(ApiKeys.TXN_OFFSET_COMMIT);
     }
@@ -1358,7 +1356,7 @@ public class MultiTenantRequestContextTest {
       TxnOffsetCommitResponse outbound = new TxnOffsetCommitResponse(0, partitionErrors);
       Struct struct = parseResponse(ApiKeys.TXN_OFFSET_COMMIT, ver, context.buildResponse(outbound));
       TxnOffsetCommitResponse intercepted = new TxnOffsetCommitResponse(struct);
-      assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+      assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
           intercepted.errors().keySet());
       verifyResponseMetrics(ApiKeys.TXN_OFFSET_COMMIT, Errors.NONE);
     }
@@ -1373,7 +1371,7 @@ public class MultiTenantRequestContextTest {
       requestPartitions.put(new TopicPartition("bar", 0), 0L);
       DeleteRecordsRequest inbound = new DeleteRecordsRequest.Builder(30000, requestPartitions).build(ver);
       DeleteRecordsRequest intercepted = (DeleteRecordsRequest) parseRequest(context, inbound);
-      assertEquals(asSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
+      assertEquals(mkSet(new TopicPartition("tenant_foo", 0), new TopicPartition("tenant_bar", 0)),
           intercepted.partitionOffsets().keySet());
       verifyRequestMetrics(ApiKeys.DELETE_RECORDS);
     }
@@ -1389,7 +1387,7 @@ public class MultiTenantRequestContextTest {
       DeleteRecordsResponse outbound = new DeleteRecordsResponse(0, partitionErrors);
       Struct struct = parseResponse(ApiKeys.DELETE_RECORDS, ver, context.buildResponse(outbound));
       DeleteRecordsResponse intercepted = new DeleteRecordsResponse(struct);
-      assertEquals(asSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
+      assertEquals(mkSet(new TopicPartition("foo", 0), new TopicPartition("bar", 0)),
           intercepted.responses().keySet());
       verifyResponseMetrics(ApiKeys.DELETE_RECORDS, Errors.NONE);
     }
@@ -1409,7 +1407,7 @@ public class MultiTenantRequestContextTest {
       requestTopics.put("invalid", new PartitionDetails(4));
       CreatePartitionsRequest inbound = new CreatePartitionsRequest.Builder(requestTopics, 30000, false).build(ver);
       CreatePartitionsRequest request = (CreatePartitionsRequest) parseRequest(context, inbound);
-      assertEquals(asSet("tenant_foo", "tenant_bar", "tenant_invalid"), request.newPartitions().keySet());
+      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), request.newPartitions().keySet());
       assertEquals(2, request.newPartitions().get("tenant_foo").newAssignments().size());
       assertEquals(2, request.newPartitions().get("tenant_bar").newAssignments().size());
       assertNotEquals(unbalancedAssignment, request.newPartitions().get("tenant_bar").newAssignments());
@@ -1439,7 +1437,7 @@ public class MultiTenantRequestContextTest {
       requestTopics.put("invalid", new PartitionDetails(4));
       CreatePartitionsRequest inbound = new CreatePartitionsRequest.Builder(requestTopics, 30000, false).build(ver);
       CreatePartitionsRequest request = (CreatePartitionsRequest) parseRequest(context, inbound);
-      assertEquals(asSet("tenant_foo", "tenant_bar", "tenant_invalid"), request.newPartitions().keySet());
+      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), request.newPartitions().keySet());
       assertNull(request.newPartitions().get("tenant_foo").newAssignments());
       assertEquals(2, request.newPartitions().get("tenant_bar").newAssignments().size());
       assertEquals(unbalancedAssignment, request.newPartitions().get("tenant_bar").newAssignments());
@@ -1467,7 +1465,7 @@ public class MultiTenantRequestContextTest {
       requestedResources.put(new ConfigResource(ConfigResource.Type.TOPIC, "bar"), Collections.<String>emptyList());
       DescribeConfigsRequest inbound = new DescribeConfigsRequest.Builder(requestedResources).build(ver);
       DescribeConfigsRequest intercepted = (DescribeConfigsRequest) parseRequest(context, inbound);
-      assertEquals(asSet(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo"),
+      assertEquals(mkSet(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo"),
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "tenant_bar")), new HashSet<>(intercepted.resources()));
       verifyRequestMetrics(ApiKeys.DESCRIBE_CONFIGS);
@@ -1531,7 +1529,7 @@ public class MultiTenantRequestContextTest {
       DescribeConfigsResponse outbound = new DescribeConfigsResponse(0, resourceErrors);
       Struct struct = parseResponse(ApiKeys.DESCRIBE_CONFIGS, ver, context.buildResponse(outbound));
       DescribeConfigsResponse intercepted = new DescribeConfigsResponse(struct);
-      assertEquals(asSet(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
+      assertEquals(mkSet(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "bar")), intercepted.configs().keySet());
       Collection<DescribeConfigsResponse.ConfigEntry> interceptedBrokerConfigs =
@@ -1541,9 +1539,9 @@ public class MultiTenantRequestContextTest {
         interceptedEntries.add(configEntry.name());
       }
       if (allowDescribeBrokerConfigs) {
-        assertEquals(Utils.mkSet("message.max.bytes", "num.network.threads"), interceptedEntries);
+        assertEquals(mkSet("message.max.bytes", "num.network.threads"), interceptedEntries);
       } else {
-        assertEquals(Utils.mkSet("message.max.bytes"), interceptedEntries);
+        assertEquals(mkSet("message.max.bytes"), interceptedEntries);
       }
       verifyResponseMetrics(ApiKeys.DESCRIBE_CONFIGS, Errors.NONE);
     }
@@ -1562,7 +1560,7 @@ public class MultiTenantRequestContextTest {
           Collections.<AlterConfigsRequest.ConfigEntry>emptyList()));
       AlterConfigsRequest inbound = new AlterConfigsRequest.Builder(resourceConfigs, false).build(ver);
       AlterConfigsRequest intercepted = (AlterConfigsRequest) parseRequest(context, inbound);
-      assertEquals(asSet(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo"),
+      assertEquals(mkSet(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo"),
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "tenant_bar")), intercepted.configs().keySet());
       verifyRequestMetrics(ApiKeys.ALTER_CONFIGS);
@@ -1580,7 +1578,7 @@ public class MultiTenantRequestContextTest {
       AlterConfigsResponse outbound = new AlterConfigsResponse(0, resourceErrors);
       Struct struct = parseResponse(ApiKeys.ALTER_CONFIGS, ver, context.buildResponse(outbound));
       AlterConfigsResponse intercepted = new AlterConfigsResponse(struct);
-      assertEquals(asSet(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
+      assertEquals(mkSet(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "bar")), intercepted.errors().keySet());
       verifyResponseMetrics(ApiKeys.ALTER_CONFIGS, Errors.NONE);
@@ -1633,10 +1631,6 @@ public class MultiTenantRequestContextTest {
     struct.writeTo(buffer);
     buffer.flip();
     return buffer;
-  }
-
-  private <T> Set<T> asSet(T... elems) {
-    return new HashSet<>(Arrays.asList(elems));
   }
 
   private Struct parseResponse(ApiKeys api, short version, Send send) throws IOException {
@@ -1713,7 +1707,7 @@ public class MultiTenantRequestContextTest {
       if (metricName.name().startsWith("error"))
         assertEquals(error.name(), metricName.tags().get("error"));
     }
-    assertEquals(asSet(expectedMetrics), tenantMetrics);
+    assertEquals(mkSet(expectedMetrics), tenantMetrics);
 
     verifySensors(apiKey, error, expectedMetrics);
     return metricsByName;

@@ -10,6 +10,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -50,7 +51,7 @@ public class MetricsReporterTest extends MetricReporterClusterTestHarness {
         long startMs = System.currentTimeMillis();
 
         while (System.currentTimeMillis() - startMs < 20000) {
-            ConsumerRecords<byte[], byte[]> records = consumer.poll(200);
+            ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofMillis(200));
             for (ConsumerRecord<byte[], byte[]> record : records) {
                 latestResult = verify(latestResult == null ? new Result() : latestResult, record);
                 if (latestResult.hasAllFields()) {
