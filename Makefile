@@ -6,7 +6,6 @@ DEFAULT_BUMP := minor
 
 #Including above to ensure variables overrides work correctly
 include ./mk-include/cc-semver.mk
-JAVA_VERSION := $(shell docker run -it $(BASE_IMAGE):$(BASE_VERSION) java -version)
 KAFKA_VERSION := $(shell awk 'sub(/.*version=/,""){print $1}' ./gradle.properties)
 VERSION := $(shell [ -d .git ] && git describe --tags --always --dirty)
 VERSION := $(VERSION)-$(KAFKA_VERSION)-$(USER)
