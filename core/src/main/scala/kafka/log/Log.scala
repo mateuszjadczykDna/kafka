@@ -952,6 +952,10 @@ class Log(@volatile var dir: File,
     }
   }
 
+  def getHighWatermark: Option[Long] = lock synchronized {
+    replicaHighWatermark
+  }
+
   private def updateFirstUnstableOffset(): Unit = lock synchronized {
     checkIfMemoryMappedBufferClosed()
     val updatedFirstStableOffset = producerStateManager.firstUnstableOffset match {

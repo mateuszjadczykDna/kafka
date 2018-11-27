@@ -343,4 +343,19 @@ For a detailed description of spotbugs bug categories, see https://spotbugs.read
         <Class name="io.confluent.kafka.server.plugins.policy.CreateTopicPolicy"/>
         <Bug pattern="NM_SAME_SIMPLE_NAME_AS_INTERFACE"/>
     </Match>
+
+
+    <Match>
+        <!-- Suppress warnings in jmh generated code. -->
+        <OR>
+        <Package name="org.apache.kafka.jmh.tier.generated"/>
+        <Package name="org.apache.kafka.jmh.tier.generated.*"/>
+        </OR>
+        <OR>
+        <Bug pattern="UUF_UNREAD_FIELD"/>
+        <Bug pattern="UUF_UNUSED_FIELD"/>
+        <Bug pattern="DLS_DEAD_LOCAL_STORE"/>
+        </OR>
+    </Match>
+
 </FindBugsFilter>

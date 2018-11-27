@@ -207,7 +207,7 @@ class OffsetIndexTest extends JUnitSuite {
     }
     vals
   }
-  
+
   def nonExistentTempFile(): File = {
     val file = TestUtils.tempFile()
     Files.delete(file.toPath)

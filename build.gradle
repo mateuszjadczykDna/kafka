@@ -35,6 +35,7 @@ buildscript {
     classpath "com.diffplug.spotless:spotless-plugin-gradle:3.16.0"
     classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:1.6.5"
     classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.6'
+    classpath 'de.undercouch:gradle-download-task:3.4.3'
   }
 }
 
@@ -591,6 +592,17 @@ project(':core') {
   apply plugin: 'scala'
   archivesBaseName = "kafka_${versions.baseScala}"
 
+  sourceSets {
+    main {
+      scala {
+        srcDirs = ['src/main/scala', 'src/main/java', "${buildDir}/generated/src/main/java"]
+      }
+      java {
+        srcDirs = []
+      }
+    }
+  }
+
   dependencies {
     compile project(':clients')
     compile libs.jacksonDatabind
@@ -601,6 +613,7 @@ project(':core') {
     compile libs.scalaReflect
     compile libs.scalaLogging
     compile libs.slf4jApi
+    compile libs.flatbuffers
     compile(libs.zkclient) {
       exclude module: 'zookeeper'
     }
@@ -631,6 +644,7 @@ project(':core') {
     testCompile libs.apachedsMavibotPartition
     testCompile libs.apachedsJdbmPartition
     testCompile libs.junit
+    testCompile libs.scalacheck
     testCompile libs.scalatest
     testCompile libs.slf4jlog4j
     testCompile libs.jfreechart
@@ -660,6 +674,51 @@ project(':core') {
     into "$buildDir/dependant-libs-${versions.scala}"
     duplicatesStrategy 'exclude'
   }
+
+  ext.getOsName = { ->
+    def osname = System.getProperty("os.name")
+    def flatbuffersOS
+    if (osname.indexOf("inux") != -1) {
+      flatbuffersOS = "linux"
+    } else if (osname == "Mac OS X") {
+      flatbuffersOS = "osx"
+    } else {
+      throw new Throwable('Error occurred detecting OS for flatbuffers compiler download.')
+    }
+    return flatbuffersOS;
+  }
+
+  apply plugin: 'de.undercouch.download'
+  task downloadFlatbuffersCompiler(type: Download) {
+    def flatbuffersOS = getOsName();
+    def mavenUrl = project.repositories.find { it.name == "MavenRepo"}.url
+    src "${mavenUrl}com/github/davidmoten/flatbuffers-compiler/${libs.flatbuffersCompiler}/flatbuffers-compiler-${libs.flatbuffersCompiler}-distribution-${flatbuffersOS}.tar.gz"
+    overwrite false
+    dest buildDir
+  }
+
+  task extractFlatbuffersCompiler(type: Copy, dependsOn: downloadFlatbuffersCompiler) {
+    def flatbuffersOS = getOsName();
+    from tarTree(resources.gzip("${buildDir}/flatbuffers-compiler-${libs.flatbuffersCompiler}-distribution-${flatbuffersOS}.tar.gz"))
+    into "${buildDir}/flatbuffers"
+  }
+
+  task generateTierTopicSerdes(dependsOn: extractFlatbuffersCompiler) {
+    doLast {
+      exec {
+        commandLine "${buildDir}/flatbuffers/bin/flatc", "--java", "--gen-mutable", "-o",
+                    "${buildDir}/generated/src/main/java", "src/main/resources/tier_partition_state_entry.fbs"
+      }
+      exec {
+        commandLine "${buildDir}/flatbuffers/bin/flatc", "--java", "-o", "${buildDir}/generated/src/main/java",
+                    "src/main/resources/tier_init_leader.fbs"
+      }
+    }
+  }
+  /* end flatbuffers generation steps */
+
+  compileScala.dependsOn generateTierTopicSerdes
+  compileJava.dependsOn generateTierTopicSerdes
 
   task genProtocolErrorDocs(type: JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
@@ -946,7 +1005,6 @@ project(':tools') {
     compile libs.argparse4j
     compile libs.jacksonDatabind
     compile libs.slf4jApi
-
     compile libs.jacksonJaxrsJsonProvider
     compile libs.jerseyContainerServlet
     compile libs.jerseyHk2
@@ -1244,6 +1302,7 @@ project(':jmh-benchmarks') {
   }
 
   dependencies {
+    compile project(':core')
     compile project(':clients')
     compile project(':streams')
     compile libs.jmhCore
@@ -1257,6 +1316,9 @@ project(':jmh-benchmarks') {
     }
   }
 
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-jmh-benchmarks.xml")
+  }
 
   task jmh(type: JavaExec, dependsOn: [':jmh-benchmarks:clean', ':jmh-benchmarks:shadowJar']) {
 
@@ -1375,7 +1437,6 @@ project(':connect:json') {
     compile project(':connect:api')
     compile libs.jacksonDatabind
     compile libs.slf4jApi
-
     testCompile libs.easymock
     testCompile libs.junit
     testCompile libs.powermockJunit4

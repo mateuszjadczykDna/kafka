@@ -26,6 +26,7 @@ public class Topic {
 
     public static final String GROUP_METADATA_TOPIC_NAME = "__consumer_offsets";
     public static final String TRANSACTION_STATE_TOPIC_NAME = "__transaction_state";
+    public static final String TIER_TOPIC_NAME = "__tier_topic";
     public static final String LEGAL_CHARS = "[a-zA-Z0-9._-]";
 
     public static final Set<String> INTERNAL_TOPICS = Collections.unmodifiableSet(
@@ -46,8 +47,20 @@ public class Topic {
                     "ASCII alphanumerics, '.', '_' and '-'");
     }
 
+    // TODO: TIER_TOPIC_NAME and its namespaced variant should be flagged as internal.
+    // https://confluentinc.atlassian.net/browse/CPKAFKA-1877
+    // However, this will block the ability to producer with a KafkaProducer.
+    // Therefore we use isTierTopic and isTierable to avoid tiering it by default.
     public static boolean isInternal(String topic) {
         return INTERNAL_TOPICS.contains(topic);
+    }
+
+    public static boolean isTierTopic(String topic) {
+        return topic.startsWith(TIER_TOPIC_NAME);
+    }
+
+    public static boolean isTierable(String topic) {
+        return !isInternal(topic) && !isTierTopic(topic);
     }
 
     /**

@@ -48,6 +48,24 @@
     <allow class="javax.xml.datatype.DatatypeConfigurationException" />
   </subpackage>
 
+  <subpackage name="tier">
+    <allow pkg="kafka.tier.domain" />
+    <allow pkg="kafka.tier.client" />
+    <allow pkg="kafka.tier.state" />
+    <allow pkg="kafka.tier.exceptions" />
+    <allow pkg="kafka.tier.serdes" />
+    <allow pkg="kafka.tier.topic" />
+    <allow pkg="org.apache.kafka.clients.admin" />
+    <allow pkg="org.apache.kafka.clients.consumer" />
+    <allow pkg="org.apache.kafka.clients.producer" />
+    <allow class="kafka.server.KafkaConfig" />
+
+    <subpackage name="client">
+      <allow pkg="kafka.tier" />
+    </subpackage>
+  </subpackage>
+
+
   <subpackage name="coordinator">
     <allow class="kafka.server.MetadataCache" />
   </subpackage>

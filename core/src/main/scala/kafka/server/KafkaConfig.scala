@@ -176,6 +176,16 @@ object Defaults {
   val TransactionsAbortTimedOutTransactionsCleanupIntervalMS = TransactionStateManager.DefaultAbortTimedOutTransactionsIntervalMs
   val TransactionsRemoveExpiredTransactionsCleanupIntervalMS = TransactionStateManager.DefaultRemoveExpiredTransactionalIdsIntervalMs
 
+  /** ********* Tier management configuration ***********/
+  val TierFeature = false
+  val TierEnable = false
+  val TierMetadataMaxPollMs = 100L
+  val TierMetadataRequestTimeoutMs = 30000
+  val TierMetadataBootstrapServers = null
+  val TierMetadataNamespace = null
+  val TierMetadataNumPartitions = 10:Short
+  val TierMetadataReplicationFactor = 3:Short
+
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlots = 1000
 
@@ -395,6 +405,16 @@ object KafkaConfig {
   val TransactionsTopicReplicationFactorProp = "transaction.state.log.replication.factor"
   val TransactionsAbortTimedOutTransactionCleanupIntervalMsProp = "transaction.abort.timed.out.transaction.cleanup.interval.ms"
   val TransactionsRemoveExpiredTransactionalIdCleanupIntervalMsProp = "transaction.remove.expired.transaction.cleanup.interval.ms"
+
+  /** ********* Tier management configuration ***********/
+  val TierFeatureProp = "tier.feature"
+  val TierEnableProp = "tier.enable"
+  val TierMetadataBootstrapServersProp = "tier.metadata.bootstrap.servers"
+  val TierMetadataMaxPollMsProp = "tier.metadata.max.poll.ms"
+  val TierMetadataRequestTimeoutMsProp = "tier.metadata.request.timeout.ms"
+  val TierMetadataNamespaceProp = "tier.metadata.namespace"
+  val TierMetadataNumPartitionsProp = "tier.metadata.num.partitions"
+  val TierMetadataReplicationFactorProp = "tier.metadata.replication.factor"
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlots = "max.incremental.fetch.session.cache.slots"
@@ -700,6 +720,16 @@ object KafkaConfig {
   val TransactionsAbortTimedOutTransactionsIntervalMsDoc = "The interval at which to rollback transactions that have timed out"
   val TransactionsRemoveExpiredTransactionsIntervalMsDoc = "The interval at which to remove transactions that have expired due to <code>transactional.id.expiration.ms<code> passing"
 
+  /** ********* Tier management configuration ***********/
+  val TierFeatureDoc = "Feature flag that enables components related to tiered storage, and enable the tiered storage feature."
+  val TierMetadataBootstrapServersDoc = "The bootstrap servers for the tier topic cluster. Kafka will default to the local broker if this is not defined."
+  val TierMetadataMaxPollMsDoc = "The maximum delay before invocations of poll of the tier topic."
+  val TierMetadataRequestTimeoutMsDoc = "request.timeout.ms passed through to the backing producer. After this timeout the producer will retry the request."
+  val TierEnableDoc = "Enable topic tiering on all topics broker wide."
+  val TierMetadataNamespaceDoc = "Namespace of the tier topic name e.g. namespace mycluster will be translated into __tier_topic_mycluster."
+  val TierMetadataNumPartitionsDoc = "The number of partitions for the tier topic (should not change after deployment)."
+  val TierMetadataReplicationFactorDoc = "The replication factor for the Tier Topic (set higher to ensure availability)."
+
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlotsDoc = "The maximum number of incremental fetch sessions that we will maintain."
 
@@ -963,6 +993,16 @@ object KafkaConfig {
       .define(TransactionsTopicSegmentBytesProp, INT, Defaults.TransactionsTopicSegmentBytes, atLeast(1), HIGH, TransactionsTopicSegmentBytesDoc)
       .define(TransactionsAbortTimedOutTransactionCleanupIntervalMsProp, INT, Defaults.TransactionsAbortTimedOutTransactionsCleanupIntervalMS, atLeast(1), LOW, TransactionsAbortTimedOutTransactionsIntervalMsDoc)
       .define(TransactionsRemoveExpiredTransactionalIdCleanupIntervalMsProp, INT, Defaults.TransactionsRemoveExpiredTransactionsCleanupIntervalMS, atLeast(1), LOW, TransactionsRemoveExpiredTransactionsIntervalMsDoc)
+
+      /** ********* Tier management configuration ***********/
+      .defineInternal(TierFeatureProp, BOOLEAN, Defaults.TierFeature, MEDIUM, TierFeatureDoc)
+      .defineInternal(TierEnableProp, BOOLEAN, Defaults.TierEnable, MEDIUM, TierEnableDoc)
+      .defineInternal(TierMetadataBootstrapServersProp, STRING, Defaults.TierMetadataBootstrapServers, MEDIUM, TierMetadataBootstrapServersDoc)
+      .defineInternal(TierMetadataMaxPollMsProp, LONG, Defaults.TierMetadataMaxPollMs, atLeast(1), MEDIUM, TierMetadataMaxPollMsDoc)
+      .defineInternal(TierMetadataRequestTimeoutMsProp, INT, Defaults.TierMetadataRequestTimeoutMs, atLeast(1), MEDIUM, TierMetadataRequestTimeoutMsDoc)
+      .defineInternal(TierMetadataNamespaceProp, STRING, Defaults.TierMetadataNamespace, MEDIUM, TierMetadataNamespaceDoc)
+      .defineInternal(TierMetadataNumPartitionsProp, SHORT, Defaults.TierMetadataNumPartitions, atLeast(1), HIGH, TierMetadataNumPartitionsDoc)
+      .defineInternal(TierMetadataReplicationFactorProp, SHORT, Defaults.TierMetadataReplicationFactor, atLeast(1), HIGH, TierMetadataReplicationFactorDoc)
 
     /** ********* Fetch Session Configuration **************/
       .define(MaxIncrementalFetchSessionCacheSlots, INT, Defaults.MaxIncrementalFetchSessionCacheSlots, atLeast(0), MEDIUM, MaxIncrementalFetchSessionCacheSlotsDoc)
@@ -1249,6 +1289,15 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val transactionAbortTimedOutTransactionCleanupIntervalMs = getInt(KafkaConfig.TransactionsAbortTimedOutTransactionCleanupIntervalMsProp)
   val transactionRemoveExpiredTransactionalIdCleanupIntervalMs = getInt(KafkaConfig.TransactionsRemoveExpiredTransactionalIdCleanupIntervalMsProp)
 
+  /** ********* Tier management configuration ***********/
+  val tierFeature = getBoolean(KafkaConfig.TierFeatureProp)
+  val tierEnable = getBoolean(KafkaConfig.TierEnableProp)
+  val tierMetadataBootstrapServers = getString(KafkaConfig.TierMetadataBootstrapServersProp)
+  val tierMetadataMaxPollMs = getLong(KafkaConfig.TierMetadataMaxPollMsProp)
+  val tierMetadataRequestTimeoutMs = getInt(KafkaConfig.TierMetadataRequestTimeoutMsProp)
+  val tierMetadataNamespace = getString(KafkaConfig.TierMetadataNamespaceProp)
+  val tierMetadataNumPartitions = getShort(KafkaConfig.TierMetadataNumPartitionsProp)
+  val tierMetadataReplicationFactor = getShort(KafkaConfig.TierMetadataReplicationFactorProp)
 
   /** ********* Metric Configuration **************/
   val metricNumSamples = getInt(KafkaConfig.MetricNumSamplesProp)

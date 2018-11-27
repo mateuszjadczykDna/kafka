@@ -35,6 +35,9 @@ import kafka.metrics.{KafkaMetricsGroup, KafkaMetricsReporter}
 import kafka.network.SocketServer
 import kafka.security.CredentialProvider
 import kafka.security.auth.Authorizer
+import kafka.tier.archiver.{TierArchiver, TierArchiverConfig}
+import kafka.tier.store.{MockInMemoryTierObjectStore}
+import kafka.tier.{TierTopicManager, TierTopicManagerConfig}
 import kafka.utils._
 import kafka.zk.{BrokerInfo, KafkaZkClient}
 import org.apache.kafka.clients.{ApiVersions, ClientDnsLookup, ManualMetadataUpdater, NetworkClient, NetworkClientUtils}
@@ -80,6 +83,7 @@ object KafkaServer {
     logProps.put(LogConfig.MessageTimestampTypeProp, kafkaConfig.logMessageTimestampType.name)
     logProps.put(LogConfig.MessageTimestampDifferenceMaxMsProp, kafkaConfig.logMessageTimestampDifferenceMaxMs: java.lang.Long)
     logProps.put(LogConfig.MessageDownConversionEnableProp, kafkaConfig.logMessageDownConversionEnable: java.lang.Boolean)
+    logProps.put(LogConfig.TierEnableProp, kafkaConfig.tierEnable: java.lang.Boolean)
     logProps
   }
 
@@ -133,6 +137,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
   var groupCoordinator: GroupCoordinator = null
 
   var transactionCoordinator: TransactionCoordinator = null
+
+  var tierTopicManager: TierTopicManager = null
+  var tierObjectStore: MockInMemoryTierObjectStore = null
+  var tierArchiver: TierArchiver = null
 
   var kafkaController: KafkaController = null
 
@@ -238,6 +246,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         logManager.startup()
 
         metadataCache = new MetadataCache(config.brokerId)
+
+
         // Enable delegation token cache for all SCRAM mechanisms to simplify dynamic update.
         // This keeps the cache up-to-date if new SCRAM mechanisms are enabled dynamically.
         tokenCache = new DelegationTokenCache(ScramMechanism.mechanismNames)
@@ -279,6 +289,22 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         transactionCoordinator = TransactionCoordinator(config, replicaManager, new KafkaScheduler(threads = 1, threadNamePrefix = "transaction-log-manager-"), zkClient, metrics, metadataCache, Time.SYSTEM)
         transactionCoordinator.startup()
 
+        if (config.tierFeature) {
+          val tierBrokerListener = "PLAINTEXT"
+          val tierTopicManagerConfig = new TierTopicManagerConfig(config,
+            brokerInfo.broker.brokerEndPoint(new ListenerName(tierBrokerListener)).connectionString(),
+            _clusterId)
+
+          /* tiered storage components */
+          tierTopicManager = new TierTopicManager(metrics, tierTopicManagerConfig)
+          tierTopicManager.startup()
+
+          val tierArchiverConfig = TierArchiverConfig()
+          tierObjectStore = new MockInMemoryTierObjectStore("testbucket")
+          tierArchiver = new TierArchiver(tierArchiverConfig, replicaManager, tierTopicManager, tierObjectStore)
+          tierArchiver.start()
+        }
+
         /* Get the authorizer and initialize it if one is specified.*/
         authorizer = Option(config.authorizerClassName).filter(_.nonEmpty).map { authorizerClassName =>
           val authZ = CoreUtils.createObject[Authorizer](authorizerClassName)
@@ -293,7 +319,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         /* start processing requests */
         apis = new KafkaApis(socketServer.requestChannel, replicaManager, adminManager, groupCoordinator, transactionCoordinator,
           kafkaController, zkClient, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers,
-          fetchManager, brokerTopicStats, clusterId, time, tokenManager)
+          fetchManager, brokerTopicStats, clusterId, time, tokenManager, tierTopicManager, tierArchiver)
+
 
         requestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.requestChannel, apis, time,
           config.numIoThreads)
@@ -316,7 +343,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         socketServer.startProcessors()
         brokerState.newState(RunningAsBroker)
         shutdownLatch = new CountDownLatch(1)
+
         startupComplete.set(true)
+
         isStartingUp.set(false)
         AppInfoParser.registerAppInfo(jmxPrefix, config.brokerId.toString, metrics)
         info("started")
@@ -568,6 +597,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         CoreUtils.swallow(controlledShutdown(), this)
         brokerState.newState(BrokerShuttingDown)
 
+        if (tierTopicManager != null)
+          CoreUtils.swallow(tierTopicManager.shutdown(), this)
+
         if (dynamicConfigManager != null)
           CoreUtils.swallow(dynamicConfigManager.shutdown(), this)
 
@@ -599,6 +631,12 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           CoreUtils.swallow(replicaManager.shutdown(), this)
         if (logManager != null)
           CoreUtils.swallow(logManager.shutdown(), this)
+
+        if (tierArchiver != null)
+          CoreUtils.swallow(tierArchiver.shutdown(), this)
+
+        if (tierObjectStore != null)
+          CoreUtils.swallow(tierObjectStore.close(), this)
 
         if (kafkaController != null)
           CoreUtils.swallow(kafkaController.shutdown(), this)
