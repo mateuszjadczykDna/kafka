@@ -54,7 +54,7 @@ versions += [
   argparse4j: "0.7.0",
   bcpkix: "1.60",
   easymock: "4.0.1",
-  gson: "2.7",
+  gson: "2.8.5",
   guava: "20.0",
   jackson: "2.9.7",
   jbcrypt: "0.4",
