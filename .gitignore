@@ -32,6 +32,7 @@ Vagrantfile.local
 .DS_Store
 .ssh
 .netrc
+.semaphore-cache/
 
 config/server-*
 config/zookeeper-*
