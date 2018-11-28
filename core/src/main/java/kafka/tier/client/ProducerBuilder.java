@@ -10,6 +10,7 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import java.util.Properties;
 
 public class ProducerBuilder implements TierTopicProducerBuilder {
+    private static final String CLIENT_ID_PREFIX = "__kafka.tiertopicmanager";
     private final TierTopicManagerConfig config;
 
     public ProducerBuilder(TierTopicManagerConfig config) {
@@ -42,6 +43,10 @@ public class ProducerBuilder implements TierTopicProducerBuilder {
      * primary source of tier topic manager metrics.
      */
     private static String clientId(String clusterId, int brokerId) {
-        return String.format("__kafka.tiertopicmanager.%s.%s", clusterId, brokerId);
+        return String.format("%s.%s.%s", CLIENT_ID_PREFIX, clusterId, brokerId);
+    }
+
+    public static boolean tierProducer(String clientId) {
+        return clientId.startsWith(CLIENT_ID_PREFIX);
     }
 }

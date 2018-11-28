@@ -63,7 +63,7 @@ class TierArchiver(config: TierArchiverConfig,
   }
 
   def tierable(topicPartition: TopicPartition, logConfig: LogConfig): Boolean = {
-    logConfig.tierEnable && logConfig.delete && Topic.isTierable(topicPartition.topic())
+    logConfig.tierEnable && logConfig.delete && !Topic.isInternal(topicPartition.topic())
   }
 
   /**

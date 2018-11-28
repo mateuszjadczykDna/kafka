@@ -6,7 +6,7 @@ package kafka.tier
 
 import java.io.File
 import java.util
-import java.util.{Collections, UUID}
+import java.util.{Collections}
 
 import kafka.tier.client.{MockConsumerBuilder, MockProducerBuilder}
 import kafka.tier.domain.TierObjectMetadata

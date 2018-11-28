@@ -6,7 +6,6 @@ package kafka.tier.state;
 
 import kafka.tier.domain.AbstractTierMetadata;
 import kafka.tier.domain.TierObjectMetadata;
-import kafka.tier.domain.TierTopicInitLeader;
 import kafka.tier.serdes.ObjectMetadata;
 
 import java.io.IOException;

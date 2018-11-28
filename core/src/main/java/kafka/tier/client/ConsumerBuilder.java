@@ -11,6 +11,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import java.util.Properties;
 
 public class ConsumerBuilder implements TierTopicConsumerBuilder {
+    private static final String CLIENT_ID_PREFIX = "__kafka.tiertopicmanager";
     private final TierTopicManagerConfig config;
 
     public ConsumerBuilder(TierTopicManagerConfig config) {
@@ -45,7 +46,6 @@ public class ConsumerBuilder implements TierTopicConsumerBuilder {
      * primary source of tier topic manager metrics.
      */
     private static String clientId(String clusterId, int brokerId, String clientIdSuffix) {
-        return String.format("__kafka.tiertopicmanager.%s.%s.%s", clusterId, brokerId, clientIdSuffix);
+        return String.format("%s.%s.%s.%s", CLIENT_ID_PREFIX, clusterId, brokerId, clientIdSuffix);
     }
-
 }

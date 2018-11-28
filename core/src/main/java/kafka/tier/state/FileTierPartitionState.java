@@ -224,7 +224,6 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
         return AppendResult.FENCED;
     }
 
-
     private static long appendWithSizePrefix(FileChannel channel,
                                              ByteBuffer buffer)
             throws IOException {

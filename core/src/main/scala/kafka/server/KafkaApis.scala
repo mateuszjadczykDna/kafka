@@ -38,6 +38,7 @@ import kafka.security.auth.{Resource, _}
 import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
 import kafka.tier.TierTopicManager
 import kafka.tier.archiver.TierArchiver
+import kafka.tier.client.ProducerBuilder
 import kafka.utils.{CoreUtils, Logging}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.common.acl.{AccessControlEntry, AclBinding}
@@ -494,7 +495,7 @@ class KafkaApis(val requestChannel: RequestChannel,
     if (authorizedRequestInfo.isEmpty)
       sendResponseCallback(Map.empty)
     else {
-      val internalTopicsAllowed = request.header.clientId == AdminUtils.AdminClientId
+      val internalTopicsAllowed = request.header.clientId == AdminUtils.AdminClientId || ProducerBuilder.tierProducer(request.header.clientId)
 
       // call the replica manager to append messages to the replicas
       replicaManager.appendRecords(

@@ -89,7 +89,7 @@ public class MemoryTierPartitionState implements TierPartitionState {
         return currentEpoch.get();
     }
 
-    public AppendResult append(AbstractTierMetadata entry) {
+    public TierPartitionState.AppendResult append(AbstractTierMetadata entry) {
         if (status == TierPartitionStatus.INIT) {
             return AppendResult.ILLEGAL;
         } else if (entry instanceof TierTopicInitLeader) {
