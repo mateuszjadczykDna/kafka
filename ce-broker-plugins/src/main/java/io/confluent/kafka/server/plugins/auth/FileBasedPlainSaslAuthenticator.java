@@ -54,7 +54,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
    * Authenticate user via username/password
    * @param username username
    * @param password password
-   * @returns {@link MultiTenantPrincipal} containing authorization id and tenant
+   * @return {@link MultiTenantPrincipal} containing authorization id and tenant
    * @throws SaslAuthenticationException if authentication fails.
    *         Note that the error string in the SaslAuthenticationException
    *         is returned to the client so do not leak information in it.
