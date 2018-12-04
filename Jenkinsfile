@@ -18,10 +18,7 @@ def job = {
         sh "./gradlew -PscalaVersion=2.11 ${gradlewParameters} clean assemble"
     }
 
-    def kafkaRepo
-    def kafkaBranch = env.BRANCH_NAME;
     stage("Run Gradle tests") {
-        kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size());
         sh "./gradlew ${gradlewParameters} clean test"
     }
 
@@ -29,6 +26,8 @@ def job = {
     def kafkaMuckrakeVersionMap = [
             "ce-trunk": "master"
     ];
+    def kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size()).trim();
+    def kafkaBranch = env.BRANCH_NAME;
     def muckrakeBranch = kafkaMuckrakeVersionMap[kafkaBranch] ?: "master";
     // Start the downstream job.
     stage("Trigger test-cp-downstream-builds-cekafka") {
