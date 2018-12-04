@@ -80,7 +80,7 @@ object TierArchiverState {
                                 blockingTaskExecutor: ScheduledExecutorService,
                                 config: TierArchiverConfig) extends TierArchiverState {
 
-
+    // Priority: BeforeLeader (this) > AfterUpload > BeforeUpload
     override def relativePriority(other: TierArchiverState): Int = {
       other match {
         case _: BeforeLeader => Priority.Same
@@ -123,11 +123,13 @@ object TierArchiverState {
 
     def lag(): Long = highWatermark() - archivedOffset()
 
+    // Priority: BeforeLeader > AfterUpload > BeforeUpload (this)
+    // When comparing two BeforeUpload states, prioritize the state with greater lag higher.
     override def relativePriority(other: TierArchiverState): Int = {
       other match {
         case _: BeforeLeader => Priority.Lower
-        case _: BeforeUpload => {
-          val otherLag = other.asInstanceOf[BeforeUpload].lag()
+        case otherBeforeUpload: BeforeUpload => {
+          val otherLag = otherBeforeUpload.lag()
           val thisLag = this.lag()
           if (otherLag > thisLag) {
             Priority.Lower
@@ -243,10 +245,11 @@ object TierArchiverState {
                                blockingTaskExecutor: ScheduledExecutorService,
                                config: TierArchiverConfig) extends TierArchiverState {
 
+    // Priority: BeforeLeader > AfterUpload (this) > BeforeUpload
     override def relativePriority(other: TierArchiverState): Int = {
       other match {
-        case _: BeforeLeader => Priority.Higher
-        case _: BeforeUpload => Priority.Lower
+        case _: BeforeLeader => Priority.Lower
+        case _: BeforeUpload => Priority.Higher
         case _: AfterUpload => Priority.Same
       }
     }
