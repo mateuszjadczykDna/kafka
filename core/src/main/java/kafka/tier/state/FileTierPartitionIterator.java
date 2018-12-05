@@ -16,6 +16,8 @@ class FileTierPartitionIterator implements Iterator<ObjectMetadata> {
     private long channelPosition;
     private final ByteBuffer bf;
     private FileChannel channel;
+    private ObjectMetadata entry;
+    private short entryLength;
     private static final int ENTRY_LENGTH_SIZE = 2;
     private static final int BUFFER_SIZE = 4096;
 
@@ -28,12 +30,18 @@ class FileTierPartitionIterator implements Iterator<ObjectMetadata> {
 
     public boolean hasNext() {
         try {
-            if (bf.position() + ENTRY_LENGTH_SIZE <= bf.limit()) {
-                short length = bf.getShort(bf.position());
-                if (bf.position() + length <= bf.limit()) {
+            if (entry != null) {
+                return true;
+            } else if (bf.position() + ENTRY_LENGTH_SIZE <= bf.limit()) {
+                bf.mark();
+                entryLength = bf.getShort();
+                if (bf.position() + entryLength <= bf.limit()) {
+                    entry = ObjectMetadata.getRootAsObjectMetadata(bf);
                     return true;
                 }
 
+                // reset position as we couldn't perform a full read
+                bf.reset();
                 final int read = FileUtils.reloadBuffer(channel, bf, channelPosition);
                 if (read <= 0) {
                     return false;
@@ -50,10 +58,12 @@ class FileTierPartitionIterator implements Iterator<ObjectMetadata> {
 
     @Override
     public ObjectMetadata next() {
-        // we must reread the length so that hasNext is idempotent
-        short length = bf.getShort();
-        final ObjectMetadata entry = ObjectMetadata.getRootAsObjectMetadata(bf);
-        bf.position(bf.position() + length);
-        return entry;
+        if (entry == null) {
+            throw new IllegalStateException("hasNext must be called prior to calling next.");
+        }
+        bf.position(bf.position() + entryLength);
+        ObjectMetadata returnEntry = entry;
+        entry = null;
+        return returnEntry;
     }
 }
