@@ -1,6 +1,6 @@
 IMAGE_NAME := ce-kafka
 BASE_IMAGE := confluent-docker.jfrog.io/confluentinc/cc-base
-BASE_VERSION := v2.1.0
+BASE_VERSION := v2.3.0
 RELEASE_BRANCH := ce-trunk
 DEFAULT_BUMP := minor
 
