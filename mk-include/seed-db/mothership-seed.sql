@@ -22,7 +22,6 @@ CREATE USER caas;
 
 CREATE SCHEMA deployment;
 
-
 ALTER SCHEMA deployment OWNER TO caas;
 
 --
@@ -423,7 +422,10 @@ CREATE TABLE organization (
 
 ALTER TABLE organization OWNER TO caas;
 
-INSERT INTO organization (id, name) VALUES (0, 'Internal');
+COPY organization (id, name, plan) FROM stdin;
+0	Internal	{"billing": {"email": "caas-team@confluent.io", "method": "MANUAL", "interval": "MONTHLY", "accrued_this_cycle": "0", "stripe_customer_id": ""}, "tax_address": {"zip": "", "city": "", "state": "", "country": "", "street1": "", "street2": ""}, "product_level": "TEAM", "referral_code": ""}
+\.
+
 
 --
 -- Name: organization_id_seq; Type: SEQUENCE; Schema: deployment; Owner: caas
@@ -678,9 +680,9 @@ private	{}	2018-10-10 11:00:00.000000	2018-10-10 11:00:00.000000
 COPY k8s_cluster (id, network_id, config, created, modified) FROM stdin;
 k8s1	n1	{"name": "minikube", "caas_version": "0.4.0-7-gd799613", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-22 13:50:41.818297	2017-06-22 13:50:41.818297
 k8s2	n2	{"name": "k8s-mothership.us-west-2", "caas_version": "0.6.10", "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
-k8s3	n2	{"name": "k8s3.us-west-2", "caas_version": "0.6.10", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
-k8s4	n3	{"name": "k8s4.us-west-2", "caas_version": "0.6.10", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
-k8s5	n4	{"name": "k8s5.us-west-2", "caas_version": "0.6.10", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
+k8s3	n3	{"name": "k8s3.us-west-2", "caas_version": "0.6.10", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
+k8s4	n4	{"name": "k8s4.us-central1", "caas_version": "0.6.10", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
+k8s5	n5	{"name": "k8s5.us-west-2", "caas_version": "0.6.10", "is_schedulable": true, "img_pull_policy": "IfNotPresent"}	2017-06-27 22:46:27.267852	2017-06-27 22:46:27.267852
 \.
 
 
@@ -700,6 +702,7 @@ n1	minikube	local	local	local	{"zones": [{"id": "minikube", "name": "a"}], "dock
 n2	vpc-958feff3	aws	us-west-2	devel	{"zones": [{"id": "us-west-2a", "name": "a"}, {"id": "us-west-2b", "name": "b"}, {"id": "us-west-2c", "name": "c"}], "docker_repo": "037803949979.dkr.ecr.us-west-2.amazonaws.com", "image_prefix": "confluentinc"}	2017-06-22 13:50:29.53859	2017-06-22 13:50:29.53859
 n3	vpc-eff08497	aws	us-west-2	devel	{"zones": [{"id": "us-west-2a", "name": "a"}], "docker_repo": "037803949979.dkr.ecr.us-west-2.amazonaws.com", "image_prefix": "confluentinc"}	2017-06-22 13:50:29.53859	2017-06-22 13:50:29.53859
 n4	k8s-sz-b1-us-central1	gcp	us-central1	devel	{"zones": [{"id": "us-central1-b", "name": "b"}], "docker_repo": "us.gcr.io", "image_prefix": "cc-devel"}	2018-03-23 20:28:16.819057	2018-03-23 20:28:16.819057
+n5	vpc-abcdef12	aws	us-west-2	devel	{"zones": [{"id": "us-west-2a", "name": "a"},{"id": "us-west-2b", "name": "b"},{"id": "us-west-2c", "name": "c"}], "docker_repo": "037803949979.dkr.ecr.us-west-2.amazonaws.com", "image_prefix": "confluentinc"}	2017-06-22 13:50:29.53859	2017-06-22 13:50:29.53859
 \.
 
 
@@ -709,13 +712,6 @@ n4	k8s-sz-b1-us-central1	gcp	us-central1	devel	{"zones": [{"id": "us-central1-b"
 
 SELECT pg_catalog.setval('network_num', 1, true);
 
-
---
--- Data for Name: organization; Type: TABLE DATA; Schema: deployment; Owner: caas
---
-
-COPY organization (id, name, deactivated, created, modified) FROM stdin;
-\.
 
 
 --

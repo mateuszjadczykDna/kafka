@@ -9,7 +9,7 @@ INIT_CI_TARGETS += helm-setup-ci
 BUILD_TARGETS += helm-set-version helm-package
 TEST_TARGETS += helm-lint
 CLEAN_TARGETS += helm-clean
-RELEASE_TARGETS += helm-set-bumped-version helm-add-requirements
+RELEASE_PRECOMMIT += helm-set-bumped-version helm-add-requirements
 RELEASE_MAKE_TARGETS += helm-release
 
 CHART_VERSION := $(VERSION_NO_V)
@@ -90,7 +90,7 @@ helm-install-deps: helm-update-repo
 
 .PHONY: helm-update-deps
 helm-update-deps: helm-update-repo
-	helm dep update charts/$(CHART_NAME)
+	rm -f charts/$(CHART_NAME)/requirements.lock && helm dep update charts/$(CHART_NAME)
 
 .PHONY: helm-add-requirements-lock
 helm-add-requirements: helm-update-deps
@@ -121,3 +121,14 @@ helm-init-ci:
 
 .PHONY: helm-setup-ci
 helm-setup-ci: helm-install-ci helm-init-ci
+
+.PHONY: helm-repo-update-downstream
+## Run helm repo update on downstream chart
+helm-repo-update-downstream:
+ifneq ($(DOWNSTREAM_CHART_REPO),)
+	git clone git@github.com:${DOWNSTREAM_CHART_REPO} downstream-chart
+	pushd downstream-chart && \
+		make helm-update-deps helm-add-requirements-lock
+	git -C downstream-chart commit -m 'Update chart dependencies'
+	git -C downstream-chart push origin master
+endif

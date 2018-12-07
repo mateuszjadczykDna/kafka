@@ -7,7 +7,7 @@
 _noop :=
 _space := $(_noop) $(_noop)
 
-RELEASE_TARGETS += set-tf-bumped-version
+RELEASE_PRECOMMIT += set-tf-bumped-version
 RELEASE_MAKE_TARGETS += bump-downstream-tf-consumers
 CLEAN_TARGETS += clean-terraform
 

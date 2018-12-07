@@ -35,9 +35,11 @@ endif
 DOCKER_REPO ?= confluent-docker.jfrog.io
 
 # Set targers for standard commands
-RELEASE_TARGETS += push-docker
+RELEASE_POSTCOMMIT += push-docker
 BUILD_TARGETS += build-docker
 CLEAN_TARGETS += clean-images
+
+DOCKER_BUILD_PRE ?=
 
 .PHONY: show-docker
 ## Show docker variables
@@ -55,11 +57,11 @@ show-docker:
 ## Login to docker Artifactory
 docker-login:
 ifeq ($(DOCKER_USER)$(DOCKER_APIKEY),$(_empty))
-	@echo confluent-docker.jfrog.io not logged in, Username and Password not found in environment, prompting for login:
-	@jq -e '.auths."confluent-docker.jfrog.io"' $(HOME)/.docker/config.json ||\
-		docker login confluent-docker.jfrog.io
+	@jq -e '.auths."confluent-docker.jfrog.io"' $(HOME)/.docker/config.json 2>&1 >/dev/null ||\
+		(echo "confluent-docker.jfrog.io not logged in, Username and Password not found in environment, prompting for login:" && \
+		 docker login confluent-docker.jfrog.io)
 else
-	@jq -e '.auths."confluent-docker.jfrog.io"' $(HOME)/.docker/config.json ||\
+	@jq -e '.auths."confluent-docker.jfrog.io"' $(HOME)/.docker/config.json 2>&1 >/dev/null ||\
 		docker login confluent-docker.jfrog.io --username $(DOCKER_USER) --password $(DOCKER_APIKEY)
 endif
 
@@ -74,11 +76,10 @@ endif
 .PHONY: build-docker
 ifeq ($(BUILD_DOCKER_OVERRIDE),)
 ## Build just the docker image
-build-docker: .netrc .ssh docker-pull-base
+build-docker: .netrc .ssh docker-pull-base $(DOCKER_BUILD_PRE)
 	docker build --no-cache --build-arg version=$(IMAGE_VERSION) -t $(BUILD_TAG) .
-	rm -f .netrc
+	rm -rf .netrc .ssh
 else
-## Build just the docker image
 build-docker: $(BUILD_DOCKER_OVERRIDE)
 endif
 
