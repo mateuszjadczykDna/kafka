@@ -809,7 +809,7 @@ public class MultiTenantRequestContextTest {
   public void testControlledShutdownNotAllowed() throws Exception {
     for (short ver = ApiKeys.CONTROLLED_SHUTDOWN.oldestVersion(); ver <= ApiKeys.CONTROLLED_SHUTDOWN.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CONTROLLED_SHUTDOWN, ver);
-      ControlledShutdownRequest inbound = new ControlledShutdownRequest.Builder(1, ver).build(ver);
+      ControlledShutdownRequest inbound = new ControlledShutdownRequest.Builder(1, 0, ver).build(ver);
       ControlledShutdownRequest request = (ControlledShutdownRequest) parseRequest(context, inbound);
       assertTrue(context.shouldIntercept());
       ControlledShutdownResponse response = (ControlledShutdownResponse) context.intercept(request, 0);
@@ -825,7 +825,7 @@ public class MultiTenantRequestContextTest {
     for (short ver = ApiKeys.STOP_REPLICA.oldestVersion(); ver <= ApiKeys.STOP_REPLICA.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.STOP_REPLICA, ver);
       TopicPartition partition = new TopicPartition("foo", 0);
-      StopReplicaRequest inbound = new StopReplicaRequest.Builder(1, 0, false,
+      StopReplicaRequest inbound = new StopReplicaRequest.Builder((short) 1, 0, 0, 0, false,
           Collections.singleton(partition)).build(ver);
       StopReplicaRequest request = (StopReplicaRequest) parseRequest(context, inbound);
       assertEquals(Collections.singleton(new TopicPartition("tenant_foo", 0)), request.partitions());
@@ -843,7 +843,7 @@ public class MultiTenantRequestContextTest {
     for (short ver = ApiKeys.LEADER_AND_ISR.oldestVersion(); ver <= ApiKeys.LEADER_AND_ISR.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.LEADER_AND_ISR, ver);
       TopicPartition partition = new TopicPartition("foo", 0);
-      LeaderAndIsrRequest inbound = new LeaderAndIsrRequest.Builder(ver, 1, 1,
+      LeaderAndIsrRequest inbound = new LeaderAndIsrRequest.Builder(ver, 1, 1, 0,
           Collections.singletonMap(partition, new LeaderAndIsrRequest.PartitionState(15, 1, 20,
               Collections.<Integer>emptyList(), 15, Collections.<Integer>emptyList(), false)),
           Collections.<Node>emptySet()).build(ver);
@@ -862,7 +862,7 @@ public class MultiTenantRequestContextTest {
     for (short ver = ApiKeys.UPDATE_METADATA.oldestVersion(); ver <= ApiKeys.UPDATE_METADATA.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.UPDATE_METADATA, ver);
       TopicPartition partition = new TopicPartition("foo", 0);
-      UpdateMetadataRequest inbound = new UpdateMetadataRequest.Builder(ver, 1, 1,
+      UpdateMetadataRequest inbound = new UpdateMetadataRequest.Builder(ver, 1, 1, 0,
           Collections.singletonMap(partition, new UpdateMetadataRequest.PartitionState(15, 1, 20,
               Collections.<Integer>emptyList(), 15, Collections.<Integer>emptyList(),
               Collections.<Integer>emptyList())),
