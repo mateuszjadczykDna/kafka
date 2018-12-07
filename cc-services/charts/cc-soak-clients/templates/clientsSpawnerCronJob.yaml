@@ -1,0 +1,47 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: "{{ .Chart.Name }}-clients-spawner"
+spec:
+  schedule: "0 12 * * 1" # (at 12 on every Monday)
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+          - name: "client-config-volume"
+            configMap:
+              name: "{{ .Chart.Name }}-client-config"
+          - name: "topic-config-volume"
+            configMap:
+              name: "{{ .Chart.Name }}-topic-config"
+          restartPolicy: Never
+          containers:
+          - name: {{ .Chart.Name }}
+          {{- if eq .Values.image.tag "latest" }}
+            image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:{{ default .Chart.Version .Values.image.tag }}"
+          {{- else }}
+            image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:v{{ default .Chart.Version .Values.image.tag }}"
+          {{- end }}
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            args:
+              - soak-clients
+              - spawn
+            env:
+              - name: TROGDOR_HOST
+                value: "http://cc-trogdor-service-coordinator.{{.Release.Namespace}}.svc:{{ .Values.trogdorCoordinatorPort }}"
+              - name: TROGDOR_BOOTSTRAPSERVERS
+                value: "{{ .Values.bootstrapServer }}"
+              - name: TROGDOR_TOPIC_CONFIG_PATH
+                value: "/mnt/config/topic/topics.json"
+              - name: TROGDOR_AGENTS_COUNT
+                value: "{{ .Values.agentCount }}"
+              - name: TROGDOR_ADMIN_CONF
+                value: "/mnt/config/client/client_properties.json"
+              - name: DEBUG_LOGS
+                value: "{{ .Values.debugLogs }}"
+            volumeMounts:
+              - name: client-config-volume
+                mountPath: /mnt/config/client
+              - name: topic-config-volume
+                mountPath: /mnt/config/topic

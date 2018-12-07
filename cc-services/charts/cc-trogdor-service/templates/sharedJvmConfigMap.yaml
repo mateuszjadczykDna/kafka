@@ -1,0 +1,56 @@
+{{- $root := . -}}
+{{- $name := include "trogdor.name" . -}}
+{{- $fullname := include "trogdor.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-sharedjvmconfig
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+data:
+  jvm.config: '{{/* Heap options */ -}}
+-Xmx4096M
+-Xms4096M
+
+{{/* GC logging options */ -}}
+-Xlog:gc*:file=/var/log/trogdor-gc.log:time,tags:filecount=10,filesize=102400
+
+{{/* Performance options (Based on https://docs.confluent.io/current/kafka/deployment.html#jvm) */ -}}
+-server
+-XX:MetaspaceSize=96m
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=20
+-XX:InitiatingHeapOccupancyPercent=35
+-XX:+ExplicitGCInvokesConcurrent
+-XX:G1HeapRegionSize=16
+-XX:MinMetaspaceFreeRatio=50
+-XX:MaxMetaspaceFreeRatio=80
+-Djava.awt.headless=true
+
+{{/* JMX options */ -}}
+-Dcom.sun.management.jmxremote=true
+-Dcom.sun.management.jmxremote.authenticate=false
+-Dcom.sun.management.jmxremote.ssl=false
+-Dcom.sun.management.jmxremote.local.only=false
+-Dcom.sun.management.jmxremote.rmi.port={{$root.Values.trogdorJmxPort}}
+-Dcom.sun.management.jmxremote.port={{$root.Values.trogdorJmxPort}}
+
+{{/* Debugging (print finalized flags) */ -}}
+-XX:+PrintFlagsFinal
+-XX:+UnlockDiagnosticVMOptions'
+  log4j.properties: 'log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.EnhancedPatternLayout
+log4j.appender.stdout.layout.ConversionPattern=[%p] %d [%t] %c %M - %m%n
+log4j.appender.jsonlog=org.apache.log4j.FileAppender
+log4j.appender.jsonlog.File=/mnt/log/main.jsonl
+log4j.appender.jsonlog.layout=org.jetbrains.appenders.JsonLayout
+log4j.appender.humanlog.layout=org.apache.log4j.EnhancedPatternLayout
+log4j.appender.humanlog.layout.ConversionPattern=[%p] %d [%t] %c %M - %m%n
+log4j.appender.humanlog.File=/mnt/log/main.log
+log4j.appender.humanlog=org.apache.log4j.FileAppender
+log4j.rootLogger=INFO, TRACE, DEBUG, stdout, jsonlog, humanlog
+log4j.logger.org.apache.kafka=TRACE
+log4j.logger.org.eclipse.jetty=INFO
+'

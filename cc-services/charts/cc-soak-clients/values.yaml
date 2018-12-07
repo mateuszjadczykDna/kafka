@@ -1,0 +1,14 @@
+image:
+  repository: confluent-docker.jfrog.io/confluentinc
+  name: cc-soak-clients
+  tag: latest
+  pullPolicy: IfNotPresent
+trogdorCoordinatorPort: 9002
+apiKey: "null"
+apiSecret: "null"
+bootstrapServer: "null"
+shortLivedTaskMs: "900000"
+shortLivedTaskMinutes: "15"
+longLivedTaskMs: "604800000"
+debugLogs: "true"
+agentCount: "6" # as much as agentReplicaCount in cc-trogdor-service

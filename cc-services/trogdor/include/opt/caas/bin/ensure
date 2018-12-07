@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# Copyright 2016-2017 Confluent Inc.
+#
+
+set -o nounset \
+    -o errexit \
+    -o verbose \
+    -o xtrace
+
+echo "===> Check that log4j dir is writable ..."
+mkdir -p "$KAFKA_LOG4J_DIR" && chmod -R ag+w "$KAFKA_LOG4J_DIR"
+dub path "$KAFKA_LOG4J_DIR" writable
+
+# TODO: Make sure that K8S mounts secrets as RO. Otherwise make sure this dir and its contents are RO.
+echo "===> Check that secrets dir is readable ..."
+mkdir -p "$KAFKA_SECRETS_DIR" && chmod -R ag+w "$KAFKA_SECRETS_DIR"
+dub path "$KAFKA_SECRETS_DIR" writable

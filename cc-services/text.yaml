@@ -1,0 +1,64 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  creationTimestamp: 2018-11-28T12:23:01Z
+  name: cc-soak-clients-clients-spawner
+  namespace: default
+  resourceVersion: "2303729"
+  selfLink: /apis/batch/v1beta1/namespaces/default/cronjobs/cc-soak-clients-clients-spawner
+  uid: 58f53dd8-f308-11e8-b872-42010a80002e
+spec:
+  concurrencyPolicy: Allow
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      creationTimestamp: null
+    spec:
+      template:
+        metadata:
+          creationTimestamp: null
+        spec:
+          containers:
+          - args:
+            - soak-clients
+            - spawn
+            env:
+            - name: TROGDOR_HOST
+              value: http://cc-trogdor-service-coordinator.default.svc:9002
+            - name: TROGDOR_BOOTSTRAPSERVERS
+              value: pkc-4ym5o.us-west-2.aws.devel.cpdev.cloud:9092
+            - name: TROGDOR_TOPIC_CONFIG_PATH
+              value: /mnt/config/topic/topics.json
+            - name: TROGDOR_AGENTS_COUNT
+              value: "3"
+            - name: TROGDOR_ADMIN_CONF
+              value: /mnt/config/client/client_properties.json
+            image: confluent-docker.jfrog.io/confluentinc/cc-soak-clients:latest
+            imagePullPolicy: IfNotPresent
+            name: cc-soak-clients
+            resources: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+            volumeMounts:
+            - mountPath: /mnt/config/client
+              name: client-config-volume
+            - mountPath: /mnt/config/topic
+              name: topic-config-volume
+          dnsPolicy: ClusterFirst
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+          volumes:
+          - configMap:
+              defaultMode: 420
+              name: cc-soak-clients-client-config
+            name: client-config-volume
+          - configMap:
+              defaultMode: 420
+              name: cc-soak-clients-topic-config
+            name: topic-config-volume
+  schedule: 0 12 * * 1
+  successfulJobsHistoryLimit: 3
+  suspend: false
+status: {}

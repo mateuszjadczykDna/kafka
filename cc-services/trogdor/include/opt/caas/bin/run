@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# Copyright 2016-2017 Confluent Inc.
+#
+set -o nounset \
+    -o errexit \
+    -o verbose \
+    -o xtrace
+
+echo "===> ENV Variables ..."
+env | sort
+
+echo "===> User"
+id
+
+echo "===> Configuring ..."
+/opt/caas/bin/configure
+
+echo "===> Running preflight checks ... "
+/opt/caas/bin/ensure
+
+echo "===> Launching ... "
+exec /opt/caas/bin/launch

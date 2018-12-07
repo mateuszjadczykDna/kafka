@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: coordinator
+  name: {{ .Chart.Name }}-coordinator
+spec:
+  ports:
+    - name: {{ .Chart.Name }}-coordinator
+      port: {{ .Values.trogdorCoordinatorPort }}
+      protocol: TCP
+      targetPort: {{ .Values.trogdorCoordinatorPort }}
+  selector:
+    app: {{ .Chart.Name }}-coordinator
+    release: {{ .Release.Name }}
+  type: NodePort

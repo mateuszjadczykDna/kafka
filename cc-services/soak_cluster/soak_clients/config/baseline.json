@@ -1,0 +1,32 @@
+{
+  "topics": [
+    {
+      "name": "big_topic",
+      "partitions_count": 1000,
+      "produce_mbs_throughput": 150,
+      "consume_mbs_throughput": 400,
+      "producer_count": 6,
+      "consumer_count": 6
+    },
+    {
+      "name": "medium_topic",
+      "partitions_count": 25,
+      "produce_mbs_throughput": 50,
+      "consume_mbs_throughput": 100,
+      "producer_count": 4,
+      "consumer_count": 4,
+      "idempotence_enabled": true
+    },
+    {
+      "name": "eos_topic",
+      "partitions_count": 100,
+      "produce_mbs_throughput": 50,
+      "consume_mbs_throughput": 100,
+      "producer_count": 4,
+      "consumer_count": 4,
+      "transactions_enabled": true
+    }
+  ],
+  "long_lived_task_duration_ms": 604800000,
+  "short_lived_task_duration_ms": 900000
+}

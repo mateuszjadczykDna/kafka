@@ -1,0 +1,25 @@
+{{- $root := . -}}
+{{- $name := include "trogdor.name" . -}}
+{{- $fullname := include "trogdor.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+data:
+  config.json: '{ "platform": "org.apache.kafka.trogdor.basic.BasicPlatform", "nodes": {
+    {{ range $k, $v := until (int .Values.agentReplicaCount ) | default 5 }}
+    "{{$name}}-agent-{{$v}}": {
+      "hostname": "{{$name}}-agent-{{$v}}.{{$root.Release.Namespace}}.svc",
+      "trogdor.agent.port": {{$root.Values.trogdorAgentPort}}
+      },
+    {{end}}
+    "{{$name}}-coordinator-0": {
+      "hostname": "{{$name}}-coordinator.{{$root.Release.Namespace}}.svc",
+      "trogdor.coordinator.port": {{$root.Values.trogdorCoordinatorPort}}
+    }
+  }
+}'

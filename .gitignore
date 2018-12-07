@@ -55,3 +55,6 @@ docs/generated/
 kafkatest.egg-info/
 systest/
 *.swp
+vendor/
+
+cc-services/soak_cluster/mk-include

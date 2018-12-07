@@ -20,10 +20,19 @@ var (
 	bootstrapServers             = os.Getenv("TROGDOR_BOOTSTRAPSERVERS")
 	trogdorCoordinatorCreateURL  = fmt.Sprintf("%s/coordinator/task/create", trogdorCoordinatorHost)
 	trogdorCoordinatorStatusURL  = fmt.Sprintf("%s/coordinator/status", trogdorCoordinatorHost)
-	defaultValueGeneratorSpec    = trogdor.ValueGeneratorSpec{ValueType: "uniformRandom", Size: 900, Padding: 100}
-	defaultKeyGeneratorSpec      = trogdor.KeyGeneratorSpec{Type: "sequential", Size: 4, StartOffset: 0}
 	defaultTopicSpec             = trogdor.TopicSpec{NumPartitions: 256, ReplicationFactor: 3}
 )
+
+
+func clientNodes() []string {
+	var clientNodes []string
+	for agentID := 0; agentID < trogdorAgentsCount; agentID++ {
+		// should be the same as the one in agentStatefulSet.yaml
+		clientNodes = append(clientNodes, fmt.Sprintf("cc-trogdor-service-agent-%d", agentID))
+	}
+	return clientNodes
+}
+
 
 func TestProducerSaturation(t *testing.T) {
 
@@ -32,19 +41,22 @@ func TestProducerSaturation(t *testing.T) {
 		adminConfig := trogdor.AdminConf{}
 		adminConfig.ParseConfig(adminConfPath)
 		scenarioConfig := trogdor.ScenarioConfig{ScenarioID: "LongProduceTest", AgentCount: trogdorAgentsCount,
-			Class:                     "org.apache.kafka.trogdor.workload.ProduceBenchSpec",
-			ActiveTopics:              defaultTopicSpec,
-			LoopDurationMs:            600000,
-			NumberOfLoops:             16,
-			StartMs:                   uint64(time.Now().UnixNano() / int64(time.Millisecond)),
-			LoopCoolDownMs:            120000,
-			BootstrapServers:          bootstrapServers,
-			MinimumMessagesPerCluster: 8000,
-			MessagesStepPerCluster:    80000,
-			AdminConf:                 adminConfig,
-			ValueGenerator:            defaultValueGeneratorSpec,
-			KeyGenerator:              defaultKeyGeneratorSpec}
-
+			Class:                   "org.apache.kafka.trogdor.workload.ProduceBenchSpec",
+			TopicSpec:               defaultTopicSpec,
+			LoopDurationMs:          600000,
+			NumberOfLoops:           16,
+			StartMs:                 uint64(time.Now().UnixNano() / int64(time.Millisecond)),
+			LoopCoolDownMs:          120000,
+			BootstrapServers:        bootstrapServers,
+			MinimumMessagesPerAgent: 8000,
+			MessagesStepPerLoop:     80000,
+			AdminConf:               adminConfig,
+			ProducerOptions: trogdor.ProducerOptions{
+				ValueGenerator: trogdor.DefaultValueGeneratorSpec,
+				KeyGenerator:   trogdor.DefaultKeyGeneratorSpec,
+			},
+			ClientNodes: clientNodes(),
+		}
 		scenario := &trogdor.ScenarioSpec{}
 		scenario.CreateScenario(scenarioConfig)
 		fmt.Print(scenario.TaskSpecs)
@@ -52,7 +64,7 @@ func TestProducerSaturation(t *testing.T) {
 		Convey("When I attempt to schedule the scenario I should receive no errors", func() {
 
 			for _, v := range scenario.TaskSpecs {
-				v.SendRequest(trogdorCoordinatorHost)
+				v.CreateTask(trogdorCoordinatorHost)
 			}
 
 		})
@@ -68,19 +80,22 @@ func TestRoundTripSaturation(t *testing.T) {
 		adminConfig := trogdor.AdminConf{}
 		adminConfig.ParseConfig(adminConfPath)
 		scenarioConfig := trogdor.ScenarioConfig{ScenarioID: "LongRoundTripTest", AgentCount: trogdorAgentsCount,
-			Class:                     "org.apache.kafka.trogdor.workload.RoundTripWorkloadSpec",
-			ActiveTopics:              defaultTopicSpec,
-			LoopDurationMs:            600000,
-			NumberOfLoops:             16,
-			StartMs:                   uint64(time.Now().UnixNano() / int64(time.Millisecond)),
-			LoopCoolDownMs:            120000,
-			BootstrapServers:          bootstrapServers,
-			MinimumMessagesPerCluster: 8000,
-			MessagesStepPerCluster:    80000,
-			AdminConf:                 adminConfig,
-			ValueGenerator:            defaultValueGeneratorSpec,
-			KeyGenerator:              defaultKeyGeneratorSpec}
-
+			Class:                   "org.apache.kafka.trogdor.workload.RoundTripWorkloadSpec",
+			TopicSpec:               defaultTopicSpec,
+			LoopDurationMs:          600000,
+			NumberOfLoops:           16,
+			StartMs:                 uint64(time.Now().UnixNano() / int64(time.Millisecond)),
+			LoopCoolDownMs:          120000,
+			BootstrapServers:        bootstrapServers,
+			MinimumMessagesPerAgent: 8000,
+			MessagesStepPerLoop:     80000,
+			AdminConf:               adminConfig,
+			ProducerOptions: trogdor.ProducerOptions{
+				ValueGenerator: trogdor.DefaultValueGeneratorSpec,
+				KeyGenerator:   trogdor.DefaultKeyGeneratorSpec,
+			},
+			ClientNodes: clientNodes(),
+		}
 		scenario := &trogdor.ScenarioSpec{}
 		scenario.CreateScenario(scenarioConfig)
 		fmt.Print(scenario.TaskSpecs)
@@ -88,7 +103,7 @@ func TestRoundTripSaturation(t *testing.T) {
 		Convey("When I attempt to schedule the scenario I should receive no errors", func() {
 
 			for _, v := range scenario.TaskSpecs {
-				v.SendRequest(trogdorCoordinatorHost)
+				v.CreateTask(trogdorCoordinatorHost)
 			}
 
 		})
@@ -104,24 +119,27 @@ func TestAuthSaturation(t *testing.T) {
 		adminConfig := trogdor.AdminConf{}
 		adminConfig.ParseConfig(adminConfPath)
 		scenarioConfig := trogdor.ScenarioConfig{ScenarioID: "LongProduceTest", AgentCount: trogdorAgentsCount,
-			Class:                     "org.apache.kafka.trogdor.workload.ProduceBenchSpec",
-			ActiveTopics:              defaultTopicSpec,
-			LoopDurationMs:            500,
-			NumberOfLoops:             1000,
-			StartMs:                   uint64(time.Now().UnixNano() / int64(time.Millisecond)),
-			LoopCoolDownMs:            10,
-			BootstrapServers:          bootstrapServers,
-			MinimumMessagesPerCluster: 500,
-			MessagesStepPerCluster:    0,
-			AdminConf:                 adminConfig,
-			ValueGenerator:            defaultValueGeneratorSpec,
-			KeyGenerator:              defaultKeyGeneratorSpec}
-
+			Class:                   "org.apache.kafka.trogdor.workload.ProduceBenchSpec",
+			TopicSpec:               defaultTopicSpec,
+			LoopDurationMs:          500,
+			NumberOfLoops:           1000,
+			StartMs:                 uint64(time.Now().UnixNano() / int64(time.Millisecond)),
+			LoopCoolDownMs:          10,
+			BootstrapServers:        bootstrapServers,
+			MinimumMessagesPerAgent: 500,
+			MessagesStepPerLoop:     0,
+			AdminConf:               adminConfig,
+			ProducerOptions:         trogdor.ProducerOptions{
+				ValueGenerator: trogdor.DefaultValueGeneratorSpec,
+				KeyGenerator:   trogdor.DefaultKeyGeneratorSpec,
+			},
+			ClientNodes: clientNodes(),
+		}
 		scenario := &trogdor.ScenarioSpec{}
 		scenario.CreateScenario(scenarioConfig)
 
 		for _, v := range scenario.TaskSpecs {
-			v.SendRequest(trogdorCoordinatorHost)
+			v.CreateTask(trogdorCoordinatorHost)
 		}
 
 		Convey("Schedule a steady load to see when failure is reached", func() {
@@ -129,23 +147,28 @@ func TestAuthSaturation(t *testing.T) {
 			adminConfig := trogdor.AdminConf{}
 			adminConfig.ParseConfig(adminConfPath)
 			scenarioConfig := trogdor.ScenarioConfig{ScenarioID: "LongProduceTest", AgentCount: trogdorAgentsCount,
-				ActiveTopics:              defaultTopicSpec,
-				LoopDurationMs:            50000,
-				NumberOfLoops:             16,
-				StartMs:                   uint64(time.Now().UnixNano() / int64(time.Millisecond)),
-				LoopCoolDownMs:            10,
-				BootstrapServers:          bootstrapServers,
-				MinimumMessagesPerCluster: 100000,
-				MessagesStepPerCluster:    0,
-				AdminConf:                 adminConfig,
-				ValueGenerator:            defaultValueGeneratorSpec,
-				KeyGenerator:              defaultKeyGeneratorSpec}
+				TopicSpec:               defaultTopicSpec,
+				LoopDurationMs:          50000,
+				NumberOfLoops:           16,
+				StartMs:                 uint64(time.Now().UnixNano() / int64(time.Millisecond)),
+				LoopCoolDownMs:          10,
+				BootstrapServers:        bootstrapServers,
+				MinimumMessagesPerAgent: 100000,
+				MessagesStepPerLoop:     0,
+				AdminConf:               adminConfig,
+				ProducerOptions: trogdor.ProducerOptions{
+					ValueGenerator: trogdor.DefaultValueGeneratorSpec,
+					KeyGenerator:   trogdor.DefaultKeyGeneratorSpec,
+				},
+				ClientNodes: clientNodes(),
+			}
+
 
 			scenario := &trogdor.ScenarioSpec{}
 			scenario.CreateScenario(scenarioConfig)
 
 			for _, v := range scenario.TaskSpecs {
-				resp, body, err := v.SendRequest(trogdorCoordinatorHost)
+				resp, body, err := v.CreateTask(trogdorCoordinatorHost)
 				if err != nil {
 					print(err)
 				} else {

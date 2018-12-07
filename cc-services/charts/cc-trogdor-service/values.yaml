@@ -1,0 +1,33 @@
+# Default values for trogdor.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+coordinatorReplicaCount: 1
+# agentReplicaCount must be at least as much as the biggest producer_count
+# (or consumer_count) defined in the topics.json configmap
+agentReplicaCount: 6
+
+image:
+  repository: confluent-docker.jfrog.io/confluentinc
+  name: cc-trogdor
+  tag: latest
+  pullPolicy: Always
+
+kafkaName: kafka
+
+trogdorAgentPort: 9001
+trogdorCoordinatorPort: 9002
+trogdorJmxPort: 7203
+
+service:
+  type: NodePort
+  port: 8889
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+agentAffinity: []
+coordinatorAffinity: {}

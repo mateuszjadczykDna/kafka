@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-client-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+data:
+  client_properties.json: '
+{
+  "sasl.mechanism": "PLAIN",
+  "sasl.jaas.config": "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"{{ .Values.apiKey }}\" password=\"{{ .Values.apiSecret }}\";",
+  "security.protocol": "SASL_SSL"
+}
+'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-topic-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+data:
+  topics.json: '
+{
+  "long_lived_task_duration_ms": {{ .Values.longLivedTaskMs }},
+  "short_lived_task_duration_ms": {{ .Values.shortLivedTaskMs }},
+  "topics": [
+    {
+      "name": "big_topic",
+      "partitions_count": 1000,
+      "produce_mbs_throughput": 150,
+      "consume_mbs_throughput": 400,
+      "producer_count": 11,
+      "consumer_count": 11
+    },
+    {
+      "name": "medium_topic",
+      "partitions_count": 25,
+      "produce_mbs_throughput": 50,
+      "consume_mbs_throughput": 100,
+      "producer_count": 4,
+      "consumer_count": 4,
+      "idempotence_enabled": true
+    },
+    {
+      "name": "eos_topic",
+      "partitions_count": 100,
+      "produce_mbs_throughput": 50,
+      "consume_mbs_throughput": 100,
+      "producer_count": 4,
+      "consumer_count": 4,
+      "transactions_enabled": true
+    }
+  ]
+}
+'

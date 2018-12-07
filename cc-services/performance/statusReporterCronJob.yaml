@@ -1,0 +1,19 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: StatusReporter
+spec:
+  schedule: "5,20,35,50 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: {{ .Chart.Name }}
+          {{- if eq .Values.statusReporterImage.tag "latest" }}
+            image: "{{ .Values.statusReporterImage.repository }}/{{ .Values.statusReporterImage.name }}:{{ default .Chart.Version .Values.statusReporterImage.tag }}"
+          {{- else }}
+            image: "{{ .Values.statusReporterImage.repository }}/{{ .Values.statusReporterImage.name }}:v{{ default .Chart.Version .Values.statusReporterImage.tag }}"
+          {{- end }}
+            imagePullPolicy: {{ .Values.statusReporterImage.pullPolicy }}

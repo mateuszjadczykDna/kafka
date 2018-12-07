@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# Copyright 2016-2017 Confluent Inc.
+#
+set -o errexit \
+    -o verbose \
+    -o xtrace
+
+echo "===> Adding jolokia agent to the java command ... " 
+export JOLOKIA_AGENT_PORT=${JOLOKIA_AGENT_PORT:-7777}
+export JOLOKIA_AGENT_HOST=${JOLOKIA_AGENT_HOST:-"0.0.0.0"}
+export EXTRA_ARGS="${EXTRA_ARGS} -javaagent:/opt/caas/lib/jolokia/jolokia-jvm-${JOLOKIA_AGENT_VERSION}-agent.jar=port=${JOLOKIA_AGENT_PORT},host=${JOLOKIA_AGENT_HOST}"
+
+echo "===> Adding logging json layout to CLASSPATH ... "
+export CLASSPATH=/usr/share/java/cc-base/log4j-json-layout-${CC_BASE_VERSION}.jar
+
+echo "===> Adding kafka broker plugins to CLASSPATH ... "
+export CLASSPATH="/usr/share/java/kafka/*:$CLASSPATH"
+
+echo "===> Adding kafka log4j config ... "
+cat /opt/caas/config/trogdor/log4j.properties
+export KAFKA_LOG4J_OPTS="-Dlog4j.configuration=file:/opt/caas/config/trogdor/log4j.properties"
+
+echo "===> Adding JVM config to the java command ... "
+cat /opt/caas/config/trogdor/jvm.config
+export EXTRA_ARGS="$(cat /opt/caas/config/trogdor/jvm.config | xargs) ${EXTRA_ARGS}"
+# These ensure that the "if" sections for heap sizing, GC tuning, and JMX opts in kafka launch script do not trigger.
+export JMX_PORT='7203'
+
+echo "===> Launching ${COMPONENT} ... "
+export DEFAULT_NODE_ARGS="--node-name ${HOSTNAME}"
+exec /opt/confluent/bin/kafka-run-class.sh $EXTRA_ARGS $RUN_CLASS $DEFAULT_NODE_ARGS $EXTRA_CLASS_ARGS

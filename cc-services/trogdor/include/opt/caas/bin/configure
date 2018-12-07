@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# Copyright 2016-2017 Confluent Inc.
+#
+
+set -o nounset \
+    -o errexit \
+    -o verbose \
+    -o xtrace
+
+dub ensure KAFKA_SECRETS_DIR
+dub ensure KAFKA_LOG4J_DIR
+dub ensure KAFKA_CONFIG_DIR
+dub ensure CAAS_POD_ID

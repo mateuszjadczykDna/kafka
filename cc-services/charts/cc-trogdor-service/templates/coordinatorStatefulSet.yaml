@@ -1,0 +1,87 @@
+apiVersion: apps/v1beta2
+kind: StatefulSet
+metadata:
+  name: "{{ template "trogdor.name" . }}-coordinator"
+  labels:
+    app: "{{ template "trogdor.name" . }}-coordinator"
+    chart: {{ template "trogdor.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  serviceName: "{{ template "trogdor.name" . }}-coordinator"
+  replicas: {{ .Values.coordinatorReplicaCount }}
+  selector:
+    matchLabels:
+      app: "{{ template "trogdor.name" . }}-coordinator"
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: "{{ template "trogdor.name" . }}-coordinator"
+        release: {{ .Release.Name }}
+    spec:
+      volumes:
+        - name: "config-volume"
+          configMap:
+            name: {{ .Chart.Name }}-config
+        - name: "jvm-config-volume"
+          configMap:
+            name: {{ .Chart.Name }}-sharedjvmconfig
+
+      securityContext:
+        allowPrivilegeEscalation: true
+        hostIPC: true
+        hostPID: true
+        privileged: true
+      hostPID: true
+      hostIPC: true
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- if eq .Values.image.tag "latest" }}
+          image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:{{ default .Chart.Version .Values.image.tag }}"
+          {{- else }}
+          image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:v{{ default .Chart.Version .Values.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: "config-volume"
+              mountPath: /mnt/config
+            - name: "jvm-config-volume"
+              mountPath: /opt/caas/config/trogdor
+          env:
+            - name: EXTRA_CLASS_ARGS
+              value: "--coordinator.config /mnt/config/config.json"
+            - name: RUN_CLASS
+              value: "org.apache.kafka.trogdor.coordinator.Coordinator"
+            - name: CAAS_POD_ID
+              value: "1"
+          ports:
+            - name: coordinator
+              containerPort: 9002
+              protocol: TCP
+            - name: jmx
+              containerPort: {{ .Values.trogdorJmxPort}}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /coordinator/status
+              port: 9002
+          readinessProbe:
+            httpGet:
+              path: /coordinator/status
+              port: 9002
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.coordinatorAffinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+
