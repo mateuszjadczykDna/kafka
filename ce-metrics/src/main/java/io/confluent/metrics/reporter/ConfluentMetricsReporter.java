@@ -28,6 +28,7 @@ import org.apache.kafka.common.record.TimestampType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -401,6 +402,22 @@ public class ConfluentMetricsReporter
       MetricsSplitter splitter = new MetricsSplitter(getMetricsMessageBuilder(now).buildPartial());
       splitter.addKafkaMeasurables(KafkaMetricsHelper.collectKafkaMetrics(metricMap, pattern));
 
+      // add CPU metric if the source is a broker (we simulate a Kafka metric for serialization)
+      if (metricType == BROKER) {
+        double cpuUtil = ((com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean()).getProcessCpuLoad();
+        KafkaMeasurable.Builder builder = KafkaMeasurable.newBuilder();
+        builder.setValue(cpuUtil);
+
+        ConfluentMetric.KafkaMetricName.Builder nameBuilder = ConfluentMetric.KafkaMetricName.newBuilder();
+        nameBuilder.setGroup("kafka.server");
+        nameBuilder.setName("CpuUsage");
+        builder.setMetricName(nameBuilder.build());
+        KafkaMeasurable km = builder.build();
+        List<KafkaMeasurable> kms = new ArrayList<>();
+        kms.add(km);
+        splitter.addKafkaMeasurables(kms);
+      }
+
       // add Yammer metrics if the source is a broker, the clients don't produce Yammer metrics
       if (metricType == BROKER) {
         YammerMetricsResult yammerMetricsResult =
@@ -410,6 +427,7 @@ public class ConfluentMetricsReporter
         splitter.addYammerHistograms(yammerMetricsResult.histograms);
         splitter.addYammerTimers(yammerMetricsResult.timers);
       }
+
       out.addAll(splitter.build());
       return out;
     }

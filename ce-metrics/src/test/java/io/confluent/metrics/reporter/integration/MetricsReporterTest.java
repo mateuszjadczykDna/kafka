@@ -65,8 +65,9 @@ public class MetricsReporterTest extends MetricReporterClusterTestHarness {
             fail("No records have been verified");
         else
             fail(String.format("One of the following is false : has Kafka measurable(%b), has Yammer gauge(%b), " +
-                    "has Yammer Meter(%b), has Yammer histogram(%b), has Yammer Timer(%b)", latestResult.hasKafkaMeasurable,
-                    latestResult.hasYammerGauge, latestResult.hasYammerMeter, latestResult.hasYammerHistogram, latestResult.hasYammerTimer));
+                    "has Yammer Meter(%b), has Yammer histogram(%b), has Yammer Timer(%b), has CPU Usage(%b)",
+                    latestResult.hasKafkaMeasurable, latestResult.hasYammerGauge, latestResult.hasYammerMeter,
+                    latestResult.hasYammerHistogram, latestResult.hasYammerTimer, latestResult.hasCpuUsage));
     }
 
     protected Result verify(Result lastResult, ConsumerRecord<byte[], byte[]> record) {
@@ -90,6 +91,9 @@ public class MetricsReporterTest extends MetricReporterClusterTestHarness {
                                     metricsMessage.getYammerHistogramCount() > 0;
         result.hasYammerTimer = lastResult.hasYammerTimer ||
                                 metricsMessage.getYammerTimerCount() > 0;
+        result.hasCpuUsage = lastResult.hasCpuUsage ||
+                             metricsMessage.getKafkaMeasurableList().stream().anyMatch(km ->
+                                     km.getMetricName().getName().equals("CpuUsage"));
         result.systemMetrics = metricsMessage.hasSystemMetrics()
                                ? metricsMessage.getSystemMetrics()
                                : lastResult.systemMetrics;
@@ -116,11 +120,15 @@ public class MetricsReporterTest extends MetricReporterClusterTestHarness {
         boolean hasYammerMeter;
         boolean hasYammerHistogram;
         boolean hasYammerTimer;
+        boolean hasCpuUsage;
         ConfluentMetric.SystemMetrics systemMetrics;
 
         boolean hasAllFields() {
-            return hasKafkaMeasurable && hasYammerGauge && hasYammerMeter && hasYammerHistogram && hasYammerTimer &&
-                (systemMetrics != null);
+            return hasKafkaMeasurable && hasYammerFields() && hasCpuUsage && (systemMetrics != null);
+        }
+
+        boolean hasYammerFields() {
+            return hasYammerGauge && hasYammerMeter && hasYammerHistogram && hasYammerTimer;
         }
 
         void verify() {

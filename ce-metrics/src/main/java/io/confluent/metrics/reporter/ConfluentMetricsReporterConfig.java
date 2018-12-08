@@ -107,6 +107,8 @@ public class ConfluentMetricsReporterConfig extends AbstractConfig {
           "RequestHandlerAvgIdlePercent",
           "RequestQueueSize",
           "RequestQueueTimeMs",
+          "RequestsPerSec",
+          "ResponseQueueSize",
           "ResponseQueueTimeMs",
           "ResponseSendTimeMs",
           "Size",
