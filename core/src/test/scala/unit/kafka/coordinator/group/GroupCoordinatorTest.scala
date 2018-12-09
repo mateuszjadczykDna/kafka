@@ -60,6 +60,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   val ConsumerMaxSessionTimeout = 1000
   val DefaultRebalanceTimeout = 500
   val DefaultSessionTimeout = 500
+  val DefaultRequireKnownMemberId = false
   val GroupInitialRebalanceDelay = 50
   var timer: MockTimer = null
   var groupCoordinator: GroupCoordinator = null
@@ -126,7 +127,7 @@ class GroupCoordinatorTest extends JUnitSuite {
 
     // JoinGroup
     var joinGroupResponse: Option[JoinGroupResult] = None
-    groupCoordinator.handleJoinGroup(otherGroupId, memberId, "clientId", "clientHost", 60000, 10000, "consumer",
+    groupCoordinator.handleJoinGroup(otherGroupId, memberId, DefaultRequireKnownMemberId, "clientId", "clientHost", 60000, 10000, "consumer",
       List("range" -> new Array[Byte](0)), result => { joinGroupResponse = Some(result)})
     assertEquals(Some(Errors.COORDINATOR_LOAD_IN_PROGRESS), joinGroupResponse.map(_.error))
 
@@ -300,7 +301,6 @@ class GroupCoordinatorTest extends JUnitSuite {
 
   @Test
   def testHeartbeatUnknownGroup() {
-
     val heartbeatResult = heartbeat(groupId, memberId, -1)
     assertEquals(Errors.UNKNOWN_MEMBER_ID, heartbeatResult)
   }
@@ -1584,12 +1584,13 @@ class GroupCoordinatorTest extends JUnitSuite {
                             protocolType: String,
                             protocols: List[(String, Array[Byte])],
                             rebalanceTimeout: Int = DefaultRebalanceTimeout,
-                            sessionTimeout: Int = DefaultSessionTimeout): Future[JoinGroupResult] = {
+                            sessionTimeout: Int = DefaultSessionTimeout,
+                            requireKnownMemberId: Boolean = DefaultRequireKnownMemberId): Future[JoinGroupResult] = {
     val (responseFuture, responseCallback) = setupJoinGroupCallback
 
     EasyMock.replay(replicaManager)
 
-    groupCoordinator.handleJoinGroup(groupId, memberId, "clientId", "clientHost", rebalanceTimeout, sessionTimeout,
+    groupCoordinator.handleJoinGroup(groupId, memberId, requireKnownMemberId, "clientId", "clientHost", rebalanceTimeout, sessionTimeout,
       protocolType, protocols, responseCallback)
     responseFuture
   }
@@ -1639,8 +1640,9 @@ class GroupCoordinatorTest extends JUnitSuite {
                         protocolType: String,
                         protocols: List[(String, Array[Byte])],
                         sessionTimeout: Int = DefaultSessionTimeout,
-                        rebalanceTimeout: Int = DefaultRebalanceTimeout): JoinGroupResult = {
-    val responseFuture = sendJoinGroup(groupId, memberId, protocolType, protocols, rebalanceTimeout, sessionTimeout)
+                        rebalanceTimeout: Int = DefaultRebalanceTimeout,
+                        requireKnownMemberId: Boolean = DefaultRequireKnownMemberId): JoinGroupResult = {
+    val responseFuture = sendJoinGroup(groupId, memberId, protocolType, protocols, rebalanceTimeout, sessionTimeout, requireKnownMemberId)
     timer.advanceClock(GroupInitialRebalanceDelay + 1)
     // should only have to wait as long as session timeout, but allow some extra time in case of an unexpected delay
     Await.result(responseFuture, Duration(rebalanceTimeout + 100, TimeUnit.MILLISECONDS))

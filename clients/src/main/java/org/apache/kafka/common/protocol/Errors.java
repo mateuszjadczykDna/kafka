@@ -59,6 +59,7 @@ import org.apache.kafka.common.errors.InvalidTxnTimeoutException;
 import org.apache.kafka.common.errors.KafkaStorageException;
 import org.apache.kafka.common.errors.LeaderNotAvailableException;
 import org.apache.kafka.common.errors.LogDirNotFoundException;
+import org.apache.kafka.common.errors.MemberIdRequiredException;
 import org.apache.kafka.common.errors.NetworkException;
 import org.apache.kafka.common.errors.NotControllerException;
 import org.apache.kafka.common.errors.NotCoordinatorException;
@@ -287,7 +288,9 @@ public enum Errors {
     UNKNOWN_LEADER_EPOCH(75, "The leader epoch in the request is newer than the epoch on the broker",
             UnknownLeaderEpochException::new),
     UNSUPPORTED_COMPRESSION_TYPE(76, "The requesting client does not support the compression type of given partition.",
-            UnsupportedCompressionTypeException::new);
+            UnsupportedCompressionTypeException::new),
+    MEMBER_ID_REQUIRED(77, "Consumer needs to have a valid member id before actually entering group",
+            MemberIdRequiredException::new);
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
 
