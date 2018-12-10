@@ -31,7 +31,18 @@ def listener_prop(listener, prop):
 
 
 class MultiTenantTest(ProduceConsumeValidateTest):
-    OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_PATH = "/mnt/test/jws_public_key.pem"
+    OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FOLDER = "/mnt/multi_tenant_test"
+    OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FILE_NAME = "jws_public_key.pem"
+    OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FILE_PATH = OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FOLDER + "/" + OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FILE_NAME
+    OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----\n" \
+                                         "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtsTM4Ap/N0HHSS/VXwRZ" \
+                                         "BtDsNNg+MBmXNhPGB3wuIlhtrz0W60MO9p83BQJAOtlwWD8e62CbLt9suFZT2Nmv" \
+                                         "rIpUdnemhSo5Y5bgDgWpt0GZ7EbmKk/AGwpvE25DydtclRAUSMx7Ja6+Hfz1ODeV" \
+                                         "bofg4qpLnVvW7hyVGOJn5/Q3zA+H0DL0c7kmiMlCRCyxrEN804A32JgcFK3Ph/Li" \
+                                         "BkIu8YylRP1Tq9iTZAIW2zOXgcDCYR6g2zuvN2g1s8c7d2V8/VP05SlvR1ighHwa" \
+                                         "tgFvbtF1DHKHPZRc3rYPkKbQxJAMl/7U8XYbrNMXhjEUlJwRSvXIw0ZtmbNqrm+k" \
+                                         "mwIDAQAB" \
+                                         "\n-----END PUBLIC KEY-----"
     JWS_TOKEN = (
         "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJDb25mbHVlbnQiLCJhdWQiOm51bGwsImV4cCI"
         "6MTkzNTA1Nzc4OCwianRpIjoid0EtVWp1MzJEcFJtNXlmMWVWeFIwUSIsImlhdCI6MTU"
@@ -63,7 +74,7 @@ class MultiTenantTest(ProduceConsumeValidateTest):
 
         server_jaas_config = """org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
             unsecuredLoginStringClaim_sub="Confluent" \
-            publicKeyPath="{key_path}";""".format(key_path=self.OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_PATH)
+            publicKeyPath="{key_path}";""".format(key_path=self.OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FILE_PATH)
 
         self.kafka = KafkaService(test_context, num_nodes=1, zk=self.zk,
                                   security_protocol=self.client_listener,
@@ -79,6 +90,11 @@ class MultiTenantTest(ProduceConsumeValidateTest):
                                       [listener_prop("sasl_plaintext", "oauthbearer.sasl.jaas.config"),
                                        server_jaas_config]
                                   ])
+
+        for node in self.kafka.nodes:
+            node.account.mkdir(self.OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FOLDER)
+            node.account.create_file(self.OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FILE_PATH, self.OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY)
+
         client_jaas_config_variables = {
             'allowed_cluster': self.ALLOWED_CLUSTER,
             'jws_token': self.JWS_TOKEN
@@ -99,6 +115,11 @@ class MultiTenantTest(ProduceConsumeValidateTest):
     def setUp(self):
         self.zk.start()
         self.kafka.start()
+
+    def tearDown(self):
+        for node in self.kafka.nodes:
+            node.account.remove(self.OAUTH_SECURED_JWS_TOKEN_PUBLIC_KEY_FOLDER)
+        super(MultiTenantTest, self).tearDown()
 
     def list_consumer_groups(self, listener):
         node = self.kafka.nodes[0]

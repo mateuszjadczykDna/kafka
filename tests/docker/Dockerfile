@@ -72,7 +72,4 @@ RUN cd /opt && git clone -q  https://github.com/confluentinc/kibosh.git && cd "/
 RUN useradd -ms /bin/bash ducker && mkdir -p /home/ducker/ && rsync -aiq /root/.ssh/ /home/ducker/.ssh && chown -R ducker /home/ducker/ /mnt/ && echo 'ducker ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
 USER ducker
 
-# Copy test files to image
-COPY ./jws_public_key.pem /mnt/test/jws_public_key.pem
-
 CMD sudo service ssh start && tail -f /dev/null
