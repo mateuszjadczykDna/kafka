@@ -183,6 +183,7 @@ class SocketServerTest extends JUnitSuite {
     sendRequest(plainSocket, serializedBytes)
     processRequest(server.requestChannel)
     assertEquals(serializedBytes.toSeq, receiveResponse(plainSocket).toSeq)
+    verifyAcceptorIdlePercent("PLAINTEXT", expectIdle = false)
   }
 
   @Test
@@ -1059,6 +1060,28 @@ class SocketServerTest extends JUnitSuite {
     }
   }
 
+  @Test
+  def testConnectionRateLimit(): Unit = {
+    val numConnections = 10
+    props.put("max.connections.per.ip", numConnections.toString)
+    val testableServer = new TestableSocketServer(1)
+    testableServer.startup()
+    try {
+      val testableSelector = testableServer.testableSelector
+      testableSelector.pollBlockMs = 100 // To ensure that Processor is blocked
+      testableSelector.operationCounts.clear()
+      val sockets = (1 to numConnections).map(_ => connect(testableServer))
+      testableSelector.waitForOperations(SelectorOperation.Register, numConnections)
+      val pollCount = testableSelector.operationCounts(SelectorOperation.Poll)
+      assertTrue(s"Connections created too quickly: $pollCount", pollCount >= numConnections)
+      verifyAcceptorIdlePercent("PLAINTEXT", expectIdle = true)
+
+      assertProcessorHealthy(testableServer, sockets)
+    } finally {
+      shutdownServerAndMetrics(testableServer)
+    }
+  }
+
   private def withTestableServer(testWithServer: TestableSocketServer => Unit): Unit = {
     props.put("listeners", "PLAINTEXT://localhost:0")
     val testableServer = new TestableSocketServer
@@ -1096,7 +1119,22 @@ class SocketServerTest extends JUnitSuite {
   def isSocketConnectionId(connectionId: String, socket: Socket): Boolean =
     connectionId.contains(s":${socket.getLocalPort}-")
 
-  class TestableSocketServer extends SocketServer(KafkaConfig.fromProps(props),
+  private def verifyAcceptorIdlePercent(listenerName: String, expectIdle: Boolean): Unit = {
+    val idlePercentMetricMBeanName = "kafka.network:type=Acceptor,name=AcceptorIdlePercent,listener=PLAINTEXT"
+    val idlePercentMetrics = YammerMetrics.defaultRegistry.allMetrics.asScala
+      .filterKeys(_.getMBeanName.equals(idlePercentMetricMBeanName)).values
+    assertEquals(1, idlePercentMetrics.size)
+    val idlePercentMetric = idlePercentMetrics.head.asInstanceOf[Meter]
+    val idlePercent = idlePercentMetric.meanRate
+    if (expectIdle) {
+      assertTrue(s"Acceptor idle percent not recorded: $idlePercent", idlePercent > 0.0)
+      assertTrue(s"Unexpected idle percent in acceptor: $idlePercent", idlePercent <= 1.0)
+    } else {
+      assertEquals(0.0, idlePercent, 0.001)
+    }
+  }
+
+  class TestableSocketServer(val connectionQueueSize: Int = 20) extends SocketServer(KafkaConfig.fromProps(props),
       new Metrics, Time.SYSTEM, credentialProvider) {
 
     @volatile var selector: Option[TestableSelector] = None
@@ -1104,7 +1142,9 @@ class SocketServerTest extends JUnitSuite {
     override def newProcessor(id: Int, connectionQuotas: ConnectionQuotas, listenerName: ListenerName,
                                 protocol: SecurityProtocol, memoryPool: MemoryPool): Processor = {
       new Processor(id, time, config.socketRequestMaxBytes, requestChannel, connectionQuotas, config.connectionsMaxIdleMs,
-        config.failedAuthenticationDelayMs, listenerName, protocol, config, metrics, credentialProvider, memoryPool, new LogContext()) {
+        config.failedAuthenticationDelayMs, listenerName, protocol, config, metrics, credentialProvider,
+        memoryPool, new LogContext(), connectionQueueSize) {
+
         override protected[network] def createSelector(channelBuilder: ChannelBuilder): Selector = {
            val testableSelector = new TestableSelector(config, channelBuilder, time, metrics)
            assertEquals(None, selector)
@@ -1187,6 +1227,7 @@ class SocketServerTest extends JUnitSuite {
     val allCachedPollData = Seq(cachedCompletedReceives, cachedCompletedSends, cachedDisconnected)
     @volatile var minWakeupCount = 0
     @volatile var pollTimeoutOverride: Option[Long] = None
+    @volatile var pollBlockMs = 0
 
     def addFailure(operation: SelectorOperation, exception: Option[Exception] = None) {
       failures += operation ->
@@ -1228,6 +1269,8 @@ class SocketServerTest extends JUnitSuite {
 
     override def poll(timeout: Long): Unit = {
       try {
+        if (pollBlockMs > 0)
+          Thread.sleep(pollBlockMs)
         allCachedPollData.foreach(_.reset)
         runOp(SelectorOperation.Poll, None) {
           super.poll(pollTimeoutOverride.getOrElse(timeout))
