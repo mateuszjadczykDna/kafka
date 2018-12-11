@@ -1059,7 +1059,7 @@ public class SslTransportLayerTest {
         int flushDelayCount = 0;
 
         public TestSslChannelBuilder(Mode mode) {
-            super(mode, null, false);
+            super(mode, ListenerName.forSecurityProtocol(SecurityProtocol.SSL), false);
         }
 
         public void configureBufferSizes(Integer netReadBufSize, Integer netWriteBufSize, Integer appBufSize) {

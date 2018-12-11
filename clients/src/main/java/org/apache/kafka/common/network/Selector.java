@@ -123,6 +123,7 @@ public class Selector implements Selectable, AutoCloseable {
     private final MemoryPool memoryPool;
     private final long lowMemThreshold;
     private final int failedAuthenticationDelayMs;
+    private final Metrics metrics;
 
     //indicates if the previous call to poll was able to make progress in reading already-buffered data.
     //this is used to prevent tight loops when memory is not available to read any more data
@@ -173,6 +174,7 @@ public class Selector implements Selectable, AutoCloseable {
         this.connected = new ArrayList<>();
         this.disconnected = new HashMap<>();
         this.failedSends = new ArrayList<>();
+        this.metrics = metrics;
         this.sensors = new SelectorMetrics(metrics, metricGrpPrefix, metricTags, metricsPerConnection);
         this.channelBuilder = channelBuilder;
         this.recordTimePerConnection = recordTimePerConnection;
@@ -553,6 +555,10 @@ public class Selector implements Selectable, AutoCloseable {
                                 sensors.reauthenticationLatency
                                         .record(channel.reauthenticationLatencyMs().doubleValue(), readyTimeMs);
                         }
+                        if (channel.interceptor() != null)
+                            channel.interceptor().onAuthenticatedConnection(
+                                    channel.id(), channel.socketAddress(),
+                                    channel.principal(), metrics);
                     }
                     List<NetworkReceive> responsesReceivedDuringReauthentication = channel
                             .getAndClearResponsesReceivedDuringReauthentication();
@@ -822,6 +828,12 @@ public class Selector implements Selectable, AutoCloseable {
      */
     private void close(KafkaChannel channel, CloseMode closeMode) {
         channel.disconnect();
+        if (channel.ready() && channel.interceptor() != null)
+            channel.interceptor().onAuthenticatedDisconnection(
+                    channel.id(),
+                    channel.socketAddress(),
+                    channel.principal(),
+                    metrics);
 
         // Ensure that `connected` does not have closed channels. This could happen if `prepare` throws an exception
         // in the `poll` invocation when `finishConnect` succeeds

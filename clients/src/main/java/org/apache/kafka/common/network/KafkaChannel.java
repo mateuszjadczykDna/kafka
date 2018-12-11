@@ -166,6 +166,10 @@ public class KafkaChannel implements AutoCloseable {
         return authenticator.principal();
     }
 
+    public BrokerInterceptor interceptor() {
+        return interceptor;
+    }
+
     /**
      * Does handshake of transportLayer and authentication using configured authenticator.
      * For SSL with client authentication enabled, {@link TransportLayer#handshake()} performs

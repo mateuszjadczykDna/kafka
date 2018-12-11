@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import kafka.security.auth.SimpleAclAuthorizer$;
@@ -61,7 +62,7 @@ public class PhysicalCluster {
     kafkaCluster = new EmbeddedKafkaCluster();
     random = new Random();
     usersById = new HashMap<>();
-    usersByApiKey = new HashMap<>();
+    usersByApiKey = new ConcurrentHashMap<>();
     logicalClusters = new HashMap<>();
 
     this.overrideProps = new Properties();
@@ -127,7 +128,7 @@ public class PhysicalCluster {
     return userMetadata;
   }
 
-  public synchronized MultiTenantPrincipal principal(String saslUserName) {
+  public MultiTenantPrincipal principal(String saslUserName) {
     Matcher matcher = SASL_USERNAME_PATTERN.matcher(saslUserName);
     if (!matcher.matches()) {
       throw new IllegalArgumentException("Invalid SASL user name " + saslUserName);

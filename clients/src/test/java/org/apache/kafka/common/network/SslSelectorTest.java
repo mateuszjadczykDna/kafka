@@ -223,7 +223,7 @@ public class SslSelectorTest extends SelectorTest {
         //the initial channel builder is for clients, we need a server one
         File trustStoreFile = File.createTempFile("truststore", ".jks");
         Map<String, Object> sslServerConfigs = TestSslUtils.createSslConfig(false, true, Mode.SERVER, trustStoreFile, "server");
-        channelBuilder = new SslChannelBuilder(Mode.SERVER, null, false);
+        channelBuilder = new SslChannelBuilder(Mode.SERVER, ListenerName.forSecurityProtocol(SecurityProtocol.SSL), false);
         channelBuilder.configure(sslServerConfigs);
         selector = new Selector(NetworkReceive.UNLIMITED, 5000, metrics, time, "MetricGroup",
                 new HashMap<String, String>(), true, false, channelBuilder, pool, new LogContext());
