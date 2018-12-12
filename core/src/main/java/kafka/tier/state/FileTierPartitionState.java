@@ -201,6 +201,18 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
         return Optional.empty();
     }
 
+    /**
+     * Return internal FileChannel.
+     * For testing use only.
+     */
+    FileChannel channel() {
+        return channel;
+    }
+
+    long fileSize() throws IOException {
+        return channel.size();
+    }
+
     private AppendResult append(TierTopicInitLeader initLeader) {
         int epoch = currentEpoch.get();
         if (initLeader.tierEpoch() >= epoch) {
@@ -251,6 +263,7 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
         }
         return -1;
     }
+
 
     private void scanAndTruncate() throws IOException {
         final ByteBuffer sizeBuf = ByteBuffer.allocate(ENTRY_LENGTH_SIZE)
