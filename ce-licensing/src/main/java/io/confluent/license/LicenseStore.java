@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.confluent.command.record.Command.CommandConfigType;
@@ -43,6 +44,7 @@ public class LicenseStore {
   public static final long READ_TO_END_TIMEOUT_MS = 120_000;
 
   private final KafkaBasedLog<CommandKey, CommandMessage> licenseLog;
+  private final AtomicBoolean running = new AtomicBoolean();
   private final AtomicReference<String> latestLicense;
   private final Time time;
 
@@ -183,15 +185,19 @@ public class LicenseStore {
   }
 
   public void start() {
-    log.info("Starting License Store");
-    licenseLog.start();
-    log.info("Started License Store");
+    if (running.compareAndSet(false, true)) {
+      log.info("Starting License Store");
+      licenseLog.start();
+      log.info("Started License Store");
+    }
   }
 
   public void stop() {
-    log.info("Closing License Store");
-    licenseLog.stop();
-    log.info("Closed License Store");
+    if (running.compareAndSet(true, false)) {
+      log.info("Closing License Store");
+      licenseLog.stop();
+      log.info("Closed License Store");
+    }
   }
 
   public String licenseScan() {

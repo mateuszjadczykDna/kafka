@@ -249,4 +249,12 @@
     <suppress checks="AvoidStarImport"
               files="YammerMetricsTest.java$"/>
 
+    <!-- ce-licensing exclusions -->
+    <suppress checks="NPathComplexity"
+              files="LicenseManager.java"/>
+    <suppress checks="JavaNCSS"
+              files="LicenseManagerTest.java"/>
+    <suppress checks="MethodLength"
+              files="LicenseManagerTest.java"/>
+
 </suppressions>
