@@ -1412,16 +1412,7 @@ public class MultiTenantRequestContextTest {
       assertEquals(2, request.newPartitions().get("tenant_bar").newAssignments().size());
       assertNotEquals(unbalancedAssignment, request.newPartitions().get("tenant_bar").newAssignments());
       assertTrue(request.newPartitions().get("tenant_invalid").newAssignments().isEmpty());
-      assertTrue(context.shouldIntercept());
-      CreatePartitionsResponse response = (CreatePartitionsResponse) context.intercept(request, 0);
-      Struct struct = parseResponse(ApiKeys.CREATE_PARTITIONS, ver, context.buildResponse(response));
-      CreatePartitionsResponse outbound = new CreatePartitionsResponse(struct);
-      Map<String, ApiError> errors = outbound.errors();
-      assertEquals(3, errors.size());
-      assertEquals(Errors.CLUSTER_AUTHORIZATION_FAILED, errors.get("foo").error());
-      assertEquals(Errors.CLUSTER_AUTHORIZATION_FAILED, errors.get("bar").error());
-      assertEquals(Errors.CLUSTER_AUTHORIZATION_FAILED, errors.get("invalid").error());
-      verifyRequestAndResponseMetrics(ApiKeys.CREATE_PARTITIONS, Errors.CLUSTER_AUTHORIZATION_FAILED);
+      verifyRequestMetrics(ApiKeys.CREATE_PARTITIONS);
     }
   }
 
@@ -1442,16 +1433,28 @@ public class MultiTenantRequestContextTest {
       assertEquals(2, request.newPartitions().get("tenant_bar").newAssignments().size());
       assertEquals(unbalancedAssignment, request.newPartitions().get("tenant_bar").newAssignments());
       assertNull(request.newPartitions().get("tenant_invalid").newAssignments());
-      assertTrue(context.shouldIntercept());
-      CreatePartitionsResponse response = (CreatePartitionsResponse) context.intercept(request, 0);
-      Struct struct = parseResponse(ApiKeys.CREATE_PARTITIONS, ver, context.buildResponse(response));
-      CreatePartitionsResponse outbound = new CreatePartitionsResponse(struct);
-      Map<String, ApiError> errors = outbound.errors();
-      assertEquals(3, errors.size());
-      assertEquals(Errors.CLUSTER_AUTHORIZATION_FAILED, errors.get("foo").error());
-      assertEquals(Errors.CLUSTER_AUTHORIZATION_FAILED, errors.get("bar").error());
-      assertEquals(Errors.CLUSTER_AUTHORIZATION_FAILED, errors.get("invalid").error());
-      verifyRequestAndResponseMetrics(ApiKeys.CREATE_PARTITIONS, Errors.CLUSTER_AUTHORIZATION_FAILED);
+      verifyRequestMetrics(ApiKeys.CREATE_PARTITIONS);
+    }
+  }
+
+  @Test
+  public void testCreatePartitionsPolicyFailure() throws Exception {
+    for (short ver = ApiKeys.CREATE_PARTITIONS.oldestVersion(); ver <= ApiKeys.CREATE_PARTITIONS.latestVersion(); ver++) {
+      MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_PARTITIONS, ver);
+      Map<String, ApiError> partitionErrors = new HashMap<>();
+      partitionErrors.put("tenant_foo", new ApiError(Errors.POLICY_VIOLATION, "Topic tenant_foo is not permitted"));
+      partitionErrors.put("tenant_bar", new ApiError(Errors.NONE, ""));
+      CreatePartitionsResponse outbound = new CreatePartitionsResponse(0, partitionErrors);
+      Struct struct = parseResponse(ApiKeys.CREATE_PARTITIONS, ver, context.buildResponse(outbound));
+      CreatePartitionsResponse intercepted = new CreatePartitionsResponse(struct);
+      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
+      assertEquals(Errors.NONE, intercepted.errors().get("bar").error());
+
+      ApiError apiError = intercepted.errors().get("foo");
+      assertEquals(Errors.POLICY_VIOLATION, apiError.error());
+      if (apiError.message() != null) {
+        assertFalse(apiError.message().contains("tenant_"));
+      }
     }
   }
 

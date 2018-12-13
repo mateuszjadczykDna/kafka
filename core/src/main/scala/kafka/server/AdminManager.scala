@@ -253,6 +253,17 @@ class AdminManager(val config: KafkaConfig,
           }.toMap
         }
 
+        // Temporary work-around for validating CREATE_PARTITIONS requests until KIP-201 is merged
+        createTopicPolicy match {
+          case Some(policy) =>
+            policy.validate(
+              new RequestMetadata(topic, numPartitionsIncrement,
+                null,
+                null, // assignments are overwritten on request transformation
+                new java.util.HashMap[String, String]()))
+          case None =>
+        }
+
         val updatedReplicaAssignment = adminZkClient.addPartitions(topic, existingAssignment, allBrokers,
           newPartition.totalCount, reassignment, validateOnly = validateOnly)
         CreatePartitionsMetadata(topic, updatedReplicaAssignment, ApiError.NONE)

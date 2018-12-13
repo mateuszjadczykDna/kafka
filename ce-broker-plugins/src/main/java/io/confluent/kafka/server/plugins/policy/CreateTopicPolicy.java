@@ -67,6 +67,9 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     if (!TenantContext.isTenantPrefixed(reqMetadata.topic())) {
       return;
     }
+    if (reqMetadata.numPartitions() == null) {
+      throw new PolicyViolationException("Must specify number of partitions.");
+    }
 
     Short repFactorPassed = reqMetadata.replicationFactor();
     if (repFactorPassed != null && repFactorPassed != requiredRepFactor) {
@@ -75,19 +78,14 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
 
     this.policyConfig.validateTopicConfigs(reqMetadata.configs());
 
-    if (reqMetadata.numPartitions() != null) {
-      Map<String, Object> adminConfig = new HashMap<>();
-      adminConfig.putAll(adminClientProps);
-      log.debug("Checking partitions count with config: {}", adminClientProps);
-      try (AdminClient adminClient = AdminClient.create(adminConfig)) {
-        ensureValidPartitionCount(
-            adminClient,
-            TenantContext.extractTenantPrefix(reqMetadata.topic()),
-            reqMetadata.numPartitions()
-        );
-      }
-    } else {
-      throw new PolicyViolationException("Must specify number of partitions.");
+    Map<String, Object> adminConfig = new HashMap<>(adminClientProps);
+    log.debug("Checking partitions count with config: {}", adminClientProps);
+    try (AdminClient adminClient = AdminClient.create(adminConfig)) {
+      ensureValidPartitionCount(
+              adminClient,
+              TenantContext.extractTenantPrefix(reqMetadata.topic()),
+              reqMetadata.numPartitions()
+      );
     }
   }
 
@@ -181,7 +179,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
    *
    * @param adminClient Kafka admin client
    * @param tenantPrefix topic prefix for tenant
-   * @param partitionsCount requested number of partitions
+   * @param partitionsCount requested number of partitions or the delta if validating a createPartitions request
    * @throws PolicyViolationException if requested number of partitions cannot be created
    */
   void ensureValidPartitionCount(AdminClient adminClient,
@@ -189,14 +187,14 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
                                  int partitionsCount) throws PolicyViolationException {
     if (partitionsCount > maxPartitionsPerTenant) {
       throw new PolicyViolationException(String.format(
-          "You may not create more than maximum number of partitions (%d).",
+          "You may not create more than the maximum number of partitions (%d).",
           maxPartitionsPerTenant));
     } else {
       int totalCurrentPartitions = numPartitions(adminClient, tenantPrefix);
       if (totalCurrentPartitions + partitionsCount > maxPartitionsPerTenant) {
         throw new PolicyViolationException(String.format(
-            "You may not create more than %d partitions. "
-                + "Adding requested number of partitions will exceed %d total partitions. "
+            "You may not create more than %d new partitions. "
+                + "Adding the requested number of partitions will exceed %d total partitions. "
                 + "Currently, there are %d total topic partitions",
             maxPartitionsPerTenant - totalCurrentPartitions,
             maxPartitionsPerTenant, totalCurrentPartitions));

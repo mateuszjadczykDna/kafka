@@ -94,9 +94,9 @@ public class MultiTenantApis {
       case CREATE_ACLS:
       case DESCRIBE_ACLS:
       case DELETE_ACLS:
+      case CREATE_PARTITIONS:
         return true;
 
-      case CREATE_PARTITIONS: // Disallowed until it supports custom policies
       case CONTROLLED_SHUTDOWN:
       case LEADER_AND_ISR:
       case UPDATE_METADATA:
