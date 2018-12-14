@@ -102,6 +102,10 @@
      <allow pkg="org.apache.kafka.test" />
    </subpackage>
 
+   <subpackage name="multitenant">
+     <allow pkg="org.apache.kafka.test" />
+   </subpackage>
+  
    <subpackage name="security.minikdc">
      <allow pkg="org.apache.commons.lang.text" />
      <allow pkg="org.apache.directory" />

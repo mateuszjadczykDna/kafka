@@ -3,7 +3,8 @@
 package io.confluent.kafka.security.ldap.authorizer;
 
 import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizerConfig.SearchMode;
-import io.confluent.kafka.security.ldap.utils.RetryBackoff;
+import io.confluent.kafka.utils.RetryBackoff;
+
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;

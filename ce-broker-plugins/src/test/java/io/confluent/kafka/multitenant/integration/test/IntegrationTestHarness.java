@@ -15,13 +15,24 @@ import org.apache.kafka.common.security.scram.internals.ScramMechanism;
 
 public class IntegrationTestHarness {
 
+  private static final int DEFAULT_BROKERS_IN_PHYSICAL_CLUSTER = 1;
+
   private PhysicalCluster physicalCluster;
   private final List<KafkaProducer<?, ?>> producers = new ArrayList<>();
   private final List<KafkaConsumer<?, ?>> consumers = new ArrayList<>();
   private final List<AdminClient> adminClients = new ArrayList<>();
+  private final int brokersInPhysicalCluster;
+
+  public IntegrationTestHarness() {
+    this(DEFAULT_BROKERS_IN_PHYSICAL_CLUSTER);
+  }
+
+  public IntegrationTestHarness(int brokersInPhysicalCluster) {
+    this.brokersInPhysicalCluster = brokersInPhysicalCluster;
+  }
 
   public PhysicalCluster start(Properties brokerOverrideProps) throws Exception {
-    physicalCluster = new PhysicalCluster(brokerOverrideProps);
+    physicalCluster = new PhysicalCluster(brokersInPhysicalCluster, brokerOverrideProps);
     physicalCluster.start();
     return physicalCluster;
   }

@@ -51,6 +51,9 @@ import org.apache.kafka.common.security.token.delegation.internals.DelegationTok
 import org.apache.kafka.common.security.{JaasContext, JaasUtils}
 import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, Node}
+import org.apache.kafka.common.config.internals.ConfluentConfigs
+
+import org.apache.kafka.server.multitenant.MultiTenantMetadata
 
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Seq, mutable}
@@ -157,6 +160,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
   private var _clusterId: String = null
   private var _brokerTopicStats: BrokerTopicStats = null
 
+  private val _multitenantMetadata: MultiTenantMetadata = ConfluentConfigs.buildMultitenantMetadata(config.values)
 
   def clusterId: String = _clusterId
 
@@ -660,6 +664,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           CoreUtils.swallow(metrics.close(), this)
         if (brokerTopicStats != null)
           CoreUtils.swallow(brokerTopicStats.close(), this)
+
+        if (_multitenantMetadata != null) {
+          _multitenantMetadata.close(config.brokerSessionUuid)
+        }
 
         // Clear all reconfigurable instances stored in DynamicBrokerConfig
         config.dynamicConfig.clear()

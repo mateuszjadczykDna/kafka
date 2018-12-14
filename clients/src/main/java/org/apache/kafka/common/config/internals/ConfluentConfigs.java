@@ -20,12 +20,18 @@ import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.server.interceptor.BrokerInterceptor;
 import org.apache.kafka.server.interceptor.DefaultBrokerInterceptor;
+import org.apache.kafka.server.multitenant.MultiTenantMetadata;
 
 import java.util.Map;
 
 public class ConfluentConfigs {
     public static final String BROKER_INTERCEPTOR_CLASS_CONFIG = "broker.interceptor.class";
     public static final Class<?> BROKER_INTERCEPTOR_CLASS_DEFAULT = DefaultBrokerInterceptor.class;
+    public static final String MULTITENANT_METADATA_CLASS_CONFIG = "multitenant.metadata.class";
+    public static final String MULTITENANT_METADATA_CLASS_DEFAULT = null;
+    public static final String MULTITENANT_METADATA_DIR_CONFIG = "multitenant.metadata.dir";
+    public static final String MULTITENANT_METADATA_DIR_DEFAULT = null;
+
 
     public static BrokerInterceptor buildBrokerInterceptor(Mode mode, Map<String, ?> configs) {
         if (mode == Mode.CLIENT)
@@ -40,5 +46,17 @@ public class ConfluentConfigs {
         }
         interceptor.configure(configs);
         return interceptor;
+    }
+
+    public static MultiTenantMetadata buildMultitenantMetadata(Map<String, ?> configs) {
+        MultiTenantMetadata meta = null;
+        if (configs.get(MULTITENANT_METADATA_CLASS_CONFIG) != null) {
+            @SuppressWarnings("unchecked")
+            Class<? extends MultiTenantMetadata> multitenantMetadataClass =
+                (Class<? extends MultiTenantMetadata>) configs.get(MULTITENANT_METADATA_CLASS_CONFIG);
+            meta = Utils.newInstance(multitenantMetadataClass);
+            meta.configure(configs);
+        }
+        return meta;
     }
 }

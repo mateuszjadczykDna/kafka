@@ -278,6 +278,7 @@ object KafkaConfig {
   val BrokerIdGenerationEnableProp = "broker.id.generation.enable"
   val MaxReservedBrokerIdProp = "reserved.broker.max.id"
   val BrokerIdProp = "broker.id"
+  val BrokerSessionUuidProp = "broker.session.uuid"
   val MessageMaxBytesProp = "message.max.bytes"
   val NumNetworkThreadsProp = "num.network.threads"
   val NumIoThreadsProp = "num.io.threads"
@@ -1086,6 +1087,11 @@ object KafkaConfig {
       /** ********* Confluent Configuration ****************/
       .defineInternal(ConfluentConfigs.BROKER_INTERCEPTOR_CLASS_CONFIG, CLASS,
         ConfluentConfigs.BROKER_INTERCEPTOR_CLASS_DEFAULT, LOW)
+      .defineInternal(BrokerSessionUuidProp, STRING, null, LOW)
+      .defineInternal(ConfluentConfigs.MULTITENANT_METADATA_CLASS_CONFIG, CLASS,
+                      ConfluentConfigs.MULTITENANT_METADATA_CLASS_DEFAULT, LOW)
+      .defineInternal(ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG, STRING,
+                      ConfluentConfigs.MULTITENANT_METADATA_DIR_DEFAULT, LOW)
   }
 
   def configNames() = configDef.names().asScala.toList.sorted
@@ -1138,6 +1144,17 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   override def get(key: String): AnyRef =
     if (this eq currentConfig) super.get(key) else currentConfig.get(key)
 
+  // Make sure that broker session UUID is set on the very first creation of KafkaConfig. When
+  // dynamic broker config updates KafkaConfig via updateCurrentConfig() method, the new instances
+  // of KafkaConfig will be created with 'props' containing broker session UUID config from the
+  // original KafkaConfig, in which case this method would not update broker session UUID.
+  override def postProcessParsedConfig(props: java.util.Map[String,Object]): java.util.Map[String,Object] = {
+    Option(props.get(KafkaConfig.BrokerSessionUuidProp)) match {
+      case None => Collections.singletonMap(KafkaConfig.BrokerSessionUuidProp, CoreUtils.generateUuidAsBase64)
+      case _ => Collections.emptyMap()
+    }
+  }
+
   //  During dynamic update, we use the values from this config, these are only used in DynamicBrokerConfig
   private[server] def originalsFromThisConfig: util.Map[String, AnyRef] = super.originals
   private[server] def valuesFromThisConfig: util.Map[String, _] = super.values
@@ -1156,6 +1173,7 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val brokerIdGenerationEnable: Boolean = getBoolean(KafkaConfig.BrokerIdGenerationEnableProp)
   val maxReservedBrokerId: Int = getInt(KafkaConfig.MaxReservedBrokerIdProp)
   var brokerId: Int = getInt(KafkaConfig.BrokerIdProp)
+  val brokerSessionUuid: String = getString(KafkaConfig.BrokerSessionUuidProp)
 
   def numNetworkThreads = getInt(KafkaConfig.NumNetworkThreadsProp)
   def backgroundThreads = getInt(KafkaConfig.BackgroundThreadsProp)

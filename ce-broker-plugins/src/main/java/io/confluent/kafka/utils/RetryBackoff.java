@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package io.confluent.kafka.security.ldap.utils;
+package io.confluent.kafka.utils;
 
 import java.util.concurrent.ThreadLocalRandom;
 

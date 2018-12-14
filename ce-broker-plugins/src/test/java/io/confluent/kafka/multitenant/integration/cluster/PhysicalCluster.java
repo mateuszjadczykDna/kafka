@@ -43,6 +43,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol;
  */
 public class PhysicalCluster {
 
+  public static final int DEFAULT_NUMBER_OF_BROKERS = 1;
   public static final KafkaPrincipal BROKER_PRINCIPAL =
       new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "broker");
   private static final Pattern SASL_USERNAME_PATTERN =
@@ -57,13 +58,19 @@ public class PhysicalCluster {
   private final Map<Integer, UserMetadata> usersById;
   private final Map<String, UserMetadata> usersByApiKey;
   private final Map<String, LogicalCluster> logicalClusters;
+  private final int numberOfBrokers;
 
   public PhysicalCluster(Properties props) {
+    this(DEFAULT_NUMBER_OF_BROKERS, props);
+  }
+
+  public PhysicalCluster(int brokers, Properties props) {
     kafkaCluster = new EmbeddedKafkaCluster();
     random = new Random();
     usersById = new HashMap<>();
     usersByApiKey = new ConcurrentHashMap<>();
     logicalClusters = new HashMap<>();
+    numberOfBrokers = brokers;
 
     this.overrideProps = new Properties();
     this.overrideProps.putAll(props);
@@ -79,7 +86,7 @@ public class PhysicalCluster {
 
     overrideProps.setProperty(SimpleAclAuthorizer$.MODULE$.SuperUsersProp(),
         BROKER_PRINCIPAL.toString());
-    kafkaCluster.startBrokers(1, KafkaTestUtils.brokerConfig(overrideProps));
+    kafkaCluster.startBrokers(numberOfBrokers, KafkaTestUtils.brokerConfig(overrideProps));
   }
 
   public synchronized void shutdown() {

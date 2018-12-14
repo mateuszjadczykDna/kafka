@@ -28,6 +28,7 @@ import org.apache.kafka.common.metrics.Sensor
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.record.Records
 import org.apache.kafka.common.security.auth.SecurityProtocol
+import org.apache.kafka.common.config.internals.ConfluentConfigs
 import org.junit.Assert._
 import org.junit.Test
 import org.scalatest.Assertions.intercept
@@ -737,6 +738,10 @@ class KafkaConfigTest {
         //Kafka Yammer metrics reporter configs
         case KafkaConfig.KafkaMetricsReporterClassesProp => // ignore
         case KafkaConfig.KafkaMetricsPollingIntervalSecondsProp => //ignore
+
+        // Confluent Cloud configs
+        case KafkaConfig.BrokerSessionUuidProp => // ignore string
+        case ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG => // ignore string
 
         case _ => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "-1")
       }
