@@ -32,16 +32,16 @@ data:
     {
       "name": "big_topic",
       "partitions_count": 1000,
-      "produce_mbs_throughput": 150,
-      "consume_mbs_throughput": 400,
+      "produce_mbs_throughput": 45,
+      "consume_mbs_throughput": 120,
       "producer_count": 11,
       "consumer_count": 11
     },
     {
       "name": "medium_topic",
       "partitions_count": 25,
-      "produce_mbs_throughput": 50,
-      "consume_mbs_throughput": 100,
+      "produce_mbs_throughput": 15,
+      "consume_mbs_throughput": 30,
       "producer_count": 4,
       "consumer_count": 4,
       "idempotence_enabled": true
@@ -49,8 +49,8 @@ data:
     {
       "name": "eos_topic",
       "partitions_count": 100,
-      "produce_mbs_throughput": 50,
-      "consume_mbs_throughput": 100,
+      "produce_mbs_throughput": 15,
+      "consume_mbs_throughput": 30,
       "producer_count": 4,
       "consumer_count": 4,
       "transactions_enabled": true

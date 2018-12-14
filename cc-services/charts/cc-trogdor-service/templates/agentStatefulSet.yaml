@@ -53,6 +53,10 @@ spec:
             - name: CAAS_POD_ID
               value: "1"
           ports:
+            - containerPort: 28130
+              hostPort: 28130
+              name: schedule-alone # ensure this pod is scheduled alone
+              protocol: TCP
             - name: agent
               containerPort: {{ .Values.trogdorAgentPort }}
               protocol: TCP

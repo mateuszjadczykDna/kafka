@@ -183,7 +183,9 @@ func TestConsecutiveTasks(t *testing.T) {
 		agentCount:         3,
 		topic:              mediumTopic,
 		throughputMbPerSec: 7.5,
-		consumerOptions:    randomConsumerGroupOptions,
+		consumerOptions:    trogdor.ConsumerOptions{
+			ConsumerGroup: "cg-1",
+		},
 		startMs:            10,
 		durationMs:         5,
 	}
@@ -223,7 +225,9 @@ func TestConsecutiveTasksFailsIfStartMsIsZero(t *testing.T) {
 		agentCount:         3,
 		topic:              mediumTopic,
 		throughputMbPerSec: 7.5,
-		consumerOptions:    randomConsumerGroupOptions,
+		consumerOptions:    trogdor.ConsumerOptions{
+			ConsumerGroup: "cg-1",
+		},
 		durationMs:         5,
 	}
 	_, err := consecutiveTasks(startConfig, 25, clientNodes)

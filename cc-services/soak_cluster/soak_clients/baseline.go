@@ -65,9 +65,6 @@ var transactionalProducerOptions = trogdor.ProducerOptions{
 	KeyGenerator:         trogdor.DefaultKeyGeneratorSpec,
 	TransactionGenerator: trogdor.DefaultTransactionGeneratorSpec,
 }
-var randomConsumerGroupOptions = trogdor.ConsumerOptions{
-	ConsumerGroup: "", // each consumer will be assigned a separate unique group by Trogdor
-}
 
 // Returns all the baseline tasks that should be ran on the Soak Cluster at all times
 func baselineTasks(topicConfigPath string, trogdorAgentsCount int) ([]trogdor.TaskSpec, error) {
@@ -123,6 +120,9 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 	if topicConfig.IdempotenceEnabled {
 		producerAdminConfig.EnableIdempotence = "true"
 	}
+	consumerOptions := trogdor.ConsumerOptions{
+		ConsumerGroup: fmt.Sprintf("Consume%sTestGroup", topicConfig.Name),
+	}
 
 	longLivingProducersScenarioConfig := scenarioConfig(&SoakScenarioConfig{
 		scenarioId:         fmt.Sprintf("LongLivedProduce-%s", topicConfig.Name),
@@ -144,9 +144,7 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		agentCount:         clientCounts.LongLivedConsumersCount,
 		topic:              topic,
 		throughputMbPerSec: topicConfig.ConsumeMBsThroughput * calculatePercentage(clientCounts.LongLivedConsumersCount, topicConfig.ConsumeCount),
-		consumerOptions: trogdor.ConsumerOptions{
-			ConsumerGroup: fmt.Sprintf("LongLivedConsume%sTestGroup", topicConfig.Name),
-		},
+		consumerOptions: consumerOptions,
 		adminConfig: adminConfig,
 	}, shuffleSlice(clientNodes))
 	logutil.Debug(logger, "longLivingConsumersScenarioConfig: %+v", longLivingConsumersScenarioConfig)
@@ -185,7 +183,7 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		agentCount:         clientCounts.ShortLivedConsumersCount,
 		topic:              topic,
 		throughputMbPerSec: topicConfig.ConsumeMBsThroughput * calculatePercentage(clientCounts.ShortLivedConsumersCount, topicConfig.ConsumeCount),
-		consumerOptions:    randomConsumerGroupOptions,
+		consumerOptions:    consumerOptions,
 		startMs:            nowMs,
 		adminConfig:        adminConfig,
 	}
