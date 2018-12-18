@@ -395,8 +395,10 @@ public class PhysicalClusterMetadataTest {
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) == null,
         "Expected metadata to be removed from the cache");
-    assertEquals(QuotaConfig.UNLIMITED_QUOTA.quota(ClientQuotaType.PRODUCE),
-                 quotaCallback.quotaLimit(ClientQuotaType.PRODUCE, tags), 0.001);
+    TestUtils.waitForCondition(
+        () -> quotaCallback.quotaLimit(ClientQuotaType.PRODUCE, tags) ==
+              QuotaConfig.UNLIMITED_QUOTA.quota(ClientQuotaType.PRODUCE),
+        "Expected unlimited quota for tenant with no quota");
   }
 
   @Test
