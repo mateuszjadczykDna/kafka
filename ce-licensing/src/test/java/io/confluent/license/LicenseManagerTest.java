@@ -905,8 +905,9 @@ public class LicenseManagerTest extends EasyMockSupport {
     try {
       manager.registerOrValidateLicense(expiredRegularLicenseStr);
       fail("expected exception");
-    } catch (InvalidLicenseException e) {
+    } catch (ExpiredLicenseException e) {
       // expected
+      assertNotNull(e.getLicense());
     }
 
     PowerMock.verifyAll();

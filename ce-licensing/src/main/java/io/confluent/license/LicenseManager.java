@@ -273,7 +273,8 @@ public class LicenseManager {
    * @param license the new license string to be persisted in the topic; may be empty if there is
    *                no updated license
    * @return the summary of the current license; never null
-   * @throws InvalidLicenseException if the supplied license is not valid
+   * @throws ExpiredLicenseException if the supplied or stored license has expired
+   * @throws InvalidLicenseException if the supplied or stored license is not valid
    */
   public License registerOrValidateLicense(String license) throws InvalidLicenseException {
     PublicKey publicKey = loadPublicKey();
@@ -421,7 +422,7 @@ public class LicenseManager {
         reason = msg;
       }
       notifyLicense(newLicense, null, reason);
-      throw new InvalidLicenseException(msg);
+      throw new ExpiredLicenseException(newLicense, msg);
     } else if (newLicense.expirationMillis() < Long.MAX_VALUE) {
       // License is still valid but limited
       String msg = newLicense.toString();
