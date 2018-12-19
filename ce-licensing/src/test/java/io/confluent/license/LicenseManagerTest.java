@@ -227,6 +227,7 @@ public class LicenseManagerTest extends EasyMockSupport {
     verifyAll();
 
     assertNotNull(license);
+    assertNotNull(license.serializedForm());
     assertTrue(license.isFreeTier());
     assertTrue(license.timeRemaining(TimeUnit.DAYS) > 1000000L);
 
@@ -306,6 +307,7 @@ public class LicenseManagerTest extends EasyMockSupport {
 
     assertNotNull(license2);
     assertTrue(license2.isTrial());
+    assertEquals(licenseStrCapture.getValue(), license.serializedForm());
     assertEquals("trial", license.audienceString());
     assertEquals(20L, daysRemaining2);
 
@@ -478,23 +480,31 @@ public class LicenseManagerTest extends EasyMockSupport {
 
     assertNotNull(license);
     assertTrue(license.isFreeTier());
+    assertEquals(License.Type.FREE_TIER, license.type());
+    assertNotNull(license.serializedForm());
     assertTrue(license.timeRemaining(TimeUnit.DAYS) > 1000000L);
     assertUpdatedEvent(license, "License for single cluster");
 
     assertNotNull(license2);
     assertTrue(license2.isTrial());
+    assertEquals(License.Type.TRIAL, license2.type());
+    assertNotNull(license2.serializedForm());
     assertEquals("trial", license2.audienceString());
     assertEquals(30L, daysRemaining2);
     assertUpdatedEvent(license2, "Trial license", "expires in 30 days");
 
     assertNotNull(license3);
     assertTrue(license3.isTrial());
+    assertEquals(License.Type.TRIAL, license3.type());
+    assertNotNull(license3.serializedForm());
     assertEquals("trial", license3.audienceString());
     assertEquals(20L, daysRemaining3);
 
     assertNotNull(license5);
     assertFalse(license5.isTrial());
     assertFalse(license5.isExpired());
+    assertEquals(License.Type.ENTERPRISE, license5.type());
+    assertEquals(validRegularLicenseStr, license5.serializedForm());
     assertEquals("", license5.audienceString());
     assertEquals(310L, daysRemaining5);
     assertEquals(10L, daysRemaining5a);
@@ -505,6 +515,8 @@ public class LicenseManagerTest extends EasyMockSupport {
     assertNotNull(license6);
     assertFalse(license6.isTrial());
     assertFalse(license6.isExpired());
+    assertEquals(License.Type.ENTERPRISE, license6.type());
+    assertEquals(anotherValidRegularLicenseStr, license6.serializedForm());
     assertEquals("", license6.audienceString());
     assertEquals(400L, daysRemaining6);
     assertEquals(380L, daysRemaining6a);

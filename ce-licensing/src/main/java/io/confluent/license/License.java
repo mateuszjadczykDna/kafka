@@ -215,6 +215,15 @@ public final class License {
     }
   }
 
+  /**
+   * The type of license.
+   */
+  public enum Type {
+    ENTERPRISE,
+    TRIAL,
+    FREE_TIER
+  }
+
   private final JwtClaims jwtClaims;
   private final Time clock;
   private final String serialized;
@@ -264,6 +273,23 @@ public final class License {
    */
   public boolean isFreeTier() {
     return hasLicenseType("free");
+  }
+
+  /**
+   * Get the type of license.
+   *
+   * @return the license type; never null
+   * @see #isFreeTier()
+   * @see #isTrial()
+   */
+  public Type type() {
+    if (isFreeTier()) {
+      return Type.FREE_TIER;
+    }
+    if (isTrial()) {
+      return Type.TRIAL;
+    }
+    return Type.ENTERPRISE;
   }
 
   /**
@@ -436,7 +462,12 @@ public final class License {
     return jwtClaims;
   }
 
-  String serializedForm() {
+  /**
+   * Get the serialized form of this license.
+   *
+   * @return the serialized form; never null
+   */
+  public String serializedForm() {
     return serialized;
   }
 
