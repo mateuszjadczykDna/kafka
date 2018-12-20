@@ -402,7 +402,8 @@ public class PhysicalClusterMetadataTest {
   }
 
   @Test
-  public void testShouldSilentlySkipApiKeysFile() throws IOException, InterruptedException {
+  public void testShouldSilentlySkipApiKeysAndHealthcheckFiles()
+      throws IOException, InterruptedException {
     final String apikeysJson = "{\"keys\": {\"key1\": {" +
                             "\"user_id\": \"user1\"," +
                             "\"logical_cluster_id\": \"myCluster\"," +
@@ -413,10 +414,14 @@ public class PhysicalClusterMetadataTest {
     final Path apikeysFile = tempFolder.newFile("apikeys.json").toPath();
     Files.write(apikeysFile, apikeysJson.getBytes());
 
+    final String hcJson = "{\"kafka_key\":\"Q4L43O\",\"kafka_secret\":\"J\",\"dd_api_key\":\"\"}";
+    final Path hcFile = tempFolder.newFile("kafka-healthcheck-external.json").toPath();
+    Files.write(hcFile, hcJson.getBytes());
+
     lcCache.start();
     assertTrue(lcCache.isUpToDate());
 
-    createLogicalClusterFile(LC_META_ABC);
+    Path lcFile = createLogicalClusterFile(LC_META_ABC);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) != null,
         "Expected new logical cluster to be added to the cache.");
@@ -425,6 +430,14 @@ public class PhysicalClusterMetadataTest {
 
     // writing the same content will still trigger file update event
     Files.write(apikeysFile, apikeysJson.getBytes());
+
+    // since the file update happens async, remove the valid metadata file and hopefully that
+    // update will happen after the previous update
+    Files.delete(lcFile);
+    TestUtils.waitForCondition(
+        () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) == null,
+        "Expected metadata to be removed from the cache");
+
     assertTrue(lcCache.isUpToDate());
   }
 

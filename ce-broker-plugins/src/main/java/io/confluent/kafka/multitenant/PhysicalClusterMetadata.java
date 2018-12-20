@@ -423,16 +423,16 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       ObjectMapper objectMapper = new ObjectMapper();
       LogicalClusterMetadata lcMeta = objectMapper.readValue(
           lcFile.toFile(), LogicalClusterMetadata.class);
-      if (!logicalClusterId.equals(lcMeta.logicalClusterId()) || !lcMeta.isValid()) {
-        // ok if this is api keys file
-        // note that with @JsonIgnoreProperties(ignoreUnknown = true), we will be able to load
-        // apikeys file, but validation of LogicalClusterMetadata will fail
-        if (logicalClusterId.contains("apikeys")) {
-          LOG.info("Ignoring create/update of {}", lcFile.getFileName());
-        } else {
-          LOG.warn("Logical cluster file {} has invalid metadata {}.", lcFile, lcMeta);
-          markStale(logicalClusterId);
-        }
+      if (lcMeta.logicalClusterId() == null) {
+        // currently, few other .json files get synced to the same dir (which we are going to
+        // consolidate into tenant metadata files later): apikeys.json and healthcheck apikeys
+        // With @JsonIgnoreProperties(ignoreUnknown = true), we will be able to load
+        // apikeys and healthcheck files, but they will not have "logical_cluster_id" field
+        LOG.info("Ignoring create/update of {}", lcFile.getFileName());
+        return false;
+      } else if (!logicalClusterId.equals(lcMeta.logicalClusterId()) || !lcMeta.isValid()) {
+        LOG.warn("Logical cluster file {} has invalid metadata {}.", lcFile, lcMeta);
+        markStale(logicalClusterId);
         return false;
       }
       logicalClusterMap.put(lcMeta.logicalClusterId(), lcMeta);
@@ -446,6 +446,16 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       // not going to retry, because fixing the content will cause an UPDATE event
       markStale(logicalClusterId);
     } catch (Exception e) {
+      // ObjectMapper behavior of loading json files that do not exactly match the format of
+      // LogicalClusterMetadata is inconsistent, even in the same environment. So, we need to filter
+      // apikeys and healthcheck file with apikeys here as well, but by filename
+      String filename = lcFile.getFileName().toString();
+      if ((filename.contains("apikeys") || filename.contains("healthcheck")) &&
+          !filename.contains("lkc")) {
+        LOG.info("Ignoring create/update of {}", lcFile.getFileName());
+        return false;
+      }
+
       LOG.error("Failed to load metadata file for logical cluster {}", logicalClusterId, e);
       markStale(logicalClusterId);
       return true;
