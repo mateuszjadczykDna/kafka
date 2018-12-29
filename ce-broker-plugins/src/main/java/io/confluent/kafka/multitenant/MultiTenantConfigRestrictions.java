@@ -21,6 +21,7 @@ public class MultiTenantConfigRestrictions {
       "num.partitions"
   );
 
+  // Topic configs that are modifiable by cloud users
   public static final Set<String> UPDATABLE_TOPIC_CONFIGS = Utils.mkSet(
       "cleanup.policy",
       "max.message.bytes",
@@ -31,5 +32,10 @@ public class MultiTenantConfigRestrictions {
       "retention.ms",
       "delete.retention.ms",
       "segment.bytes"
+  );
+
+  // Topic configs that are returned in topic describe but marked as read only
+  public static final Set<String> READ_ONLY_TOPIC_CONFIGS = Utils.mkSet(
+      "min.insync.replicas"
   );
 }

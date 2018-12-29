@@ -9,6 +9,7 @@ import io.confluent.kafka.multitenant.quota.TestCluster;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -135,6 +136,8 @@ import java.util.NoSuchElementException;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toList;
+import static org.apache.kafka.common.utils.Utils.mkEntry;
+import static org.apache.kafka.common.utils.Utils.mkMap;
 import static org.apache.kafka.common.utils.Utils.mkSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -1512,18 +1515,24 @@ public class MultiTenantRequestContextTest {
   }
 
   public void testDescribeConfigsResponse(boolean allowDescribeBrokerConfigs) throws IOException {
-    DescribeConfigsResponse.ConfigSource source = DescribeConfigsResponse.ConfigSource.STATIC_BROKER_CONFIG;
+    DescribeConfigsResponse.ConfigSource brokerSource = DescribeConfigsResponse.ConfigSource.STATIC_BROKER_CONFIG;
+    DescribeConfigsResponse.ConfigSource topicSource = DescribeConfigsResponse.ConfigSource.TOPIC_CONFIG;
     Set<DescribeConfigsResponse.ConfigSynonym> emptySynonyms = Collections.emptySet();
     Collection<DescribeConfigsResponse.ConfigEntry> brokerConfigEntries = Arrays.asList(
-      new DescribeConfigsResponse.ConfigEntry("message.max.bytes", "10000", source, false, false, emptySynonyms),
-      new DescribeConfigsResponse.ConfigEntry("num.network.threads", "5", source, false, false, emptySynonyms)
+      new DescribeConfigsResponse.ConfigEntry("message.max.bytes", "10000", brokerSource, false, false, emptySynonyms),
+      new DescribeConfigsResponse.ConfigEntry("num.network.threads", "5", brokerSource, false, false, emptySynonyms)
+    );
+    Collection<DescribeConfigsResponse.ConfigEntry> topicConfigEntries = Arrays.asList(
+      new DescribeConfigsResponse.ConfigEntry("retention.bytes", "10000000", topicSource, false, false, emptySynonyms),
+      new DescribeConfigsResponse.ConfigEntry("min.insync.replicas", "2", topicSource, false, false, emptySynonyms),
+      new DescribeConfigsResponse.ConfigEntry("min.cleanable.dirty.ratio", "0.5", topicSource, false, false, emptySynonyms)
     );
 
     for (short ver = ApiKeys.DESCRIBE_CONFIGS.oldestVersion(); ver <= ApiKeys.DESCRIBE_CONFIGS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DESCRIBE_CONFIGS, ver);
       Map<ConfigResource, DescribeConfigsResponse.Config> resourceErrors = new HashMap<>();
       resourceErrors.put(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo"), new DescribeConfigsResponse.Config(new ApiError(Errors.NONE, ""),
-          Collections.<DescribeConfigsResponse.ConfigEntry>emptyList()));
+          topicConfigEntries));
       resourceErrors.put(new ConfigResource(ConfigResource.Type.BROKER, "blah"), new DescribeConfigsResponse.Config(new ApiError(Errors.NONE, ""),
           brokerConfigEntries));
       resourceErrors.put(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_bar"), new DescribeConfigsResponse.Config(new ApiError(Errors.NONE, ""),
@@ -1535,6 +1544,28 @@ public class MultiTenantRequestContextTest {
       assertEquals(mkSet(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "bar")), intercepted.configs().keySet());
+
+      Collection<DescribeConfigsResponse.ConfigEntry> interceptedTopicConfigs =
+              intercepted.configs().get(new ConfigResource(ConfigResource.Type.TOPIC, "foo")).entries();
+      Map<String, Boolean> topicReadOnlyMap = new HashMap<>();
+      for (DescribeConfigsResponse.ConfigEntry configEntry : interceptedTopicConfigs) {
+        topicReadOnlyMap.put(configEntry.name(), configEntry.isReadOnly());
+      }
+      if (allowDescribeBrokerConfigs) {
+        assertEquals(
+            mkMap(
+                mkEntry("retention.bytes", Boolean.FALSE),
+                mkEntry("min.insync.replicas", Boolean.FALSE),
+                mkEntry("min.cleanable.dirty.ratio", Boolean.FALSE)),
+            topicReadOnlyMap);
+      } else {
+        assertEquals(
+            mkMap(
+                mkEntry("retention.bytes", Boolean.FALSE),
+                mkEntry("min.insync.replicas", Boolean.TRUE)),
+            topicReadOnlyMap);
+      }
+
       Collection<DescribeConfigsResponse.ConfigEntry> interceptedBrokerConfigs =
               intercepted.configs().get(new ConfigResource(ConfigResource.Type.BROKER, "blah")).entries();
       Set<String> interceptedEntries = new HashSet<>();

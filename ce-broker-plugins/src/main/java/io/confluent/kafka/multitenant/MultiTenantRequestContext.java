@@ -374,10 +374,17 @@ public class MultiTenantRequestContext extends RequestContext {
               return MultiTenantConfigRestrictions.VISIBLE_BROKER_CONFIGS.contains(ce.name());
             }
             if (resource.type() == ConfigResource.Type.TOPIC) {
-              return MultiTenantConfigRestrictions.UPDATABLE_TOPIC_CONFIGS.contains(ce.name());
+              // Allow both updatable and visible topic configs in the response
+              return MultiTenantConfigRestrictions.UPDATABLE_TOPIC_CONFIGS.contains(ce.name()) ||
+                      MultiTenantConfigRestrictions.READ_ONLY_TOPIC_CONFIGS.contains(ce.name());
             }
             return false;
           })
+          // For configs that are visible but not updatable, set readOnly to true
+          .map(ce -> MultiTenantConfigRestrictions.READ_ONLY_TOPIC_CONFIGS.contains(ce.name()) ?
+                  new DescribeConfigsResponse.ConfigEntry(ce.name(), ce.value(), ce.source(), ce.isSensitive(), true, ce.synonyms()) :
+                  ce
+          )
           .collect(Collectors.toSet());
       filteredConfigs.put(
           resource,
