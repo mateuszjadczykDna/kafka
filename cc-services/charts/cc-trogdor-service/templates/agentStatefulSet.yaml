@@ -27,6 +27,10 @@ spec:
         - name: "jvm-config-volume"
           configMap:
             name: {{ .Chart.Name }}-sharedjvmconfig
+        - name: "log-volume"
+          hostPath:
+            path: /var/log/caas/trogdor
+            type: ""
       securityContext:
         allowPrivilegeEscalation: true
         hostIPC: true
@@ -47,6 +51,8 @@ spec:
               mountPath: /mnt/config
             - name: "jvm-config-volume"
               mountPath: /opt/caas/config/trogdor
+            - name: "log-volume"
+              mountPath: /mnt/log
           env:
             - name: EXTRA_CLASS_ARGS
               value: "--agent.config /mnt/config/config.json"

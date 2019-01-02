@@ -40,17 +40,17 @@ data:
 {{/* Debugging (print finalized flags) */ -}}
 -XX:+PrintFlagsFinal
 -XX:+UnlockDiagnosticVMOptions'
-  log4j.properties: 'log4j.appender.stdout=org.apache.log4j.ConsoleAppender
-log4j.appender.stdout.layout=org.apache.log4j.EnhancedPatternLayout
-log4j.appender.stdout.layout.ConversionPattern=[%p] %d [%t] %c %M - %m%n
-log4j.appender.jsonlog=org.apache.log4j.FileAppender
-log4j.appender.jsonlog.File=/mnt/log/main.jsonl
-log4j.appender.jsonlog.layout=org.jetbrains.appenders.JsonLayout
-log4j.appender.humanlog.layout=org.apache.log4j.EnhancedPatternLayout
-log4j.appender.humanlog.layout.ConversionPattern=[%p] %d [%t] %c %M - %m%n
-log4j.appender.humanlog.File=/mnt/log/main.log
-log4j.appender.humanlog=org.apache.log4j.FileAppender
-log4j.rootLogger=INFO, TRACE, DEBUG, stdout, jsonlog, humanlog
-log4j.logger.org.apache.kafka=TRACE
-log4j.logger.org.eclipse.jetty=INFO
-'
+  log4j.properties: |
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.EnhancedPatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=[%p] %d [%t] %c %M - %m%n
+    log4j.appender.jsonlog=org.apache.log4j.FileAppender
+    log4j.appender.jsonlog.File=/mnt/log/trogdor.jsonl
+    log4j.appender.jsonlog.layout=org.jetbrains.appenders.JsonLayout
+    log4j.appender.humanlog.layout=org.apache.log4j.EnhancedPatternLayout
+    log4j.appender.humanlog.layout.ConversionPattern=[%p] %d [%t] %c %M - %m%n
+    log4j.appender.humanlog.File=/mnt/log/trogdor.log
+    log4j.appender.humanlog=org.apache.log4j.FileAppender
+    log4j.rootLogger=INFO, TRACE, DEBUG, stdout, jsonlog, humanlog
+    log4j.logger.org.apache.kafka=INFO
+    log4j.logger.org.eclipse.jetty=INFO
