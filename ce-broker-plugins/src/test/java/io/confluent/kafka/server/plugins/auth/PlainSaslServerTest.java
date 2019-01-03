@@ -65,6 +65,7 @@ public class PlainSaslServerTest {
     final String authString = "\u0000" + username + "\u0000" + password;
     configureUser(username, password, "tenant1");
     saslServer.evaluateResponse(authString.getBytes());
+    assertEquals(username, saslServer.getAuthorizationID());
     assertEquals(1L, stats.getSucceeded());
     assertEquals(0L, stats.getFailed());
     assertEquals(1L, stats.getTotal());

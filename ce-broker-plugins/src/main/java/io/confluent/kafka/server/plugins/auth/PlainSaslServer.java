@@ -134,7 +134,7 @@ public class PlainSaslServer implements MultiTenantSaslServer {
     }
 
     MultiTenantPrincipal principal = authenticator.authenticate(username, password);
-    authorizationID = principal.getName();
+    authorizationID = principal.user();
     MDC.put("authorizationId", authorizationID);
     tenantMetadata = principal.tenantMetadata();
     MDC.put("tenant", tenantMetadata.tenantName);

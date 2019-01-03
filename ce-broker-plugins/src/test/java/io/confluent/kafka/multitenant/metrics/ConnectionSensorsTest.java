@@ -59,9 +59,9 @@ public class ConnectionSensorsTest {
   @Test
   public void testRecordAuthenticatedConnectionsPerTenant() {
     TenantMetadata firstTenantMetadata = new TenantMetadata("tenant1", "cluster-1");
-    MultiTenantPrincipal firstTenantU1 = new MultiTenantPrincipal("tenant1_user1", firstTenantMetadata);
-    MultiTenantPrincipal firstTenantU2 = new MultiTenantPrincipal("tenant1_user2", firstTenantMetadata);
-    MultiTenantPrincipal secondTenantU1 = new MultiTenantPrincipal("tenant2_user1", new TenantMetadata("tenant2", "cluster-1"));
+    MultiTenantPrincipal firstTenantU1 = new MultiTenantPrincipal("user1", firstTenantMetadata);
+    MultiTenantPrincipal firstTenantU2 = new MultiTenantPrincipal("user2", firstTenantMetadata);
+    MultiTenantPrincipal secondTenantU1 = new MultiTenantPrincipal("user1", new TenantMetadata("tenant2", "cluster-1"));
 
     ConnectionSensors firstTenantU1Sensors = new ConnectionSensorBuilder(metrics, firstTenantU1).build();
     ConnectionSensors firstTenantU2Sensors = new ConnectionSensorBuilder(metrics, firstTenantU2).build();
@@ -71,35 +71,35 @@ public class ConnectionSensorsTest {
     for (int i = 0; i < 5; i++) {
       firstTenantU1Sensors.recordAuthenticatedConnection();
     }
-    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant1", "tenant1_user1", connectionMetrics);
-    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant1", "tenant1_user2", true, connectionMetrics);
-    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant2", "tenant2_user1", true, connectionMetrics);
+    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant1", "user1", connectionMetrics);
+    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant1", "user2", true, connectionMetrics);
+    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant2", "user1", true, connectionMetrics);
 
-    // increment connections for tenant1_user2, all others should be unaffected
+    // increment connections for tenant1:user2, all others should be unaffected
     firstTenantU2Sensors.recordAuthenticatedConnection();
     Map<String, KafkaMetric> firstTenantU1Metrics = TenantMetricsTestUtils.verifyTenantMetrics(
-            metrics, "tenant1", "tenant1_user1", connectionMetrics);
+            metrics, "tenant1", "user1", connectionMetrics);
     Map<String, KafkaMetric> firstTenantU2Metrics = TenantMetricsTestUtils.verifyTenantMetrics(
-            metrics, "tenant1", "tenant1_user2", connectionMetrics);
+            metrics, "tenant1", "user2", connectionMetrics);
     assertEquals(5.00,
             (double) firstTenantU1Metrics.get(activeAuthConnectionsCountMetricName).metricValue(), 0);  // should be unaffected
     assertEquals(1.00,
             (double) firstTenantU2Metrics.get(activeAuthConnectionsCountMetricName).metricValue(), 0);
-    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant2", "tenant2_user1", true, connectionMetrics);
+    TenantMetricsTestUtils.verifyTenantMetrics(metrics, "tenant2", "user1", true, connectionMetrics);
 
-    // increment connections for tenant2_user1, all others should be unaffected
+    // increment connections for tenant2:user1, all others should be unaffected
     for (int i = 0; i < 3; i++) {
       secondTenantU1Sensors.recordAuthenticatedConnection();
     }
     Map<String, KafkaMetric> secondTenantU1Metrics = TenantMetricsTestUtils.verifyTenantMetrics(
-            metrics, "tenant2", "tenant2_user1", connectionMetrics);
+            metrics, "tenant2", "user1", connectionMetrics);
     assertEquals(3.00,
             (double) secondTenantU1Metrics.get(activeAuthConnectionsCountMetricName).metricValue(), 0);
     // tenant1 metrics should be unaffected
     firstTenantU1Metrics = TenantMetricsTestUtils.verifyTenantMetrics(
-            metrics, "tenant1", "tenant1_user1", connectionMetrics);
+            metrics, "tenant1", "user1", connectionMetrics);
     firstTenantU2Metrics = TenantMetricsTestUtils.verifyTenantMetrics(
-            metrics, "tenant1", "tenant1_user2", connectionMetrics);
+            metrics, "tenant1", "user2", connectionMetrics);
     assertEquals(5.00,
             (double) firstTenantU1Metrics.get(activeAuthConnectionsCountMetricName).metricValue(), 0);
     assertEquals(1.00,
