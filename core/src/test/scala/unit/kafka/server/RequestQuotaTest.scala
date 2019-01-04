@@ -251,7 +251,7 @@ class RequestQuotaTest extends BaseRequestTest {
           new FindCoordinatorRequest.Builder(FindCoordinatorRequest.CoordinatorType.GROUP, "test-group")
 
         case ApiKeys.JOIN_GROUP =>
-          new JoinGroupRequest.Builder("test-join-group", 200, "", "consumer",
+          new JoinGroupRequest.Builder("test-join-group", 200, JoinGroupRequest.UNKNOWN_MEMBER_ID, JoinGroupRequest.EMPTY_GROUP_INSTANCE_ID , "consumer",
             List(new JoinGroupRequest.ProtocolMetadata("consumer-range", ByteBuffer.wrap("test".getBytes()))).asJava)
            .setRebalanceTimeout(100)
 

@@ -79,9 +79,11 @@ public class JoinGroupResponse extends AbstractResponse {
      */
     private static final Schema JOIN_GROUP_RESPONSE_V4 = JOIN_GROUP_RESPONSE_V3;
 
+    private static final Schema JOIN_GROUP_RESPONSE_V5 = JOIN_GROUP_RESPONSE_V4;
+
     public static Schema[] schemaVersions() {
         return new Schema[] {JOIN_GROUP_RESPONSE_V0, JOIN_GROUP_RESPONSE_V1, JOIN_GROUP_RESPONSE_V2,
-            JOIN_GROUP_RESPONSE_V3, JOIN_GROUP_RESPONSE_V4};
+            JOIN_GROUP_RESPONSE_V3, JOIN_GROUP_RESPONSE_V4, JOIN_GROUP_RESPONSE_V5};
     }
 
     public static final String UNKNOWN_PROTOCOL = "";
@@ -99,6 +101,8 @@ public class JoinGroupResponse extends AbstractResponse {
      * INVALID_SESSION_TIMEOUT (26)
      * GROUP_AUTHORIZATION_FAILED (30)
      * MEMBER_ID_REQUIRED (79)
+     * MEMBER_ID_MISMATCH (80)
+     * GROUP_INSTANCE_ID_NOT_FOUND (81)
      */
 
     private final int throttleTimeMs;

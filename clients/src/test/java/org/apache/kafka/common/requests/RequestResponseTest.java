@@ -732,10 +732,13 @@ public class RequestResponseTest {
         List<JoinGroupRequest.ProtocolMetadata> protocols = new ArrayList<>();
         protocols.add(new JoinGroupRequest.ProtocolMetadata("consumer-range", metadata));
         if (version == 0) {
-            return new JoinGroupRequest.Builder("group1", 30000, "consumer1", "consumer", protocols).
+            return new JoinGroupRequest.Builder("group1", 30000, "consumer1", JoinGroupRequest.EMPTY_GROUP_INSTANCE_ID, "consumer", protocols).
                     build((short) version);
+        } else if (version < 5) {
+            return new JoinGroupRequest.Builder("group1", 10000, "consumer1", JoinGroupRequest.EMPTY_GROUP_INSTANCE_ID, "consumer", protocols).
+                    setRebalanceTimeout(60000).build();
         } else {
-            return new JoinGroupRequest.Builder("group1", 10000, "consumer1", "consumer", protocols).
+            return new JoinGroupRequest.Builder("group1", 10000, "consumer1", "groupInstance1", "consumer", protocols).
                     setRebalanceTimeout(60000).build();
         }
     }

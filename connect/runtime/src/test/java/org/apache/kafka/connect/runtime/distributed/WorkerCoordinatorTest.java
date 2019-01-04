@@ -24,6 +24,7 @@ import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
+import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.common.requests.JoinGroupRequest.ProtocolMetadata;
 import org.apache.kafka.common.requests.JoinGroupResponse;
 import org.apache.kafka.common.requests.SyncGroupRequest;
@@ -103,6 +104,7 @@ public class WorkerCoordinatorTest {
                 loggerFactory,
                 consumerClient,
                 groupId,
+                JoinGroupRequest.EMPTY_GROUP_INSTANCE_ID,
                 rebalanceTimeoutMs,
                 sessionTimeoutMs,
                 heartbeatIntervalMs,

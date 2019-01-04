@@ -18,6 +18,7 @@ package org.apache.kafka.connect.runtime.distributed;
 
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.connect.runtime.WorkerConfig;
 
 import java.util.Map;
@@ -37,6 +38,13 @@ public class DistributedConfig extends WorkerConfig {
      */
     public static final String GROUP_ID_CONFIG = "group.id";
     private static final String GROUP_ID_DOC = "A unique string that identifies the Connect cluster group this worker belongs to.";
+
+    /**
+     * <code>group.instance.id</code>
+     */
+    public static final String GROUP_INSTANCE_ID_CONFIG = "group.instance.id";
+    private static final String GROUP_INSTANCE_ID_DOC = "A unique identifier of the consumer instance provided by end user. If set to non-empty string, "
+        + "the consumer is treated as a static member, otherwise an empty id indicates a dynamic member.";
 
     /**
      * <code>session.timeout.ms</code>
@@ -138,6 +146,11 @@ public class DistributedConfig extends WorkerConfig {
                         ConfigDef.Type.STRING,
                         ConfigDef.Importance.HIGH,
                         GROUP_ID_DOC)
+                .define(GROUP_INSTANCE_ID_CONFIG,
+                        ConfigDef.Type.STRING,
+                        JoinGroupRequest.EMPTY_GROUP_INSTANCE_ID,
+                        ConfigDef.Importance.MEDIUM,
+                        GROUP_INSTANCE_ID_DOC)
                 .define(SESSION_TIMEOUT_MS_CONFIG,
                         ConfigDef.Type.INT,
                         10000,

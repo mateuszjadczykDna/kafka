@@ -64,6 +64,7 @@ public final class WorkerCoordinator extends AbstractCoordinator implements Clos
     public WorkerCoordinator(LogContext logContext,
                              ConsumerNetworkClient client,
                              String groupId,
+                             String groupInstanceId,
                              int rebalanceTimeoutMs,
                              int sessionTimeoutMs,
                              int heartbeatIntervalMs,
@@ -77,14 +78,14 @@ public final class WorkerCoordinator extends AbstractCoordinator implements Clos
         super(logContext,
               client,
               groupId,
+              groupInstanceId,
               rebalanceTimeoutMs,
               sessionTimeoutMs,
               heartbeatIntervalMs,
               metrics,
               metricGrpPrefix,
               time,
-              retryBackoffMs,
-              true);
+              retryBackoffMs);
         this.log = logContext.logger(WorkerCoordinator.class);
         this.restUrl = restUrl;
         this.configStorage = configStorage;

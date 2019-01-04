@@ -128,6 +128,7 @@ public class WorkerGroupMember {
                     logContext,
                     this.client,
                     groupId,
+                    config.getString(DistributedConfig.GROUP_INSTANCE_ID_CONFIG),
                     config.getInt(DistributedConfig.REBALANCE_TIMEOUT_MS_CONFIG),
                     config.getInt(DistributedConfig.SESSION_TIMEOUT_MS_CONFIG),
                     config.getInt(DistributedConfig.HEARTBEAT_INTERVAL_MS_CONFIG),
