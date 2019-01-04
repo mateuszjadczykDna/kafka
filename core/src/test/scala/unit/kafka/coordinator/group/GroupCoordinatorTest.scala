@@ -126,7 +126,7 @@ class GroupCoordinatorTest extends JUnitSuite {
 
     // JoinGroup
     var joinGroupResponse: Option[JoinGroupResult] = None
-    groupCoordinator.handleJoinGroup(otherGroupId, memberId, true, "clientId", "clientHost", 60000, 10000, "consumer",
+    groupCoordinator.handleJoinGroup(otherGroupId, memberId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID, true, "clientId", "clientHost", 60000, 10000, "consumer",
       List("range" -> new Array[Byte](0)), result => { joinGroupResponse = Some(result)})
     assertEquals(Some(Errors.COORDINATOR_LOAD_IN_PROGRESS), joinGroupResponse.map(_.error))
 
@@ -1664,8 +1664,8 @@ class GroupCoordinatorTest extends JUnitSuite {
 
     EasyMock.replay(replicaManager)
 
-    groupCoordinator.handleJoinGroup(groupId, memberId, requireKnownMemberId, "clientId", "clientHost", rebalanceTimeout, sessionTimeout,
-      protocolType, protocols, responseCallback)
+    groupCoordinator.handleJoinGroup(groupId, memberId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID,
+      requireKnownMemberId, "clientId", "clientHost", rebalanceTimeout, sessionTimeout, protocolType, protocols, responseCallback)
     responseFuture
   }
 

@@ -184,6 +184,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   private var protocol: Option[String] = None
 
   private val members = new mutable.HashMap[String, MemberMetadata]
+  // Mapping group.instance.id to member.id
+  private val staticMembers = new mutable.HashMap[String, String]
   private val pendingMembers = new mutable.HashSet[String]
   private var numMembersAwaitingJoin = 0
   private val supportedProtocols = new mutable.HashMap[String, Integer]().withDefaultValue(0)

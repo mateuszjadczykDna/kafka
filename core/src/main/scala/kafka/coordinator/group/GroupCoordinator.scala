@@ -101,6 +101,7 @@ class GroupCoordinator(val brokerId: Int,
 
   def handleJoinGroup(groupId: String,
                       memberId: String,
+                      groupInstanceId: String,
                       requireKnownMemberId: Boolean,
                       clientId: String,
                       clientHost: String,

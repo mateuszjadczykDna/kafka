@@ -102,10 +102,13 @@ public class JoinGroupRequest extends AbstractRequest {
 
     public static final String UNKNOWN_MEMBER_ID = "";
 
+    public static final String UNKNOWN_GROUP_INSTANCE_ID = "";
+
     private final String groupId;
     private final int sessionTimeout;
     private final int rebalanceTimeout;
     private final String memberId;
+    private final String groupInstanceId;
     private final String protocolType;
     private final List<ProtocolMetadata> groupProtocols;
 
@@ -131,6 +134,7 @@ public class JoinGroupRequest extends AbstractRequest {
         private final String groupId;
         private final int sessionTimeout;
         private final String memberId;
+        private final String groupInstanceId;
         private final String protocolType;
         private final List<ProtocolMetadata> groupProtocols;
         private int rebalanceTimeout = 0;
@@ -142,6 +146,7 @@ public class JoinGroupRequest extends AbstractRequest {
             this.sessionTimeout = sessionTimeout;
             this.rebalanceTimeout = sessionTimeout;
             this.memberId = memberId;
+            this.groupInstanceId =
             this.protocolType = protocolType;
             this.groupProtocols = groupProtocols;
         }
@@ -157,8 +162,8 @@ public class JoinGroupRequest extends AbstractRequest {
                 // v0 had no rebalance timeout but used session timeout implicitly
                 rebalanceTimeout = sessionTimeout;
             }
-            return new JoinGroupRequest(version, groupId, sessionTimeout,
-                    rebalanceTimeout, memberId, protocolType, groupProtocols);
+            return new JoinGroupRequest(version, groupId, sessionTimeout, rebalanceTimeout,
+                groupInstanceId, memberId, protocolType, groupProtocols);
         }
 
         @Override
@@ -177,13 +182,14 @@ public class JoinGroupRequest extends AbstractRequest {
     }
 
     private JoinGroupRequest(short version, String groupId, int sessionTimeout,
-            int rebalanceTimeout, String memberId, String protocolType,
+            int rebalanceTimeout, String memberId, String groupInstanceId, String protocolType,
             List<ProtocolMetadata> groupProtocols) {
         super(ApiKeys.JOIN_GROUP, version);
         this.groupId = groupId;
         this.sessionTimeout = sessionTimeout;
         this.rebalanceTimeout = rebalanceTimeout;
         this.memberId = memberId;
+        this.groupInstanceId = groupInstanceId;
         this.protocolType = protocolType;
         this.groupProtocols = groupProtocols;
     }
@@ -202,6 +208,7 @@ public class JoinGroupRequest extends AbstractRequest {
             rebalanceTimeout = sessionTimeout;
 
         memberId = struct.get(MEMBER_ID);
+        groupInstanceId = struct.get(GROUP_INSTANCE_ID);
         protocolType = struct.getString(PROTOCOL_TYPE_KEY_NAME);
 
         groupProtocols = new ArrayList<>();
@@ -259,6 +266,10 @@ public class JoinGroupRequest extends AbstractRequest {
 
     public String memberId() {
         return memberId;
+    }
+
+    public String groupInstanceId() {
+        return groupInstanceId;
     }
 
     public List<ProtocolMetadata> groupProtocols() {
