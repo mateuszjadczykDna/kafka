@@ -672,6 +672,10 @@ public class StreamThread extends Thread {
             originalReset = (String) consumerConfigs.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG);
             consumerConfigs.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none");
         }
+
+        // Use thread client id to overwrite group.instance.id
+        consumerConfigs.put(ConsumerConfig.GROUP_INSTANCE_ID_CONFIG, threadClientId + "-consumer");
+
         final Consumer<byte[], byte[]> consumer = clientSupplier.getConsumer(consumerConfigs);
         taskManager.setConsumer(consumer);
 

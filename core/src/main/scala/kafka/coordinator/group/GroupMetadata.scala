@@ -22,6 +22,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kafka.common.OffsetAndMetadata
 import kafka.utils.{CoreUtils, Logging, nonthreadsafe}
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.requests.JoinGroupRequest
 import org.apache.kafka.common.utils.Time
 
 import scala.collection.{Seq, immutable, mutable}
@@ -184,6 +185,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   private var protocol: Option[String] = None
 
   private val members = new mutable.HashMap[String, MemberMetadata]
+  // Mapping group.instance.id to member.id mapping
+  private val staticMembers = new mutable.HashMap[String, String]
   private val pendingMembers = new mutable.HashSet[String]
   private var numMembersAwaitingJoin = 0
   private val supportedProtocols = new mutable.HashMap[String, Integer]().withDefaultValue(0)
@@ -201,6 +204,16 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   def not(groupState: GroupState) = state != groupState
   def has(memberId: String) = members.contains(memberId)
   def get(memberId: String) = members(memberId)
+
+  def hasStaticMember(groupInstanceId: String) = staticMembers.contains(groupInstanceId)
+  def getStaticMemberId(groupInstanceId: String) = staticMembers(groupInstanceId)
+
+  def addOrUpdateStaticMember(groupInstanceId: String, newMemberId: String) = {
+    if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)
+      staticMembers.put(groupInstanceId, newMemberId)
+  }
+
+  def removeStaticMember(groupInstanceId: String) = staticMembers.remove(groupInstanceId)
 
   def isLeader(memberId: String): Boolean = leaderId.contains(memberId)
   def leaderOrNull: String = leaderId.orNull
@@ -224,7 +237,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
       numMembersAwaitingJoin += 1
   }
 
-  def remove(memberId: String) {
+  def remove(memberId: String): MemberMetadata = {
+    val removedMember = members(memberId)
     members.remove(memberId).foreach { member =>
       member.supportedProtocols.foreach{ case (protocol, _) => supportedProtocols(protocol) -= 1 }
       if (member.awaitingJoinCallback != null)
@@ -238,6 +252,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
         Some(members.keys.head)
       }
     }
+
+    removedMember
   }
 
   def isPendingMember(memberId: String): Boolean = pendingMembers.contains(memberId) && !has(memberId)

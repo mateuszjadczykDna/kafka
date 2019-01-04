@@ -76,15 +76,14 @@ public final class WorkerCoordinator extends AbstractCoordinator implements Clos
                              WorkerRebalanceListener listener) {
         super(logContext,
               client,
-              groupId,
-              rebalanceTimeoutMs,
-              sessionTimeoutMs,
-              heartbeatIntervalMs,
-              metrics,
-              metricGrpPrefix,
-              time,
-              retryBackoffMs,
-              true);
+              groupId, ,
+            rebalanceTimeoutMs,
+            sessionTimeoutMs,
+            heartbeatIntervalMs,
+            metrics,
+            metricGrpPrefix,
+            time,
+            retryBackoffMs);
         this.log = logContext.logger(WorkerCoordinator.class);
         this.restUrl = restUrl;
         this.configStorage = configStorage;

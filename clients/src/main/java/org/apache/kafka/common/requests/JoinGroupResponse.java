@@ -32,6 +32,7 @@ import java.util.Map;
 
 import static org.apache.kafka.common.protocol.CommonFields.ERROR_CODE;
 import static org.apache.kafka.common.protocol.CommonFields.GENERATION_ID;
+import static org.apache.kafka.common.protocol.CommonFields.GROUP_INSTANCE_ID;
 import static org.apache.kafka.common.protocol.CommonFields.MEMBER_ID;
 import static org.apache.kafka.common.protocol.CommonFields.THROTTLE_TIME_MS;
 import static org.apache.kafka.common.protocol.types.Type.BYTES;
@@ -79,9 +80,19 @@ public class JoinGroupResponse extends AbstractResponse {
      */
     private static final Schema JOIN_GROUP_RESPONSE_V4 = JOIN_GROUP_RESPONSE_V3;
 
+    private static final Schema JOIN_GROUP_RESPONSE_V5 = new Schema(
+        THROTTLE_TIME_MS,
+        ERROR_CODE,
+        GENERATION_ID,
+        new Field(GROUP_PROTOCOL_KEY_NAME, STRING, "The group protocol selected by the coordinator"),
+        new Field(LEADER_ID_KEY_NAME, STRING, "The leader of the group"),
+        MEMBER_ID,
+        GROUP_INSTANCE_ID,
+        new Field(MEMBERS_KEY_NAME, new ArrayOf(JOIN_GROUP_RESPONSE_MEMBER_V0)));
+
     public static Schema[] schemaVersions() {
         return new Schema[] {JOIN_GROUP_RESPONSE_V0, JOIN_GROUP_RESPONSE_V1, JOIN_GROUP_RESPONSE_V2,
-            JOIN_GROUP_RESPONSE_V3, JOIN_GROUP_RESPONSE_V4};
+            JOIN_GROUP_RESPONSE_V3, JOIN_GROUP_RESPONSE_V4, JOIN_GROUP_RESPONSE_V5};
     }
 
     public static final String UNKNOWN_PROTOCOL = "";

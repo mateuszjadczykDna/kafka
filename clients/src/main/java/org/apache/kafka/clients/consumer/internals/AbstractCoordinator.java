@@ -22,8 +22,10 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.errors.DisconnectException;
 import org.apache.kafka.common.errors.GroupAuthorizationException;
+import org.apache.kafka.common.errors.GroupInstanceIdNotFoundException;
 import org.apache.kafka.common.errors.IllegalGenerationException;
 import org.apache.kafka.common.errors.InterruptException;
+import org.apache.kafka.common.errors.MemberIdMismatchException;
 import org.apache.kafka.common.errors.MemberIdRequiredException;
 import org.apache.kafka.common.errors.RebalanceInProgressException;
 import org.apache.kafka.common.errors.RetriableException;
@@ -104,11 +106,11 @@ public abstract class AbstractCoordinator implements Closeable {
 
     private final Logger log;
     private final int sessionTimeoutMs;
-    private final boolean leaveGroupOnClose;
     private final GroupCoordinatorMetrics sensors;
     private final Heartbeat heartbeat;
     protected final int rebalanceTimeoutMs;
     protected final String groupId;
+    protected final String groupInstanceId;
     protected final ConsumerNetworkClient client;
     protected final Time time;
     protected final long retryBackoffMs;
@@ -129,22 +131,22 @@ public abstract class AbstractCoordinator implements Closeable {
     public AbstractCoordinator(LogContext logContext,
                                ConsumerNetworkClient client,
                                String groupId,
+                               String groupInstanceId,
                                int rebalanceTimeoutMs,
                                int sessionTimeoutMs,
                                Heartbeat heartbeat,
                                Metrics metrics,
                                String metricGrpPrefix,
                                Time time,
-                               long retryBackoffMs,
-                               boolean leaveGroupOnClose) {
+                               long retryBackoffMs) {
         this.log = logContext.logger(AbstractCoordinator.class);
         this.client = client;
         this.time = time;
         this.groupId = Objects.requireNonNull(groupId,
                 "Expected a non-null group id for coordinator construction");
+        this.groupInstanceId = groupInstanceId;
         this.rebalanceTimeoutMs = rebalanceTimeoutMs;
         this.sessionTimeoutMs = sessionTimeoutMs;
-        this.leaveGroupOnClose = leaveGroupOnClose;
         this.heartbeat = heartbeat;
         this.sensors = new GroupCoordinatorMetrics(metrics, metricGrpPrefix);
         this.retryBackoffMs = retryBackoffMs;
@@ -153,17 +155,22 @@ public abstract class AbstractCoordinator implements Closeable {
     public AbstractCoordinator(LogContext logContext,
                                ConsumerNetworkClient client,
                                String groupId,
+                               String groupInstanceId,
                                int rebalanceTimeoutMs,
                                int sessionTimeoutMs,
                                int heartbeatIntervalMs,
                                Metrics metrics,
                                String metricGrpPrefix,
                                Time time,
-                               long retryBackoffMs,
-                               boolean leaveGroupOnClose) {
-        this(logContext, client, groupId, rebalanceTimeoutMs, sessionTimeoutMs,
-                new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
-                metrics, metricGrpPrefix, time, retryBackoffMs, leaveGroupOnClose);
+                               long retryBackoffMs) {
+        this(logContext,
+            client,
+            groupId,
+            groupInstanceId,
+            rebalanceTimeoutMs,
+            sessionTimeoutMs,
+            new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
+            metrics, metricGrpPrefix, time, retryBackoffMs);
     }
 
     /**
@@ -417,7 +424,8 @@ public abstract class AbstractCoordinator implements Closeable {
                 if (exception instanceof UnknownMemberIdException ||
                         exception instanceof RebalanceInProgressException ||
                         exception instanceof IllegalGenerationException ||
-                        exception instanceof MemberIdRequiredException)
+                        exception instanceof MemberIdRequiredException ||
+                        exception instanceof GroupInstanceIdNotFoundException)
                     continue;
                 else if (!future.isRetriable())
                     throw exception;
@@ -491,6 +499,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 groupId,
                 this.sessionTimeoutMs,
                 this.generation.memberId,
+                this.groupInstanceId,
                 protocolType(),
                 metadata()).setRebalanceTimeout(this.rebalanceTimeoutMs);
 
@@ -560,6 +569,13 @@ public abstract class AbstractCoordinator implements Closeable {
                     AbstractCoordinator.this.state = MemberState.UNJOINED;
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
+            } else if (error == Errors.MEMBER_ID_MISMATCH) {
+               // Immediately fail this consumer because this indicates another client has a collided group.instance.id
+               throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
+            } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {
+                resetGeneration();
+                log.debug("The group instance id info was not matching records storing on broker, resetting generation to rejoin.");
+                future.raise(Errors.GROUP_INSTANCE_ID_NOT_FOUND);
             } else {
                 // unexpected error, throw the exception
                 future.raise(new KafkaException("Unexpected error in join group response: " + error.message()));
@@ -779,7 +795,9 @@ public abstract class AbstractCoordinator implements Closeable {
             // Synchronize after closing the heartbeat thread since heartbeat thread
             // needs this lock to complete and terminate after close flag is set.
             synchronized (this) {
-                if (leaveGroupOnClose) {
+                // Starting from 2.2, only dynamic members will send LeaveGroupRequest to the broker,
+                // consumer with valid group.instance.id is viewed as static member.
+                if (!this.groupInstanceId.equals(JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)) {
                     maybeLeaveGroup();
                 }
 

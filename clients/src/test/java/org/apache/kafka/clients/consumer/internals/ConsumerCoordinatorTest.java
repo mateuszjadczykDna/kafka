@@ -101,6 +101,7 @@ public class ConsumerCoordinatorTest {
     private final TopicPartition t1p = new TopicPartition(topic1, 0);
     private final TopicPartition t2p = new TopicPartition(topic2, 0);
     private final String groupId = "test-group";
+    private final String groupInstanceId = "test-instance";
     private final int rebalanceTimeoutMs = 60000;
     private final int sessionTimeoutMs = 10000;
     private final int heartbeatIntervalMs = 5000;
@@ -2020,24 +2021,24 @@ public class ConsumerCoordinatorTest {
                                                  final boolean autoCommitEnabled,
                                                  final boolean leaveGroup) {
         return new ConsumerCoordinator(
-                new LogContext(),
-                consumerClient,
-                groupId,
-                rebalanceTimeoutMs,
-                sessionTimeoutMs,
-                heartbeat,
-                assignors,
-                metadata,
-                subscriptions,
-                metrics,
-                "consumer" + groupId,
-                time,
-                retryBackoffMs,
-                autoCommitEnabled,
-                autoCommitIntervalMs,
-                null,
-                excludeInternalTopics,
-                leaveGroup);
+            new LogContext(),
+            consumerClient,
+            groupId,
+            groupInstanceId,
+            rebalanceTimeoutMs,
+            sessionTimeoutMs,
+            heartbeat,
+            assignors,
+            metadata,
+            subscriptions,
+            metrics,
+            "consumer" + groupId,
+            time,
+            retryBackoffMs,
+            autoCommitEnabled,
+            autoCommitIntervalMs,
+            null,
+            excludeInternalTopics);
     }
 
     private FindCoordinatorResponse groupCoordinatorResponse(Node node, Errors error) {
