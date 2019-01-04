@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.apache.kafka.common.protocol.CommonFields.GROUP_ID;
+import static org.apache.kafka.common.protocol.CommonFields.GROUP_INSTANCE_ID;
 import static org.apache.kafka.common.protocol.CommonFields.MEMBER_ID;
 import static org.apache.kafka.common.protocol.types.Type.BYTES;
 import static org.apache.kafka.common.protocol.types.Type.INT32;
@@ -82,9 +83,21 @@ public class JoinGroupRequest extends AbstractRequest {
      */
     private static final Schema JOIN_GROUP_REQUEST_V4 = JOIN_GROUP_REQUEST_V3;
 
+    private static final Schema JOIN_GROUP_REQUEST_V5 = new Schema(
+        GROUP_ID,
+        new Field(SESSION_TIMEOUT_KEY_NAME, INT32, "The coordinator considers the consumer dead if it receives no " +
+            "heartbeat after this timeout in ms."),
+        new Field(REBALANCE_TIMEOUT_KEY_NAME, INT32, "The maximum time that the coordinator will wait for each " +
+            "member to rejoin when rebalancing the group"),
+        MEMBER_ID,
+        GROUP_INSTANCE_ID,
+        new Field(PROTOCOL_TYPE_KEY_NAME, STRING, "Unique name for class of protocols implemented by group"),
+        new Field(GROUP_PROTOCOLS_KEY_NAME, new ArrayOf(JOIN_GROUP_REQUEST_PROTOCOL_V0), "List of protocols " +
+            "that the member supports"));
+
     public static Schema[] schemaVersions() {
         return new Schema[] {JOIN_GROUP_REQUEST_V0, JOIN_GROUP_REQUEST_V1, JOIN_GROUP_REQUEST_V2,
-            JOIN_GROUP_REQUEST_V3, JOIN_GROUP_REQUEST_V4};
+            JOIN_GROUP_REQUEST_V3, JOIN_GROUP_REQUEST_V4, JOIN_GROUP_REQUEST_V5};
     }
 
     public static final String UNKNOWN_MEMBER_ID = "";
@@ -216,6 +229,7 @@ public class JoinGroupRequest extends AbstractRequest {
             case 2:
             case 3:
             case 4:
+            case 5:
                 return new JoinGroupResponse(
                     throttleTimeMs,
                     Errors.forException(e),
