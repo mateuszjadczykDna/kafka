@@ -12,6 +12,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
 import org.apache.kafka.common.config.ConfigResource;
+import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.metrics.Metrics;
@@ -24,6 +25,7 @@ import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.AbstractResponse;
+import org.apache.kafka.common.requests.AlterConfigsRequest;
 import org.apache.kafka.common.requests.CreateAclsRequest;
 import org.apache.kafka.common.requests.DeleteAclsRequest;
 import org.apache.kafka.common.requests.DeleteAclsResponse;
@@ -63,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -143,6 +146,8 @@ public class MultiTenantRequestContext extends RequestContext {
           body = transformCreatePartitionsRequest((CreatePartitionsRequest) body, apiVersion);
         } else if (body instanceof ProduceRequest) {
           updatePartitionBytesInMetrics((ProduceRequest) body);
+        } else if (body instanceof AlterConfigsRequest) {
+          body = transformAlterConfigsRequest((AlterConfigsRequest) body, apiVersion);
         }
       } catch (InvalidRequestException e) {
         // We couldn't transform the request. Save the tenant request exception and intercept later
@@ -269,7 +274,15 @@ public class MultiTenantRequestContext extends RequestContext {
         topicAssignment.put(i, assignment.get(i));
       }
 
-      Map<String, String> configs = topics.get(topic).configs;
+      Map<String, String> configs = new HashMap<>();
+      for (Map.Entry<String, String> configEntry : topics.get(topic).configs.entrySet()) {
+        if (allowConfigInRequest(configEntry.getKey())) {
+          configs.put(configEntry.getKey(), configEntry.getValue());
+        } else {
+          handleNonUpdateableConfig(configEntry.getKey());
+        }
+      }
+
       CreateTopicsRequest.TopicDetails topicDetails;
       if (!topicAssignment.isEmpty()) {
         topicDetails = new CreateTopicsRequest.TopicDetails(topicAssignment, configs);
@@ -283,6 +296,46 @@ public class MultiTenantRequestContext extends RequestContext {
 
     return new CreateTopicsRequest.Builder(transformedTopics, topicsRequest.timeout(),
         topicsRequest.validateOnly()).build(version);
+  }
+
+  private AlterConfigsRequest transformAlterConfigsRequest(AlterConfigsRequest alterConfigsRequest,
+                                                       short version) {
+    Map<ConfigResource, AlterConfigsRequest.Config> configs = alterConfigsRequest.configs();
+    Map<ConfigResource, AlterConfigsRequest.Config> transformedConfigs = new HashMap<>(0);
+
+    for (Map.Entry<ConfigResource, AlterConfigsRequest.Config> resourceConfigEntry : configs.entrySet()) {
+      // Only transform topic configs
+      if (resourceConfigEntry.getKey().type() != ConfigResource.Type.TOPIC) {
+        transformedConfigs.put(resourceConfigEntry.getKey(), resourceConfigEntry.getValue());
+        continue;
+      }
+
+      List<AlterConfigsRequest.ConfigEntry> filteredConfigs = new ArrayList<>();
+      for (AlterConfigsRequest.ConfigEntry configEntry : resourceConfigEntry.getValue().entries()) {
+        if (allowConfigInRequest(configEntry.name())) {
+          filteredConfigs.add(configEntry);
+        } else {
+          handleNonUpdateableConfig(configEntry.name());
+        }
+      }
+
+      transformedConfigs.put(resourceConfigEntry.getKey(), new AlterConfigsRequest.Config(filteredConfigs));
+    }
+
+    return new AlterConfigsRequest.Builder(transformedConfigs, alterConfigsRequest.validateOnly()).build(version);
+  }
+
+  // To preserve compatibility with clients that perform config updates (for example, Replicator mirroring
+  // topic configs from the source cluster), remove non-updateable configs prior to config policy validation.
+  // For configs with a range of allowable values, and for min.insync.replicas (which must be equal to 2),
+  // leave the configs in the request and let them fail the config policy, rather than changing their values.
+  private boolean allowConfigInRequest(String key) {
+    return MultiTenantConfigRestrictions.UPDATABLE_TOPIC_CONFIGS.contains(key) ||
+            key.equals(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG);
+  }
+
+  private void handleNonUpdateableConfig(String key) {
+    log.info("Altering config property {} is disallowed, ignoring config.", key);
   }
 
   private AbstractRequest transformCreatePartitionsRequest(
@@ -373,17 +426,16 @@ public class MultiTenantRequestContext extends RequestContext {
             if (resource.type() == ConfigResource.Type.BROKER) {
               return MultiTenantConfigRestrictions.VISIBLE_BROKER_CONFIGS.contains(ce.name());
             }
-            if (resource.type() == ConfigResource.Type.TOPIC) {
-              // Allow both updatable and visible topic configs in the response
-              return MultiTenantConfigRestrictions.UPDATABLE_TOPIC_CONFIGS.contains(ce.name()) ||
-                      MultiTenantConfigRestrictions.READ_ONLY_TOPIC_CONFIGS.contains(ce.name());
-            }
-            return false;
+
+            // Allow through all topic configs
+            return resource.type() == ConfigResource.Type.TOPIC;
           })
-          // For configs that are visible but not updatable, set readOnly to true
-          .map(ce -> MultiTenantConfigRestrictions.READ_ONLY_TOPIC_CONFIGS.contains(ce.name()) ?
-                  new DescribeConfigsResponse.ConfigEntry(ce.name(), ce.value(), ce.source(), ce.isSensitive(), true, ce.synonyms()) :
-                  ce
+          // For topic configs that are not updatable, set readOnly to true
+          .map(configEntry -> resource.type() == ConfigResource.Type.TOPIC &&
+                  MultiTenantConfigRestrictions.UPDATABLE_TOPIC_CONFIGS.contains(configEntry.name()) ?
+              configEntry :
+              new DescribeConfigsResponse.ConfigEntry(configEntry.name(), configEntry.value(), configEntry.source(),
+                  configEntry.isSensitive(), true, configEntry.synonyms())
           )
           .collect(Collectors.toSet());
       filteredConfigs.put(

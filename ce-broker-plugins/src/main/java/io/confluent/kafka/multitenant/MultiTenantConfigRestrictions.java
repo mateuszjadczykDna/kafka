@@ -33,9 +33,4 @@ public class MultiTenantConfigRestrictions {
       "delete.retention.ms",
       "segment.bytes"
   );
-
-  // Topic configs that are returned in topic describe but marked as read only
-  public static final Set<String> READ_ONLY_TOPIC_CONFIGS = Utils.mkSet(
-      "min.insync.replicas"
-  );
 }
