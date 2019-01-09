@@ -71,7 +71,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
           switch (entry.hashFunction) {
             case "none":
               if (!entry.hashedSecret.equals(password)) {
-                log.trace("Bad password for user {}", username);
+                log.info("Bad password for user {}", username);
                 throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
               }
               break;
@@ -79,7 +79,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
               authenticateBcrypt(entry.hashedSecret, username, password);
               break;
             default:
-              log.error("Unknown hash function: {} for user {}", entry.hashFunction,
+              log.info("Unknown hash function: {} for user {}", entry.hashFunction,
                   username);
               throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
           }
@@ -91,11 +91,11 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
               .superUser(!entry.isServiceAccount()).build();
           return new MultiTenantPrincipal(entry.userId, tenantMetadata);
         } else {
-          log.error("Wrong SASL mechanism {} for user {}", entry.saslMechanism, username);
+          log.info("Wrong SASL mechanism {} for user {}", entry.saslMechanism, username);
           throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
         }
       } else {
-        log.trace("Unknown user {}", username);
+        log.info("Unknown user {}", username);
         throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
       }
     } catch (SaslAuthenticationException e) {
@@ -115,7 +115,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
       return;
     }
     if (!BCrypt.checkpw(password, hashedSecret)) {
-      log.trace("Bad password for user {}", username);
+      log.info("Bad password for user {}", username);
       throw new SaslAuthenticationException(AUTHENTICATION_FAILED_ERROR);
     }
     synchronized (BCRYPT_PASSWORD_CACHE) {
