@@ -96,6 +96,8 @@ class SecurityConfig(TemplateRenderer):
     SASL_MECHANISM_PLAIN = 'PLAIN'
     SASL_MECHANISM_SCRAM_SHA_256 = 'SCRAM-SHA-256'
     SASL_MECHANISM_SCRAM_SHA_512 = 'SCRAM-SHA-512'
+    PLAIN_CLIENT_USER = "client"
+    PLAIN_CLIENT_PASSWORD = "client-secret"
     SCRAM_CLIENT_USER = "kafka-client"
     SCRAM_CLIENT_PASSWORD = "client-secret"
     SCRAM_BROKER_USER = "kafka-broker"
@@ -192,7 +194,9 @@ class SecurityConfig(TemplateRenderer):
                 'is_ibm_jdk': any('IBM' in line for line in java_version),
                 'SecurityConfig': SecurityConfig,
                 'client_sasl_mechanism': self.client_sasl_mechanism,
-                'enabled_sasl_mechanisms': self.enabled_sasl_mechanisms
+                'enabled_sasl_mechanisms': self.enabled_sasl_mechanisms,
+                'plain_client_user': SecurityConfig.PLAIN_CLIENT_USER,
+                'plain_client_password': SecurityConfig.PLAIN_CLIENT_PASSWORD
             }
         )
 
