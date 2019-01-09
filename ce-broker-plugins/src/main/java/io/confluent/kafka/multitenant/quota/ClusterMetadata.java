@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.kafka.common.Cluster;
@@ -88,13 +89,13 @@ class ClusterMetadata {
     for (PartitionInfo partitionInfo : existingPartitions) {
       Node[] replicas = partitionInfo.replicas();
       for (int i = 0; i < replicas.length; i++) {
-        ReplicaCounts replicaCounts = nodeReplicaCounts.get(replicas[i].id());
-        if (replicaCounts != null) {
-          if ((i == 0 && leader) || (i != 0 && !leader)) {
-            replicaCounts.topic++;
-          }
-        } else {
+        Node node = replicas[i];
+        ReplicaCounts replicaCounts = node == null ? null : nodeReplicaCounts.get(node.id());
+        if (replicaCounts == null) {
           throw new IllegalStateException("Inconsistent cluster metadata, broker not found");
+        }
+        if ((i == 0 && leader) || (i != 0 && !leader)) {
+          replicaCounts.topic++;
         }
       }
     }
@@ -110,17 +111,12 @@ class ClusterMetadata {
     for (List<Integer> replicas : assignment) {
       for (int i = 0; i < replicas.size(); i++) {
         Node replicaNode = cluster.nodeById(replicas.get(i));
-        NodeMetadata nodeMetadata = nodeMetadatas.get(replicaNode);
+        NodeMetadata nodeMetadata = replicaNode == null ? null : nodeMetadatas.get(replicaNode);
         if (nodeMetadata != null) {
-          if (i == 0) {
-            nodeMetadata.tenantLeaders++;
-            nodeMetadata.totalLeaders++;
-          } else {
-            nodeMetadata.tenantFollowers++;
-            nodeMetadata.totalFollowers++;
-          }
+          nodeMetadata.incrementReplicas(i == 0, true);
         } else {
-          log.error("Inconsistent cluster metadata: replica node {} not found", replicaNode);
+          throw new IllegalStateException(
+              "Inconsistent cluster metadata: replica node " + replicaNode + " not found");
         }
       }
     }
@@ -146,17 +142,7 @@ class ClusterMetadata {
           if (replicaNode != null) {
             NodeMetadata nodeMetadata = nodeMetadatas.get(replicaNode);
             if (nodeMetadata != null) {
-              if (i == 0) {
-                nodeMetadata.totalLeaders++;
-                if (isTenantTopic) {
-                  nodeMetadata.tenantLeaders++;
-                }
-              } else {
-                nodeMetadata.totalFollowers++;
-                if (isTenantTopic) {
-                  nodeMetadata.tenantFollowers++;
-                }
-              }
+              nodeMetadata.incrementReplicas(i == 0, isTenantTopic);
             } else {
               log.error("Inconsistent cluster metadata: replica node {} not found", replicaNode);
             }
@@ -175,6 +161,28 @@ class ClusterMetadata {
     int tenantFollowers;
     int totalLeaders;
     int totalFollowers;
+
+    void incrementReplicas(boolean isLeaderReplica, boolean isTenantTopic) {
+      if (isLeaderReplica) {
+        incrementLeaders(isTenantTopic);
+      } else {
+        incrementFollowers(isTenantTopic);
+      }
+    }
+
+    void incrementLeaders(boolean isTenantTopic) {
+      totalLeaders++;
+      if (isTenantTopic) {
+        tenantLeaders++;
+      }
+    }
+
+    void incrementFollowers(boolean isTenantTopic) {
+      totalFollowers++;
+      if (isTenantTopic) {
+        tenantFollowers++;
+      }
+    }
   }
 
   /**
@@ -208,8 +216,14 @@ class ClusterMetadata {
     int total;
 
     ReplicaCounts(int tenant, int total) {
+      this(tenant, total, 0);
+    }
+
+    // used by unit tests
+    ReplicaCounts(int tenant, int total, int topic) {
       this.tenant = tenant;
       this.total = total;
+      this.topic = topic;
     }
 
     void incrementCounts() {
@@ -228,6 +242,30 @@ class ClusterMetadata {
         result = Integer.compare(total, o.total);
       }
       return result;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ReplicaCounts that = (ReplicaCounts) o;
+      return Objects.equals(topic, that.topic) &&
+             Objects.equals(tenant, that.tenant) &&
+             Objects.equals(total, that.total);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(topic, tenant, total);
+    }
+
+    @Override
+    public String toString() {
+      return "ReplicaCounts(topic=" + topic + ", tenant=" + tenant + ", total=" + total + ')';
     }
   }
 }
