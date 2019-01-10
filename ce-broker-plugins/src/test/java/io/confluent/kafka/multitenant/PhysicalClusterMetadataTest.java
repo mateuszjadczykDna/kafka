@@ -233,6 +233,17 @@ public class PhysicalClusterMetadataTest {
         lcCache.logicalClusterIds());
   }
 
+  @Test
+  public void testWatcherIsClosedAfterShutdown() throws IOException, InterruptedException {
+    assertFalse(lcCache.dirWatcher.isRegistered());
+    lcCache.start();
+    // wait until WatchService is started, which happens on a separate thread
+    TestUtils.waitForCondition(
+        lcCache.dirWatcher::isRegistered, "Timed out waiting for WatchService to start.");
+    lcCache.shutdown();
+    assertFalse(lcCache.dirWatcher.isRegistered());
+  }
+
   @Test(expected = IllegalStateException.class)
   public void testStartAfterShutdownShouldThrowException() throws IOException {
     lcCache.shutdown();

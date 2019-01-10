@@ -59,7 +59,7 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   // logical cluster ID --> LogicalClusterMetadata
   private final Map<String, LogicalClusterMetadata> logicalClusterMap;
 
-  private final LogicalClustersChangeListener dirWatcher;
+  final LogicalClustersChangeListener dirWatcher;
   private final Thread dirListenerThread;
   private final ScheduledExecutorService executorService;
   private final RetryBackoff retryBackoff;
@@ -531,10 +531,18 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       if (watchService != null) {
         try {
           watchService.close();
+          // this is to be able to verify the watch service is closed in unit tests
+          watchService = null;
+          LOG.info("Closed watcher for {}", logicalClustersDir);
         } catch (IOException ioe) {
           LOG.error("Failed to shutdown watcher for {}.", logicalClustersDir, ioe);
         }
       }
+    }
+
+    // used in unit tests
+    boolean isRegistered() {
+      return watchService != null;
     }
 
     public void run() {
@@ -543,6 +551,8 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
         runWatcher(watchService, logicalClustersDirPath);
       } catch (InterruptedException ie) {
         LOG.warn("Watching {} was interrupted.", logicalClustersDir);
+      } finally {
+        close();
       }
     }
 
