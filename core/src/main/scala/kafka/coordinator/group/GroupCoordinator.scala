@@ -126,14 +126,14 @@ class GroupCoordinator(val brokerId: Int,
           // exist we should reject the request.
           if (memberId == JoinGroupRequest.UNKNOWN_MEMBER_ID) {
             val group = groupManager.addGroup(new GroupMetadata(groupId, Empty, time))
-            doUnknownJoinGroup(group, requireKnownMemberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
+            doUnknownJoinGroup(group, groupInstanceId, requireKnownMemberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
           } else {
             responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
           }
 
         case Some(group) =>
           if (memberId == JoinGroupRequest.UNKNOWN_MEMBER_ID) {
-            doUnknownJoinGroup(group, requireKnownMemberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
+            doUnknownJoinGroup(group, groupInstanceId, requireKnownMemberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
           } else {
             doJoinGroup(group, memberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
           }
@@ -142,6 +142,7 @@ class GroupCoordinator(val brokerId: Int,
   }
 
   private def doUnknownJoinGroup(group: GroupMetadata,
+                                 groupInstanceId: String,
                                  requireKnownMemberId: Boolean,
                                  clientId: String,
                                  clientHost: String,
@@ -162,7 +163,9 @@ class GroupCoordinator(val brokerId: Int,
       } else {
         val newMemberId = clientId + "-" + group.generateMemberIdSuffix
 
-        if (requireKnownMemberId) {
+        if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
+          // Add static group member and return immediately
+        } else if (requireKnownMemberId) {
           // If member id required, register the member in the pending member list
           // and send back a response to call for another join group request with allocated member id.
           group.addPendingMember(newMemberId)
