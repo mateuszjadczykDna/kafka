@@ -105,10 +105,10 @@ public class SecretsLoader {
     if (isEmpty(v.saslMechanism)) {
       throw new ConfigException("sasl_mechanism field is missing for key " + entry.getKey());
     }
-    if (v.isServiceAccount != null && !v.isServiceAccount.equalsIgnoreCase("true")
-        && !v.isServiceAccount.equalsIgnoreCase("false")) {
-      throw new ConfigException("is_service_account field is invalid for key " + entry.getKey()
-          + " value=" + v.isServiceAccount);
+    if (v.serviceAccount != null && !v.serviceAccount.equalsIgnoreCase("true")
+        && !v.serviceAccount.equalsIgnoreCase("false")) {
+      throw new ConfigException("service_account field is invalid for key " + entry.getKey()
+          + " value=" + v.serviceAccount);
     }
   }
 
@@ -149,7 +149,7 @@ public class SecretsLoader {
       Set<MultiTenantPrincipal> validPrincipals = new HashSet<>();
       for (KeyConfigEntry entry : validEntries.values()) {
         TenantMetadata tenantMetadata = new TenantMetadata.Builder(entry.logicalClusterId)
-            .superUser(!entry.isServiceAccount()).build();
+            .superUser(!entry.serviceAccount()).build();
         validPrincipals.add(new MultiTenantPrincipal(entry.userId, tenantMetadata));
       }
       TenantAuthenticationStats.instance().removeUnusedMBeans(validPrincipals);

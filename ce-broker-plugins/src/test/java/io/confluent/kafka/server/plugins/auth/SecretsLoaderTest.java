@@ -96,7 +96,7 @@ public class SecretsLoaderTest {
             "\"sasl_mechanism\": \"PLAIN\"," +
             "\"hashed_secret\": \"no hash\"," +
             "\"hash_function\": \"none\"," +
-            "\"is_service_account\": \"true\" }}," +
+            "\"service_account\": \"true\" }}," +
             "\"quotas\": {\"myCluster\": {" +
             "\"producer_byte_rate\": \"100\"," +
             "\"consumer_byte_rate\": \"200\"," +
@@ -135,7 +135,7 @@ public class SecretsLoaderTest {
         "\"sasl_mechanism\": \"PLAIN\"," +
         "\"hashed_secret\": \"no hash\"," +
         "\"hash_function\": \"none\"," +
-        "\"is_service_account\": \"false\" }}," +
+        "\"service_account\": \"false\" }}," +
         "\"quotas\": {\"\": {" +
         "\"producer_byte_rate\": \"1000\"," +
         "\"consumer_byte_rate\": \"2000\"," +

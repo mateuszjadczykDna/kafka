@@ -13,7 +13,7 @@
       "hash_function": "none",
       "user_id": "7",
       "logical_cluster_id": "confluent",
-      "is_service_account": "false"
+      "service_account": "false"
     },
     "skey": {
       "sasl_mechanism": "PLAIN",
@@ -21,7 +21,7 @@
       "hash_function": "none",
       "user_id": "11",
       "logical_cluster_id": "test_service",
-      "is_service_account": "true"
+      "service_account": "true"
     }
   }
 }

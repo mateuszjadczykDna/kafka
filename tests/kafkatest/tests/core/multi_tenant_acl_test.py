@@ -41,7 +41,7 @@ APIKEYS="""{
       "hash_function": "none",
       "user_id": "%(user_uid)s",
       "logical_cluster_id": "%(logical_cluster)s",
-      "is_service_account": "false"
+      "service_account": "false"
     },
     "%(service_api_key)s": {
       "sasl_mechanism": "PLAIN",
@@ -49,7 +49,7 @@ APIKEYS="""{
       "hash_function": "none",
       "user_id": "%(service_uid)s",
       "logical_cluster_id": "%(logical_cluster)s",
-      "is_service_account": "true"
+      "service_account": "true"
     }
   }
 }""" % {

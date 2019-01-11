@@ -88,7 +88,7 @@ public class FileBasedPlainSaslAuthenticator implements SaslAuthenticator {
           // This makes it easy to associate clusters in applications like C3 with the
           // corresponding customer cluster.
           TenantMetadata tenantMetadata = new TenantMetadata.Builder(entry.logicalClusterId)
-              .superUser(!entry.isServiceAccount()).build();
+              .superUser(!entry.serviceAccount()).build();
           return new MultiTenantPrincipal(entry.userId, tenantMetadata);
         } else {
           log.info("Wrong SASL mechanism {} for user {}", entry.saslMechanism, username);
