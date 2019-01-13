@@ -24,6 +24,7 @@ import org.apache.kafka.common.errors.DisconnectException;
 import org.apache.kafka.common.errors.GroupAuthorizationException;
 import org.apache.kafka.common.errors.IllegalGenerationException;
 import org.apache.kafka.common.errors.InterruptException;
+import org.apache.kafka.common.errors.MemberIdMismatchException;
 import org.apache.kafka.common.errors.MemberIdRequiredException;
 import org.apache.kafka.common.errors.RebalanceInProgressException;
 import org.apache.kafka.common.errors.RetriableException;
@@ -109,6 +110,7 @@ public abstract class AbstractCoordinator implements Closeable {
     private final Heartbeat heartbeat;
     protected final int rebalanceTimeoutMs;
     protected final String groupId;
+    protected final String groupInstanceId;
     protected final ConsumerNetworkClient client;
     protected final Time time;
     protected final long retryBackoffMs;
@@ -129,6 +131,7 @@ public abstract class AbstractCoordinator implements Closeable {
     public AbstractCoordinator(LogContext logContext,
                                ConsumerNetworkClient client,
                                String groupId,
+                               String groupInstanceId,
                                int rebalanceTimeoutMs,
                                int sessionTimeoutMs,
                                Heartbeat heartbeat,
@@ -142,6 +145,7 @@ public abstract class AbstractCoordinator implements Closeable {
         this.time = time;
         this.groupId = Objects.requireNonNull(groupId,
                 "Expected a non-null group id for coordinator construction");
+        this.groupInstanceId = groupInstanceId;
         this.rebalanceTimeoutMs = rebalanceTimeoutMs;
         this.sessionTimeoutMs = sessionTimeoutMs;
         this.leaveGroupOnClose = leaveGroupOnClose;
@@ -161,7 +165,8 @@ public abstract class AbstractCoordinator implements Closeable {
                                Time time,
                                long retryBackoffMs,
                                boolean leaveGroupOnClose) {
-        this(logContext, client, groupId, rebalanceTimeoutMs, sessionTimeoutMs,
+        this(logContext, client, groupId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID,
+            rebalanceTimeoutMs, sessionTimeoutMs,
                 new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
                 metrics, metricGrpPrefix, time, retryBackoffMs, leaveGroupOnClose);
     }
@@ -560,6 +565,12 @@ public abstract class AbstractCoordinator implements Closeable {
                     AbstractCoordinator.this.state = MemberState.UNJOINED;
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
+            } else if (error == Errors.MEMBER_ID_MISMATCH) {
+               // Immediately fail this consumer because this indicates another client has a collision group.instance.id
+               throw new MemberIdMismatchException("group.instance.id duplicate for " + );
+            } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {
+                resetGeneration();
+                log.debug("The group instance id info was not matching records storing on broker, resetting generation to rejoin.");
             } else {
                 // unexpected error, throw the exception
                 future.raise(new KafkaException("Unexpected error in join group response: " + error.message()));

@@ -139,14 +139,14 @@ public class JoinGroupRequest extends AbstractRequest {
         private final List<ProtocolMetadata> groupProtocols;
         private int rebalanceTimeout = 0;
 
-        public Builder(String groupId, int sessionTimeout, String memberId,
+        public Builder(String groupId, int sessionTimeout, String memberId, String groupInstanceId,
                        String protocolType, List<ProtocolMetadata> groupProtocols) {
             super(ApiKeys.JOIN_GROUP);
             this.groupId = groupId;
             this.sessionTimeout = sessionTimeout;
             this.rebalanceTimeout = sessionTimeout;
             this.memberId = memberId;
-            this.groupInstanceId =
+            this.groupInstanceId = groupInstanceId;
             this.protocolType = protocolType;
             this.groupProtocols = groupProtocols;
         }
@@ -174,6 +174,7 @@ public class JoinGroupRequest extends AbstractRequest {
                 append(", sessionTimeout=").append(sessionTimeout).
                 append(", rebalanceTimeout=").append(rebalanceTimeout).
                 append(", memberId=").append(memberId).
+                append(", groupInstanceId=").append(groupInstanceId).
                 append(", protocolType=").append(protocolType).
                 append(", groupProtocols=").append(Utils.join(groupProtocols, ", ")).
                 append(")");

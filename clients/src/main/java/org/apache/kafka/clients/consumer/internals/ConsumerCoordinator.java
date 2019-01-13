@@ -42,6 +42,7 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.common.requests.JoinGroupRequest.ProtocolMetadata;
 import org.apache.kafka.common.requests.OffsetCommitRequest;
 import org.apache.kafka.common.requests.OffsetCommitResponse;
@@ -136,7 +137,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         super(logContext,
               client,
               groupId,
-              rebalanceTimeoutMs,
+            JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID, rebalanceTimeoutMs,
               sessionTimeoutMs,
               heartbeat,
               metrics,
