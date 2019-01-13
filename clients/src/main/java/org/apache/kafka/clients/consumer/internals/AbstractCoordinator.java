@@ -157,6 +157,7 @@ public abstract class AbstractCoordinator implements Closeable {
     public AbstractCoordinator(LogContext logContext,
                                ConsumerNetworkClient client,
                                String groupId,
+                               String groupInstanceId,
                                int rebalanceTimeoutMs,
                                int sessionTimeoutMs,
                                int heartbeatIntervalMs,
@@ -165,7 +166,7 @@ public abstract class AbstractCoordinator implements Closeable {
                                Time time,
                                long retryBackoffMs,
                                boolean leaveGroupOnClose) {
-        this(logContext, client, groupId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID,
+        this(logContext, client, groupId, groupInstanceId,
             rebalanceTimeoutMs, sessionTimeoutMs,
                 new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
                 metrics, metricGrpPrefix, time, retryBackoffMs, leaveGroupOnClose);
@@ -496,6 +497,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 groupId,
                 this.sessionTimeoutMs,
                 this.generation.memberId,
+                this.groupInstanceId,
                 protocolType(),
                 metadata()).setRebalanceTimeout(this.rebalanceTimeoutMs);
 
@@ -567,7 +569,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 future.raise(Errors.MEMBER_ID_REQUIRED);
             } else if (error == Errors.MEMBER_ID_MISMATCH) {
                // Immediately fail this consumer because this indicates another client has a collision group.instance.id
-               throw new MemberIdMismatchException("group.instance.id duplicate for " + );
+               throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
             } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {
                 resetGeneration();
                 log.debug("The group instance id info was not matching records storing on broker, resetting generation to rejoin.");

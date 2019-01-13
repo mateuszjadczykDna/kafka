@@ -560,6 +560,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     private final Logger log;
     private final String clientId;
     private String groupId;
+    private String groupInstanceId;
     private final ConsumerCoordinator coordinator;
     private final Deserializer<K> keyDeserializer;
     private final Deserializer<V> valueDeserializer;
@@ -664,6 +665,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                 clientId = "consumer-" + CONSUMER_CLIENT_ID_SEQUENCE.getAndIncrement();
             this.clientId = clientId;
             this.groupId = config.getString(ConsumerConfig.GROUP_ID_CONFIG);
+            this.groupInstanceId = config.getString(ConsumerConfig.GROUP_INSTANCE_ID_CONFIG);
             LogContext logContext = new LogContext("[Consumer clientId=" + clientId + ", groupId=" + groupId + "] ");
             this.log = logContext.logger(getClass());
             boolean enableAutoCommit = config.getBoolean(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG);
@@ -762,6 +764,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                 new ConsumerCoordinator(logContext,
                         this.client,
                         groupId,
+                        groupInstanceId,
                         maxPollIntervalMs,
                         sessionTimeoutMs,
                         new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, maxPollIntervalMs, retryBackoffMs),
