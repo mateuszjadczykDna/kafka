@@ -184,7 +184,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   private var protocol: Option[String] = None
 
   private val members = new mutable.HashMap[String, MemberMetadata]
-  // Mapping group.instance.id to member.id
+  // Mapping group.instance.id to member.id mapping
   private val staticMembers = new mutable.HashMap[String, String]
   private val pendingMembers = new mutable.HashSet[String]
   private var numMembersAwaitingJoin = 0
@@ -203,6 +203,10 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   def not(groupState: GroupState) = state != groupState
   def has(memberId: String) = members.contains(memberId)
   def get(memberId: String) = members(memberId)
+
+  def hasStaticMember(groupInstanceId: String) = staticMembers.contains(groupInstanceId)
+  def getStaticMemberId(groupInstanceId: String) = staticMembers(groupInstanceId)
+  def addOrUpdateStaticMember(groupInstanceId: String, newMemberId: String) = staticMembers.put(groupInstanceId, newMemberId)
 
   def isLeader(memberId: String): Boolean = leaderId.contains(memberId)
   def leaderOrNull: String = leaderId.orNull
@@ -226,7 +230,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
       numMembersAwaitingJoin += 1
   }
 
-  def remove(memberId: String) {
+  def remove(memberId: String): MemberMetadata = {
+    val removedMember = members(memberId)
     members.remove(memberId).foreach { member =>
       member.supportedProtocols.foreach{ case (protocol, _) => supportedProtocols(protocol) -= 1 }
       if (member.awaitingJoinCallback != null)
@@ -240,6 +245,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
         Some(members.keys.head)
       }
     }
+
+    removedMember
   }
 
   def isPendingMember(memberId: String): Boolean = pendingMembers.contains(memberId) && !has(memberId)

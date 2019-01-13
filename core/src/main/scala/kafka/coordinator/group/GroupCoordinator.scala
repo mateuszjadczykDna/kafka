@@ -163,16 +163,14 @@ class GroupCoordinator(val brokerId: Int,
       } else {
         val newMemberId = clientId + "-" + group.generateMemberIdSuffix
 
-        if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
-          // Add static group member and return immediately
-        } else if (requireKnownMemberId) {
+        if (requireKnownMemberId) {
           // If member id required, register the member in the pending member list
           // and send back a response to call for another join group request with allocated member id.
           group.addPendingMember(newMemberId)
           addPendingMemberExpiration(group, newMemberId, sessionTimeoutMs)
           responseCallback(joinError(newMemberId, Errors.MEMBER_ID_REQUIRED))
         } else {
-          addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, newMemberId, clientId, clientHost, protocolType,
+          addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, newMemberId, groupInstanceId, clientId, clientHost, protocolType,
             protocols, group, responseCallback)
         }
       }
@@ -739,15 +737,28 @@ class GroupCoordinator(val brokerId: Int,
     heartbeatPurgatory.checkAndComplete(memberKey)
   }
 
+  private def registerStaticMember(group: GroupMetadata, groupInstanceId: String, memberId: String) {
+    if (group.hasStaticMember(groupInstanceId)) {
+      val removedMember = group.remove(group.getStaticMemberId(groupInstanceId))
+      removeHeartbeatForLeavingMember(group, removedMember)
+    }
+    group.addOrUpdateStaticMember(groupInstanceId, memberId)
+  }
+
   private def addMemberAndRebalance(rebalanceTimeoutMs: Int,
                                     sessionTimeoutMs: Int,
                                     memberId: String,
+                                    groupInstanceId: String,
                                     clientId: String,
                                     clientHost: String,
                                     protocolType: String,
                                     protocols: List[(String, Array[Byte])],
                                     group: GroupMetadata,
                                     callback: JoinCallback): MemberMetadata = {
+    if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
+      registerStaticMember(group, groupInstanceId, memberId)
+    }
+
     val member = new MemberMetadata(memberId, group.groupId, clientId, clientHost, rebalanceTimeoutMs,
       sessionTimeoutMs, protocolType, protocols)
 
