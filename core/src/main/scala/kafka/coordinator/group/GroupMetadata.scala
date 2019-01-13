@@ -206,6 +206,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
 
   def hasStaticMember(groupInstanceId: String) = staticMembers.contains(groupInstanceId)
   def getStaticMemberId(groupInstanceId: String) = staticMembers(groupInstanceId)
+
   def addOrUpdateStaticMember(groupInstanceId: String, newMemberId: String) = staticMembers.put(groupInstanceId, newMemberId)
 
   def isLeader(memberId: String): Boolean = leaderId.contains(memberId)

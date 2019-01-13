@@ -31,6 +31,7 @@ import org.apache.kafka.common.errors.DelegationTokenExpiredException;
 import org.apache.kafka.common.errors.DelegationTokenNotFoundException;
 import org.apache.kafka.common.errors.DelegationTokenOwnerMismatchException;
 import org.apache.kafka.common.errors.FencedLeaderEpochException;
+import org.apache.kafka.common.errors.GroupInstanceIdNotFoundException;
 import org.apache.kafka.common.errors.ListenerNotFoundException;
 import org.apache.kafka.common.errors.FetchSessionIdNotFoundException;
 import org.apache.kafka.common.errors.GroupAuthorizationException;
@@ -59,6 +60,7 @@ import org.apache.kafka.common.errors.InvalidTxnTimeoutException;
 import org.apache.kafka.common.errors.KafkaStorageException;
 import org.apache.kafka.common.errors.LeaderNotAvailableException;
 import org.apache.kafka.common.errors.LogDirNotFoundException;
+import org.apache.kafka.common.errors.MemberIdMismatchException;
 import org.apache.kafka.common.errors.MemberIdRequiredException;
 import org.apache.kafka.common.errors.NetworkException;
 import org.apache.kafka.common.errors.NotControllerException;
@@ -297,7 +299,12 @@ public enum Errors {
             "election so the offsets cannot be guaranteed to be monotonically increasing",
             OffsetNotAvailableException::new),
     MEMBER_ID_REQUIRED(79, "The group member needs to have a valid member id before actually entering a consumer group",
-            MemberIdRequiredException::new);
+            MemberIdRequiredException::new),
+    MEMBER_ID_MISMATCH(80, "The group.instance.id is already in the consumer group, " +
+        "however the corresponding member.id was not matching the record on coordinator",
+        MemberIdMismatchException::new),
+    GROUP_INSTANCE_ID_NOT_FOUND(81, "Some group.instance.id specified in the request are not found",
+        GroupInstanceIdNotFoundException::new);
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
 

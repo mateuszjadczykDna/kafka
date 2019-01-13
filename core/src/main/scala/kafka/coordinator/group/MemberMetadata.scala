@@ -56,6 +56,7 @@ private object MemberMetadata {
 @nonthreadsafe
 private[group] class MemberMetadata(val memberId: String,
                                     val groupId: String,
+                                    val groupInstanceId: String,
                                     val clientId: String,
                                     val clientHost: String,
                                     val rebalanceTimeoutMs: Int,
