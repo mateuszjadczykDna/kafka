@@ -85,5 +85,12 @@ class MemberMetadataTest extends JUnitSuite {
     fail()
   }
 
+  @Test
+  def testHasValidGroupInstanceId() {
+    val protocols = List(("range", Array[Byte](0)), ("roundrobin", Array[Byte](1)))
 
+    val member = new MemberMetadata(memberId, groupId, groupInstanceId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs,
+      protocolType, protocols)
+    assertEquals(groupInstanceId, member.groupInstanceId)
+  }
 }
