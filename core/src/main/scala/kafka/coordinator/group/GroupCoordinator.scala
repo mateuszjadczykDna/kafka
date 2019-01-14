@@ -954,7 +954,6 @@ class GroupCoordinator(val brokerId: Int,
 }
 
 object GroupCoordinator {
-
   val NoState = ""
   val NoProtocolType = ""
   val NoProtocol = ""

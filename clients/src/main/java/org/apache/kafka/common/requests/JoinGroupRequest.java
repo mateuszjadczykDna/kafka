@@ -209,7 +209,13 @@ public class JoinGroupRequest extends AbstractRequest {
             rebalanceTimeout = sessionTimeout;
 
         memberId = struct.get(MEMBER_ID);
-        groupInstanceId = struct.get(GROUP_INSTANCE_ID);
+        // Only v5 and above has group.instance.id field.
+        if (struct.hasField(GROUP_INSTANCE_ID)) {
+            groupInstanceId = struct.get(GROUP_INSTANCE_ID);
+        } else {
+            groupInstanceId = UNKNOWN_GROUP_INSTANCE_ID;
+        }
+
         protocolType = struct.getString(PROTOCOL_TYPE_KEY_NAME);
 
         groupProtocols = new ArrayList<>();
@@ -295,6 +301,9 @@ public class JoinGroupRequest extends AbstractRequest {
             struct.set(REBALANCE_TIMEOUT_KEY_NAME, rebalanceTimeout);
         }
         struct.set(MEMBER_ID, memberId);
+        if (version >= 5) {
+            struct.set(GROUP_INSTANCE_ID, groupInstanceId);
+        }
         struct.set(PROTOCOL_TYPE_KEY_NAME, protocolType);
         List<Struct> groupProtocolsList = new ArrayList<>(groupProtocols.size());
         for (ProtocolMetadata protocol : groupProtocols) {
