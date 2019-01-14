@@ -42,7 +42,6 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.protocol.Errors;
-import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.common.requests.JoinGroupRequest.ProtocolMetadata;
 import org.apache.kafka.common.requests.OffsetCommitRequest;
 import org.apache.kafka.common.requests.OffsetCommitResponse;
@@ -133,8 +132,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
                                boolean autoCommitEnabled,
                                int autoCommitIntervalMs,
                                ConsumerInterceptors<?, ?> interceptors,
-                               boolean excludeInternalTopics,
-                               final boolean leaveGroupOnClose) {
+                               boolean excludeInternalTopics) {
         super(logContext,
               client,
               groupId,
@@ -145,8 +143,8 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
               metrics,
               metricGrpPrefix,
               time,
-              retryBackoffMs,
-              leaveGroupOnClose);
+              retryBackoffMs
+        );
         this.log = logContext.logger(ConsumerCoordinator.class);
         this.metadata = metadata;
         this.metadataSnapshot = new MetadataSnapshot(subscriptions, metadata.fetch());

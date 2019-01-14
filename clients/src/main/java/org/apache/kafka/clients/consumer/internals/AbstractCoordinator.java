@@ -106,7 +106,6 @@ public abstract class AbstractCoordinator implements Closeable {
 
     private final Logger log;
     private final int sessionTimeoutMs;
-    private final boolean leaveGroupOnClose;
     private final GroupCoordinatorMetrics sensors;
     private final Heartbeat heartbeat;
     protected final int rebalanceTimeoutMs;
@@ -139,8 +138,7 @@ public abstract class AbstractCoordinator implements Closeable {
                                Metrics metrics,
                                String metricGrpPrefix,
                                Time time,
-                               long retryBackoffMs,
-                               boolean leaveGroupOnClose) {
+                               long retryBackoffMs) {
         this.log = logContext.logger(AbstractCoordinator.class);
         this.client = client;
         this.time = time;
@@ -149,7 +147,6 @@ public abstract class AbstractCoordinator implements Closeable {
         this.groupInstanceId = groupInstanceId;
         this.rebalanceTimeoutMs = rebalanceTimeoutMs;
         this.sessionTimeoutMs = sessionTimeoutMs;
-        this.leaveGroupOnClose = leaveGroupOnClose;
         this.heartbeat = heartbeat;
         this.sensors = new GroupCoordinatorMetrics(metrics, metricGrpPrefix);
         this.retryBackoffMs = retryBackoffMs;
@@ -165,12 +162,15 @@ public abstract class AbstractCoordinator implements Closeable {
                                Metrics metrics,
                                String metricGrpPrefix,
                                Time time,
-                               long retryBackoffMs,
-                               boolean leaveGroupOnClose) {
-        this(logContext, client, groupId, groupInstanceId,
-            rebalanceTimeoutMs, sessionTimeoutMs,
-                new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
-                metrics, metricGrpPrefix, time, retryBackoffMs, leaveGroupOnClose);
+                               long retryBackoffMs) {
+        this(logContext,
+            client,
+            groupId,
+            groupInstanceId,
+            rebalanceTimeoutMs,
+            sessionTimeoutMs,
+            new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
+            metrics, metricGrpPrefix, time, retryBackoffMs);
     }
 
     /**
@@ -795,7 +795,9 @@ public abstract class AbstractCoordinator implements Closeable {
             // Synchronize after closing the heartbeat thread since heartbeat thread
             // needs this lock to complete and terminate after close flag is set.
             synchronized (this) {
-                if (leaveGroupOnClose) {
+                // Starting from 2.2, only dynamic members will send LeaveGroupRequest to the broker,
+                // consumer with valid group.instance.id is viewed as static member.
+                if (!this.groupInstanceId.equals(JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)) {
                     maybeLeaveGroup();
                 }
 

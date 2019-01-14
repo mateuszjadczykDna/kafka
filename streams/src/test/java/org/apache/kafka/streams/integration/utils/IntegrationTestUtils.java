@@ -69,7 +69,6 @@ import java.util.stream.Collectors;
 public class IntegrationTestUtils {
 
     public static final long DEFAULT_TIMEOUT = 60 * 1000L;
-    public static final String INTERNAL_LEAVE_GROUP_ON_CLOSE = "internal.leave.group.on.close";
 
     /*
      * Records state transition for StreamThread

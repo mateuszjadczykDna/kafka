@@ -1829,7 +1829,7 @@ public class KafkaConsumerTest {
             autoCommitEnabled,
             autoCommitIntervalMs,
             interceptors,
-            excludeInternalTopics, true);
+            excludeInternalTopics);
 
         Fetcher<String, String> fetcher = new Fetcher<>(
                 loggerFactory,

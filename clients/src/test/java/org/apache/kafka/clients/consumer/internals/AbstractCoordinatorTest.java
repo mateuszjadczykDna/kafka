@@ -695,7 +695,7 @@ public class AbstractCoordinatorTest {
                                 int retryBackoffMs) {
             super(new LogContext(), client, GROUP_ID, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID, rebalanceTimeoutMs,
                 SESSION_TIMEOUT_MS, HEARTBEAT_INTERVAL_MS, metrics, METRIC_GROUP_PREFIX, time,
-                retryBackoffMs, false);
+                retryBackoffMs);
         }
 
         @Override

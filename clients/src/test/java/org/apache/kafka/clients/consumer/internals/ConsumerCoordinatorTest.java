@@ -2038,7 +2038,7 @@ public class ConsumerCoordinatorTest {
             autoCommitEnabled,
             autoCommitIntervalMs,
             null,
-            excludeInternalTopics, leaveGroup);
+            excludeInternalTopics);
     }
 
     private FindCoordinatorResponse groupCoordinatorResponse(Node node, Errors error) {
