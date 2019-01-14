@@ -977,6 +977,7 @@ object GroupMetadataManager {
   private val GROUP_KEY_GROUP_FIELD = GROUP_METADATA_KEY_SCHEMA.get("group")
 
   private val MEMBER_ID_KEY = "member_id"
+  private val GROUP_INSTANCE_ID_KEY = "group_instance_id"
   private val CLIENT_ID_KEY = "client_id"
   private val CLIENT_HOST_KEY = "client_host"
   private val REBALANCE_TIMEOUT_KEY = "rebalance_timeout"
@@ -1002,6 +1003,16 @@ object GroupMetadataManager {
     new Field(ASSIGNMENT_KEY, BYTES))
 
   private val MEMBER_METADATA_V2 = MEMBER_METADATA_V1
+
+  private val MEMBER_METADATA_V3 = new Schema(
+    new Field(MEMBER_ID_KEY, STRING),
+    new Field(GROUP_INSTANCE_ID_KEY, STRING),
+    new Field(CLIENT_ID_KEY, STRING),
+    new Field(CLIENT_HOST_KEY, STRING),
+    new Field(REBALANCE_TIMEOUT_KEY, INT32),
+    new Field(SESSION_TIMEOUT_KEY, INT32),
+    new Field(SUBSCRIPTION_KEY, BYTES),
+    new Field(ASSIGNMENT_KEY, BYTES))
 
   private val PROTOCOL_TYPE_KEY = "protocol_type"
   private val GENERATION_KEY = "generation"
@@ -1031,6 +1042,22 @@ object GroupMetadataManager {
     new Field(LEADER_KEY, NULLABLE_STRING),
     new Field(CURRENT_STATE_TIMESTAMP_KEY, INT64),
     new Field(MEMBERS_KEY, new ArrayOf(MEMBER_METADATA_V2)))
+
+  private val GROUP_METADATA_VALUE_SCHEMA_V2 = new Schema(
+    new Field(PROTOCOL_TYPE_KEY, STRING),
+    new Field(GENERATION_KEY, INT32),
+    new Field(PROTOCOL_KEY, NULLABLE_STRING),
+    new Field(LEADER_KEY, NULLABLE_STRING),
+    new Field(CURRENT_STATE_TIMESTAMP_KEY, INT64),
+    new Field(MEMBERS_KEY, new ArrayOf(MEMBER_METADATA_V2)))
+
+  private val GROUP_METADATA_VALUE_SCHEMA_V3 = new Schema(
+    new Field(PROTOCOL_TYPE_KEY, STRING),
+    new Field(GENERATION_KEY, INT32),
+    new Field(PROTOCOL_KEY, NULLABLE_STRING),
+    new Field(LEADER_KEY, NULLABLE_STRING),
+    new Field(CURRENT_STATE_TIMESTAMP_KEY, INT64),
+    new Field(MEMBERS_KEY, new ArrayOf(MEMBER_METADATA_V3)))
 
   // map of versions to key schemas as data types
   private val MESSAGE_TYPE_SCHEMAS = Map(

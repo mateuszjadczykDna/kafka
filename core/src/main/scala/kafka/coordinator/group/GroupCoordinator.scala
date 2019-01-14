@@ -742,12 +742,13 @@ class GroupCoordinator(val brokerId: Int,
     heartbeatPurgatory.checkAndComplete(memberKey)
   }
 
-  private def registerStaticMember(group: GroupMetadata, groupInstanceId: String, memberId: String) {
+  private def maybeRegisterStaticMember(group: GroupMetadata, groupInstanceId: String, newMemberId: String) {
     if (group.hasStaticMember(groupInstanceId)) {
-      val removedMember = group.remove(group.getStaticMemberId(groupInstanceId))
+      val oldMemberId = group.getStaticMemberId(groupInstanceId)
+      val removedMember = group.remove(oldMemberId)
       removeHeartbeatForLeavingMember(group, removedMember)
     }
-    group.addOrUpdateStaticMember(groupInstanceId, memberId)
+    group.addOrUpdateStaticMember(groupInstanceId, newMemberId)
   }
 
   private def addMemberAndRebalance(rebalanceTimeoutMs: Int,
@@ -761,7 +762,7 @@ class GroupCoordinator(val brokerId: Int,
                                     group: GroupMetadata,
                                     callback: JoinCallback): MemberMetadata = {
     if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
-      registerStaticMember(group, groupInstanceId, memberId)
+      maybeRegisterStaticMember(group, groupInstanceId, memberId)
     }
 
     val member = new MemberMetadata(memberId, group.groupId, groupInstanceId, clientId, clientHost, rebalanceTimeoutMs,
@@ -835,10 +836,16 @@ class GroupCoordinator(val brokerId: Int,
 
     group.remove(member.memberId)
 
-    group.currentState match {
-      case Dead | Empty =>
-      case Stable | CompletingRebalance => maybePrepareRebalance(group, reason)
-      case PreparingRebalance => joinPurgatory.checkAndComplete(GroupKey(group.groupId))
+    // Only do state transition when the member is dynamic or the given member id doesn't match
+    // the static membership mapping.
+    if (member.groupInstanceId == JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID ||
+      group.getStaticMemberId(member.groupInstanceId) == member.memberId) {
+      group.removeStaticMember(member.groupInstanceId)
+      group.currentState match {
+        case Dead | Empty =>
+        case Stable | CompletingRebalance => maybePrepareRebalance(group, reason)
+        case PreparingRebalance => joinPurgatory.checkAndComplete(GroupKey(group.groupId))
+      }
     }
   }
 

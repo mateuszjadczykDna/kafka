@@ -1247,13 +1247,11 @@ class KafkaApis(val requestChannel: RequestChannel,
       // Only return MEMBER_ID_REQUIRED error if joinGroupRequest version is >= 4
       var requireKnownMemberId = joinGroupRequest.version >= 4
 
-      var groupInstanceId = JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
-      if (joinGroupRequest.version >= 5) {
-        groupInstanceId = joinGroupRequest.groupInstanceId
-        // A static member doesn't require one more bounce.
-        if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
-          requireKnownMemberId = false
-        }
+      val groupInstanceId = joinGroupRequest.groupInstanceId
+
+      // A static member doesn't require one more bounce.
+      if (joinGroupRequest.version >= 5 && groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
+        requireKnownMemberId = false
       }
 
       // let the coordinator handle join-group

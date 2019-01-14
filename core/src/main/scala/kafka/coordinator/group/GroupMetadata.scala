@@ -209,6 +209,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
 
   def addOrUpdateStaticMember(groupInstanceId: String, newMemberId: String) = staticMembers.put(groupInstanceId, newMemberId)
 
+  def removeStaticMember(groupInstanceId: String) = staticMembers.remove(groupInstanceId)
+
   def isLeader(memberId: String): Boolean = leaderId.contains(memberId)
   def leaderOrNull: String = leaderId.orNull
   def protocolOrNull: String = protocol.orNull

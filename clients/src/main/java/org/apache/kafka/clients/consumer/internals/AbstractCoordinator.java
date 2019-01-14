@@ -22,6 +22,7 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.errors.AuthenticationException;
 import org.apache.kafka.common.errors.DisconnectException;
 import org.apache.kafka.common.errors.GroupAuthorizationException;
+import org.apache.kafka.common.errors.GroupInstanceIdNotFoundException;
 import org.apache.kafka.common.errors.IllegalGenerationException;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.MemberIdMismatchException;
@@ -423,7 +424,8 @@ public abstract class AbstractCoordinator implements Closeable {
                 if (exception instanceof UnknownMemberIdException ||
                         exception instanceof RebalanceInProgressException ||
                         exception instanceof IllegalGenerationException ||
-                        exception instanceof MemberIdRequiredException)
+                        exception instanceof MemberIdRequiredException ||
+                        exception instanceof GroupInstanceIdNotFoundException)
                     continue;
                 else if (!future.isRetriable())
                     throw exception;
@@ -568,11 +570,12 @@ public abstract class AbstractCoordinator implements Closeable {
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
             } else if (error == Errors.MEMBER_ID_MISMATCH) {
-               // Immediately fail this consumer because this indicates another client has a collision group.instance.id
+               // Immediately fail this consumer because this indicates another client has a collided group.instance.id
                throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
             } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {
                 resetGeneration();
                 log.debug("The group instance id info was not matching records storing on broker, resetting generation to rejoin.");
+                future.raise(Errors.GROUP_INSTANCE_ID_NOT_FOUND);
             } else {
                 // unexpected error, throw the exception
                 future.raise(new KafkaException("Unexpected error in join group response: " + error.message()));
