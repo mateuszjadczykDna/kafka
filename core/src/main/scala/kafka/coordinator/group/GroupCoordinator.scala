@@ -744,13 +744,19 @@ class GroupCoordinator(val brokerId: Int,
     heartbeatPurgatory.checkAndComplete(memberKey)
   }
 
-  private def maybeRegisterStaticMember(group: GroupMetadata, groupInstanceId: String, newMemberId: String) {
-    if (group.hasStaticMember(groupInstanceId)) {
+  /**
+    * Check and decide whether the given groupInstanceId is known to the group. Return true if this is a known
+    * static member.
+    */
+  private def maybeRegisterStaticMember(group: GroupMetadata, groupInstanceId: String, newMemberId: String): Boolean = {
+    val isKnownMember = group.hasStaticMember(groupInstanceId)
+    if (isKnownMember) {
       val oldMemberId = group.getStaticMemberId(groupInstanceId)
       val removedMember = group.remove(oldMemberId)
       removeHeartbeatForLeavingMember(group, removedMember)
     }
     group.addOrUpdateStaticMember(groupInstanceId, newMemberId)
+    isKnownMember
   }
 
   private def addMemberAndRebalance(rebalanceTimeoutMs: Int,
@@ -763,10 +769,6 @@ class GroupCoordinator(val brokerId: Int,
                                     protocols: List[(String, Array[Byte])],
                                     group: GroupMetadata,
                                     callback: JoinCallback): MemberMetadata = {
-    if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID) {
-      maybeRegisterStaticMember(group, groupInstanceId, memberId)
-    }
-
     val member = new MemberMetadata(memberId, group.groupId, groupInstanceId, clientId, clientHost, rebalanceTimeoutMs,
       sessionTimeoutMs, protocolType, protocols)
 
@@ -786,8 +788,12 @@ class GroupCoordinator(val brokerId: Int,
     // for new members. If the new member is still there, we expect it to retry.
     completeAndScheduleNextExpiration(group, member, NewMemberJoinTimeoutMs)
 
-    maybePrepareRebalance(group, s"Adding new member $memberId")
-    group.removePendingMember(memberId)
+    // Known static member rejoin will not trigger rebalance,
+    if (!maybeRegisterStaticMember(group, groupInstanceId, memberId)) {
+      maybePrepareRebalance(group, s"Adding new member $memberId")
+      group.removePendingMember(memberId)
+    }
+
     member
   }
 

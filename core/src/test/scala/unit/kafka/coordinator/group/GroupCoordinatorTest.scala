@@ -1657,6 +1657,7 @@ class GroupCoordinatorTest extends JUnitSuite {
                             memberId: String,
                             protocolType: String,
                             protocols: List[(String, Array[Byte])],
+                            groupInstanceId: String = JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID,
                             sessionTimeout: Int = DefaultSessionTimeout,
                             rebalanceTimeout: Int = DefaultRebalanceTimeout,
                             requireKnownMemberId: Boolean = false): Future[JoinGroupResult] = {
@@ -1664,7 +1665,7 @@ class GroupCoordinatorTest extends JUnitSuite {
 
     EasyMock.replay(replicaManager)
 
-    groupCoordinator.handleJoinGroup(groupId, memberId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID,
+    groupCoordinator.handleJoinGroup(groupId, memberId, groupInstanceId,
       requireKnownMemberId, "clientId", "clientHost", rebalanceTimeout, sessionTimeout, protocolType, protocols, responseCallback)
     responseFuture
   }
