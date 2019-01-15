@@ -204,10 +204,12 @@ class GroupCoordinator(val brokerId: Int,
         // if the member trying to register with a un-recognized id, send the response to let
         // it reset its member id and retry.
         responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
-      } else if (!group.hasStaticMember(groupInstanceId)) {
-        responseCallback(joinError(memberId, Errors.GROUP_INSTANCE_ID_NOT_FOUND))
-      } else if (group.getStaticMemberId(groupInstanceId) != memberId) {
-        responseCallback(joinError(memberId, Errors.MEMBER_ID_MISMATCH))
+      } else if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID &&
+        !group.hasStaticMember(groupInstanceId)) {
+          responseCallback(joinError(memberId, Errors.GROUP_INSTANCE_ID_NOT_FOUND))
+      } else if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID &&
+        group.getStaticMemberId(groupInstanceId) != memberId) {
+          responseCallback(joinError(memberId, Errors.MEMBER_ID_MISMATCH))
       } else {
         group.currentState match {
           case PreparingRebalance =>
