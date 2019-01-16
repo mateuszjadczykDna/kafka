@@ -161,7 +161,7 @@ class GroupCoordinator(val brokerId: Int,
       } else if (!group.supportsProtocols(protocolType, MemberMetadata.plainProtocolSet(protocols))) {
         responseCallback(joinError(JoinGroupRequest.UNKNOWN_MEMBER_ID, Errors.INCONSISTENT_GROUP_PROTOCOL))
       } else if (group.hasStaticMember(groupInstanceId)) {
-        // Known static member rejoin will not trigger rebalance.
+        // Known static member rejoin will not trigger rebalance, while immediately return with current generation assignment.
         val memberId = group.getStaticMemberId(groupInstanceId)
         onMemberRejoin(group, memberId, protocols, responseCallback)
       } else {
@@ -201,11 +201,12 @@ class GroupCoordinator(val brokerId: Int,
       } else if (!group.supportsProtocols(protocolType, MemberMetadata.plainProtocolSet(protocols))) {
         responseCallback(joinError(memberId, Errors.INCONSISTENT_GROUP_PROTOCOL))
       } else if (group.isPendingMember(memberId)) {
-        // A rejoining pending member will be accepted.
+        // A rejoining pending member will be accepted. Note that pending member will never be a static member.
+        assert(groupInstanceId == JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)
         addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, memberId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
           ,clientId, clientHost, protocolType, protocols, group, responseCallback)
       } else if (!group.has(memberId)) {
-        if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
+        if (unknownStaticMember(group, memberId, groupInstanceId)
           && group.getStaticMemberId(groupInstanceId) != memberId) {
           // the given member id doesn't match with the groupInstanceId. Should be shut down immediately.
           responseCallback(joinError(memberId, Errors.MEMBER_ID_MISMATCH))
@@ -214,9 +215,8 @@ class GroupCoordinator(val brokerId: Int,
           // it reset its member id and retry.
           responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
         }
-      } else if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
-        && !group.hasStaticMember(groupInstanceId)) {
-          // The given static member is not found on the record
+      } else if (unknownStaticMember(group, memberId, groupInstanceId)) {
+        // The given static member is not found on the record
           responseCallback(joinError(memberId, Errors.GROUP_INSTANCE_ID_NOT_FOUND))
       } else {
         group.currentState match {
@@ -283,6 +283,10 @@ class GroupCoordinator(val brokerId: Int,
         leaderId = group.leaderOrNull,
         error = Errors.NONE))
     }
+  }
+
+  private def unknownStaticMember(group: GroupMetadata, memberId: String, groupInstanceId: String): Boolean = {
+    groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID && !group.hasStaticMember(groupInstanceId)
   }
 
   def handleSyncGroup(groupId: String,
@@ -759,21 +763,6 @@ class GroupCoordinator(val brokerId: Int,
     heartbeatPurgatory.checkAndComplete(memberKey)
   }
 
-  /**
-    * Check and decide whether the given groupInstanceId is known to the group. Return true if this is a known
-    * static member.
-    */
-  private def maybeRegisterStaticMember(group: GroupMetadata, groupInstanceId: String, newMemberId: String): Boolean = {
-    val isKnownMember = group.hasStaticMember(groupInstanceId)
-    if (isKnownMember) {
-      val oldMemberId = group.getStaticMemberId(groupInstanceId)
-      val removedMember = group.remove(oldMemberId)
-      removeHeartbeatForLeavingMember(group, removedMember)
-    }
-    group.addOrUpdateStaticMember(groupInstanceId, newMemberId)
-    isKnownMember
-  }
-
   private def addMemberAndRebalance(rebalanceTimeoutMs: Int,
                                     sessionTimeoutMs: Int,
                                     memberId: String,
@@ -805,7 +794,7 @@ class GroupCoordinator(val brokerId: Int,
 
     maybePrepareRebalance(group, s"Adding new member $memberId")
     // Register new static member.
-    group.addOrUpdateStaticMember(groupInstanceId, memberId)
+    group.addStaticMember(groupInstanceId, memberId)
     group.removePendingMember(memberId)
   }
 

@@ -208,7 +208,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   def hasStaticMember(groupInstanceId: String) = staticMembers.contains(groupInstanceId)
   def getStaticMemberId(groupInstanceId: String) = staticMembers(groupInstanceId)
 
-  def addOrUpdateStaticMember(groupInstanceId: String, newMemberId: String) = {
+  def addStaticMember(groupInstanceId: String, newMemberId: String) = {
     if (groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)
       staticMembers.put(groupInstanceId, newMemberId)
   }
