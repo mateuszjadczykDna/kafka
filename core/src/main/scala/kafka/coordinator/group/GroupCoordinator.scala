@@ -844,17 +844,13 @@ class GroupCoordinator(val brokerId: Int,
     group.maybeInvokeJoinCallback(member, joinError(NoMemberId, Errors.UNKNOWN_MEMBER_ID))
 
     group.remove(member.memberId)
+    group.removeStaticMember(member.groupInstanceId)
 
-    // Only do state transition when the member is dynamic or the given member id doesn't match
-    // the static membership mapping.
-    if (member.groupInstanceId == JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID ||
-      group.getStaticMemberId(member.groupInstanceId) == member.memberId) {
-      group.removeStaticMember(member.groupInstanceId)
-      group.currentState match {
-        case Dead | Empty =>
-        case Stable | CompletingRebalance => maybePrepareRebalance(group, reason)
-        case PreparingRebalance => joinPurgatory.checkAndComplete(GroupKey(group.groupId))
-      }
+    group.removeStaticMember(member.groupInstanceId)
+    group.currentState match {
+      case Dead | Empty =>
+      case Stable | CompletingRebalance => maybePrepareRebalance(group, reason)
+      case PreparingRebalance => joinPurgatory.checkAndComplete(GroupKey(group.groupId))
     }
   }
 

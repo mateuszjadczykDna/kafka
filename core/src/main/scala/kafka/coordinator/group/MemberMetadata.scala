@@ -21,6 +21,7 @@ import java.util
 
 import kafka.utils.nonthreadsafe
 import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.requests.JoinGroupRequest
 
 
 case class MemberSummary(memberId: String,
@@ -71,6 +72,7 @@ private[group] class MemberMetadata(val memberId: String,
   var latestHeartbeat: Long = -1
   var isLeaving: Boolean = false
   var isNew: Boolean = false
+  val isStaticMember: Boolean = groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
 
   /**
    * Get metadata corresponding to the provided protocol.
