@@ -783,7 +783,7 @@ class GroupCoordinator(val brokerId: Int,
                                     protocolType: String,
                                     protocols: List[(String, Array[Byte])],
                                     group: GroupMetadata,
-                                    callback: JoinCallback): MemberMetadata = {
+                                    callback: JoinCallback) {
     val member = new MemberMetadata(memberId, group.groupId, groupInstanceId, clientId, clientHost, rebalanceTimeoutMs,
       sessionTimeoutMs, protocolType, protocols)
 
@@ -807,8 +807,6 @@ class GroupCoordinator(val brokerId: Int,
     // Register new static member.
     group.addOrUpdateStaticMember(groupInstanceId, memberId)
     group.removePendingMember(memberId)
-
-    member
   }
 
   private def updateMemberAndRebalance(group: GroupMetadata,
@@ -976,6 +974,7 @@ class GroupCoordinator(val brokerId: Int,
 }
 
 object GroupCoordinator {
+
   val NoState = ""
   val NoProtocolType = ""
   val NoProtocol = ""

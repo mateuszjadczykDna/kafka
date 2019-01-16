@@ -1632,7 +1632,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   }
 
   @Test
-  def staticMemberJoinWithUnknownMemberId() {
+  def staticMemberReJoinWithUnknownMemberId() {
     var joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, groupInstanceId, protocolType, protocols)
     assertEquals(Errors.NONE, joinGroupResult.error)
     EasyMock.reset(replicaManager)
@@ -1642,6 +1642,33 @@ class GroupCoordinatorTest extends JUnitSuite {
     assertEquals(Errors.MEMBER_ID_MISMATCH, joinGroupResult.error)
   }
 
+  @Test
+  def staticMemberRejoinWithKnownMemberId() {
+    var joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, groupInstanceId, protocolType, protocols)
+    assertEquals(Errors.NONE, joinGroupResult.error)
+    EasyMock.reset(replicaManager)
+
+    val assignedMemberId = joinGroupResult.memberId
+    // The second join group should return immediately since we are using the same metadata during CompletingRebalance.
+    val rejoinResponseFuture = sendJoinGroup(groupId, assignedMemberId, protocolType, protocols, groupInstanceId)
+    timer.advanceClock(1)
+    joinGroupResult = Await.result(rejoinResponseFuture, Duration(1, TimeUnit.MILLISECONDS))
+    assertEquals(Errors.NONE, joinGroupResult.error)
+    assertTrue(getGroup(groupId).is(CompletingRebalance))
+    EasyMock.reset(replicaManager)
+
+    val syncGroupFuture = sendSyncGroupLeader(groupId, joinGroupResult.generationId, assignedMemberId, Map(assignedMemberId -> Array[Byte]()))
+    timer.advanceClock(1)
+    val syncGroupResult = Await.result(syncGroupFuture, Duration(1, TimeUnit.MILLISECONDS))
+    assertEquals(Errors.NONE, syncGroupResult._2)
+    assertTrue(getGroup(groupId).is(Stable))
+  }
+
+  private def getGroup(groupId: String): GroupMetadata = {
+    val groupOpt = groupCoordinator.groupManager.getGroup(groupId)
+    assertTrue(groupOpt.isDefined)
+    groupOpt.get
+  }
   private def setupJoinGroupCallback: (Future[JoinGroupResult], JoinGroupCallback) = {
     val responsePromise = Promise[JoinGroupResult]
     val responseFuture = responsePromise.future
