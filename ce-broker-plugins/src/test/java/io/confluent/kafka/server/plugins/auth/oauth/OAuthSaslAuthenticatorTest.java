@@ -2,6 +2,9 @@ package io.confluent.kafka.server.plugins.auth.oauth;
 
 import io.confluent.kafka.clients.plugins.auth.oauth.OAuthBearerLoginCallbackHandler;
 
+import io.confluent.kafka.multitenant.PhysicalClusterMetadata;
+import io.confluent.kafka.multitenant.Utils;
+import org.apache.kafka.common.config.internals.ConfluentConfigs;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.network.CertStores;
 import org.apache.kafka.common.network.ChannelBuilder;
@@ -19,14 +22,22 @@ import org.apache.kafka.common.security.authenticator.LoginManager;
 import org.apache.kafka.common.security.authenticator.TestJaasConfig;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static io.confluent.kafka.multitenant.Utils.LC_META_ABC;
+import static io.confluent.kafka.multitenant.Utils.initiatePhysicalClusterMetadata;
 
 
 public class OAuthSaslAuthenticatorTest {
@@ -35,24 +46,47 @@ public class OAuthSaslAuthenticatorTest {
   private OAuthUtils.JwsContainer jwsContainer;
   private Map<String, Object> saslClientConfigs;
   private Map<String, Object> saslServerConfigs;
-  private String allowedCluster = "audi";
+  private String allowedCluster = LC_META_ABC.logicalClusterId();
+  private PhysicalClusterMetadata metadata;
+  private Map<String, Object> configs;
+  private String brokerUUID;
   private String[] allowedClusters = new String[] {allowedCluster};
   private static Time time = Time.SYSTEM;
 
   private CredentialCache credentialCache;
 
+  @Rule
+  public final TemporaryFolder tempFolder = new TemporaryFolder();
+
   @Before
-  public void setup() throws Exception {
+  public void setUp() throws Exception {
     LoginManager.closeAll();
     CertStores serverCertStores = new CertStores(true, "localhost");
     CertStores clientCertStores = new CertStores(false, "localhost");
     this.saslServerConfigs = serverCertStores.getTrustingConfig(clientCertStores);
     this.saslClientConfigs = clientCertStores.getTrustingConfig(serverCertStores);
     this.credentialCache = new CredentialCache();
+    setUpMetadata();
+  }
+
+  private void setUpMetadata() throws IOException, InterruptedException {
+    brokerUUID = "uuid";
+    configs = new HashMap<>();
+    configs.put("broker.session.uuid", brokerUUID);
+    saslServerConfigs.put("broker.session.uuid", brokerUUID);
+    configs.put(ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG,
+        tempFolder.getRoot().getCanonicalPath());
+
+    metadata = initiatePhysicalClusterMetadata(configs);
+
+    Utils.createLogicalClusterFile(LC_META_ABC, true, tempFolder);
+    TestUtils.waitForCondition(
+        () -> metadata.metadata(LC_META_ABC.logicalClusterId()) != null,
+        "Expected metadata of new logical cluster to be present in metadata cache");
   }
 
   @After
-  public void teardown() throws Exception {
+  public void tearDown() throws Exception {
     if (this.server != null) {
       this.server.close();
     }
@@ -61,6 +95,7 @@ public class OAuthSaslAuthenticatorTest {
       this.selector.close();
     }
 
+    metadata.close(brokerUUID);
   }
 
   @Test

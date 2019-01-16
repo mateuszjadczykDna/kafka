@@ -15,6 +15,8 @@ import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
 import static io.confluent.kafka.multitenant.quota.TenantQuotaCallback.DEFAULT_MIN_PARTITIONS;
+import static io.confluent.kafka.multitenant.Utils.LC_META_ABC;
+import static io.confluent.kafka.multitenant.Utils.LC_META_XYZ;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
@@ -38,16 +40,6 @@ public class PhysicalClusterMetadataTest {
 
   private static final Long RETRY_INITIAL_BACKOFF_MS = TimeUnit.SECONDS.toMillis(2);
   private static final Long RETRY_MAX_BACKOFF_MS = TimeUnit.SECONDS.toMillis(8);
-  private static final LogicalClusterMetadata LC_META_XYZ =
-      new LogicalClusterMetadata("lkc-xyz", "pkc-xyz", "xyz", "my-account", "k8s-abc",
-                                 104857600L, 1024L, 2048L,
-                                 LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
-                                 LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
-  private static final LogicalClusterMetadata LC_META_ABC =
-      new LogicalClusterMetadata("lkc-abc", "pkc-abc", "abc", "my-account", "k8s-abc",
-                                 10485760L, 102400L, 204800L,
-                                 LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
-                                 LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
 
   private PhysicalClusterMetadata lcCache;
 
@@ -147,7 +139,7 @@ public class PhysicalClusterMetadataTest {
 
   @Test
   public void testExistingFilesLoaded() throws IOException, InterruptedException {
-    createLogicalClusterFile(LC_META_ABC);
+    Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
 
     lcCache.start();
     assertTrue("Expected cache to be initialized", lcCache.isUpToDate());
@@ -163,7 +155,7 @@ public class PhysicalClusterMetadataTest {
 
     // create new file and ensure cache gets updated
     final String lcId = LC_META_XYZ.logicalClusterId();
-    Path lcFile = createLogicalClusterFile(LC_META_XYZ);
+    Path lcFile = Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(lcId) != null,
         "Expected metadata of new logical cluster to be present in metadata cache");
@@ -176,7 +168,7 @@ public class PhysicalClusterMetadataTest {
         LC_META_XYZ.producerByteRate(), LC_META_XYZ.consumerByteRate(),
         LC_META_XYZ.requestPercentage(), LC_META_XYZ.networkQuotaOverhead()
     );
-    Files.write(lcFile, jsonString(updatedLcMeta, true).getBytes());
+    Files.write(lcFile, Utils.logicalClusterJsonString(updatedLcMeta, true).getBytes());
     TestUtils.waitForCondition(
         () -> lcCache.metadata(lcId).logicalClusterName().equals("new-name"),
         "Expected metadata to be updated");
@@ -191,15 +183,15 @@ public class PhysicalClusterMetadataTest {
   @Test
   public void testEventsForJsonFileWithInvalidContentDoNotImpactValidLogicalClusters()
       throws IOException, InterruptedException {
-    Path fileWithInvalidContent = createLogicalClusterFile(LC_META_ABC, false);
-    createLogicalClusterFile(LC_META_XYZ);
+    Path fileWithInvalidContent = Utils.createLogicalClusterFile(LC_META_ABC, false, tempFolder);
+    Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
 
     lcCache.start();
     assertTrue("Expected invalid metadata to cause stale cache.", lcCache.isStale());
     assertEquals(ImmutableSet.of(LC_META_XYZ.logicalClusterId()), lcCache.logicalClusterIds());
 
     // update file with invalid content with another invalid content
-    Files.write(fileWithInvalidContent, jsonString(LC_META_XYZ, false).getBytes());
+    Files.write(fileWithInvalidContent, Utils.logicalClusterJsonString(LC_META_XYZ, false).getBytes());
 
     // we cannot verify that an update event was handled for already invalid file, so create
     // another valid file which should be an event after a file update event
@@ -207,7 +199,7 @@ public class PhysicalClusterMetadataTest {
         "lkc-123", "pkc-123", "123", "my-account", "k8s-123",
         10485760L, 102400L, 204800L, LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
         LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
-    createLogicalClusterFile(anotherMeta);
+    Utils.createLogicalClusterFile(anotherMeta, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(anotherMeta.logicalClusterId()) != null,
         "Expected metadata of new logical cluster to be present in metadata cache");
@@ -222,7 +214,7 @@ public class PhysicalClusterMetadataTest {
                  lcCache.logicalClusterIds());
 
     // ensure we can re-create file with the same name but with good content
-    createLogicalClusterFile(LC_META_ABC);
+    Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) != null,
         "Expected metadata of new logical cluster to be present in metadata cache");
@@ -287,8 +279,8 @@ public class PhysicalClusterMetadataTest {
     // we need to wait until the cache handles new subdir event, but there is no way to check
     // that it happened. Will create a new file as well, and hopefully that event will be behind
     // the `new dir` event
-    createLogicalClusterFile(LC_META_ABC);
-    createLogicalClusterFile(LC_META_XYZ);
+    Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
+    Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.logicalClusterIds().size() >= 2,
         "Expected two new logical clusters to be added to the cache.");
@@ -303,7 +295,7 @@ public class PhysicalClusterMetadataTest {
   @Test
   public void testShouldRetryOnFailureToReadFile() throws IOException, InterruptedException {
     // create one file in logical clusters dir, but not readable
-    Path abcMetaFile = createLogicalClusterFile(LC_META_ABC);
+    Path abcMetaFile = Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
     Files.setPosixFilePermissions(abcMetaFile, PosixFilePermissions.fromString("-wx-wx-wx"));
 
     // we should be able to start the cache, but with scheduled retry
@@ -311,7 +303,7 @@ public class PhysicalClusterMetadataTest {
     assertTrue(lcCache.isStale());
 
     // should be still able to update cache from valid files
-    createLogicalClusterFile(LC_META_XYZ);
+    Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_XYZ.logicalClusterId()) != null,
         "Expected metadata of 'lkc-xyz' logical cluster to be present in metadata cache");
@@ -331,9 +323,9 @@ public class PhysicalClusterMetadataTest {
     assertTrue(lcCache.isUpToDate());
 
     // initially create json file with invalid content
-    Path abcMetaFile = createLogicalClusterFile(LC_META_ABC, false);
+    Path abcMetaFile = Utils.createLogicalClusterFile(LC_META_ABC, false, tempFolder);
     // and create one valid file so that we know when update event gets handled
-    createLogicalClusterFile(LC_META_XYZ);
+    Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
 
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_XYZ.logicalClusterId()) != null,
@@ -345,7 +337,7 @@ public class PhysicalClusterMetadataTest {
                  lcCache.logicalClusterIdsIncludingStale());
 
     // "fix" abc cluster meta, which should cause cache update
-    Files.write(abcMetaFile, jsonString(LC_META_ABC, true).getBytes());
+    Files.write(abcMetaFile, Utils.logicalClusterJsonString(LC_META_ABC, true).getBytes());
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) != null,
         "Expected metadata to be updated");
@@ -367,7 +359,7 @@ public class PhysicalClusterMetadataTest {
     assertTrue(lcCache.isUpToDate());
 
     // initially create json file with valid json content, but invalid metadata
-    Path metaFile = createLogicalClusterFile(lcMeta, true);
+    Path metaFile = Utils.createLogicalClusterFile(lcMeta, true, tempFolder);
     TestUtils.waitForCondition(lcCache::isStale, "Expected invalid metadata to cause stale cache.");
 
     // "fix" cluster meta, which should cause cache update
@@ -375,7 +367,7 @@ public class PhysicalClusterMetadataTest {
         "lkc-qwr", "pkc-qwr", "xyz", "my-account", "k8s-abc", 104857600L, 1024L, 2048L,
         LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
         LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
-    Files.write(metaFile, jsonString(lcValidMeta, true).getBytes());
+    Files.write(metaFile, Utils.logicalClusterJsonString(lcValidMeta, true).getBytes());
     TestUtils.waitForCondition(
         () -> lcCache.metadata(lcValidMeta.logicalClusterId()) != null,
         "Expected metadata to be updated");
@@ -388,7 +380,7 @@ public class PhysicalClusterMetadataTest {
       throws IOException, InterruptedException {
     TenantQuotaCallback quotaCallback = new TenantQuotaCallback();
     quotaCallback.configure(Collections.singletonMap("broker.id", "1"));
-    Path metaFile = createLogicalClusterFile(LC_META_ABC);
+    Path metaFile = Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
 
     lcCache.start();
     assertTrue("Expected cache to be initialized", lcCache.isUpToDate());
@@ -432,7 +424,7 @@ public class PhysicalClusterMetadataTest {
     lcCache.start();
     assertTrue(lcCache.isUpToDate());
 
-    Path lcFile = createLogicalClusterFile(LC_META_ABC);
+    Path lcFile = Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) != null,
         "Expected new logical cluster to be added to the cache.");
@@ -450,40 +442,5 @@ public class PhysicalClusterMetadataTest {
         "Expected metadata to be removed from the cache");
 
     assertTrue(lcCache.isUpToDate());
-  }
-
-  private Path createLogicalClusterFile(LogicalClusterMetadata lcMeta) throws IOException {
-    return createLogicalClusterFile(lcMeta, true);
-  }
-
-  private Path createLogicalClusterFile(LogicalClusterMetadata lcMeta, boolean valid)
-      throws IOException {
-    final String lcFilename = lcMeta.logicalClusterId() + ".json";
-    final Path lcFile = tempFolder.newFile(lcFilename).toPath();
-    Files.write(lcFile, jsonString(lcMeta, valid).getBytes());
-    return lcFile;
-  }
-
-  private String jsonString(LogicalClusterMetadata lcMeta, boolean valid) {
-    String json = "{" +
-                        "\"logical_cluster_id\": \"" + lcMeta.logicalClusterId() + "\"," +
-                        "\"physical_cluster_id\": \"" + lcMeta.physicalClusterId() + "\"," +
-                        "\"logical_cluster_name\": \"" + lcMeta.logicalClusterName() + "\"," +
-                        "\"account_id\": \"" + lcMeta.accountId() + "\"," +
-                        "\"k8s_cluster_id\": \"" + lcMeta.k8sClusterId() + "\"," +
-                        "\"logical_cluster_type\": \"" + lcMeta.logicalClusterType() + "\"";
-    if (lcMeta.storageBytes() != null) {
-      json += ", \"storage_bytes\": " + lcMeta.storageBytes();
-    }
-    if (lcMeta.producerByteRate() != null) {
-      json += ", \"network_ingress_byte_rate\": " + lcMeta.producerByteRate();
-    }
-    if (lcMeta.consumerByteRate() != null) {
-      json += ", \"network_egress_byte_rate\": " + lcMeta.consumerByteRate();
-    }
-    if (valid) {
-      json += "}";
-    }
-    return json;
   }
 }

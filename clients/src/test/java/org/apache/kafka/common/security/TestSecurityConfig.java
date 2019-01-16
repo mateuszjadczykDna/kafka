@@ -21,6 +21,7 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
+import org.apache.kafka.common.config.internals.ConfluentConfigs;
 
 import java.util.Map;
 
@@ -41,7 +42,9 @@ public class TestSecurityConfig extends AbstractConfig {
             .define(BrokerSecurityConfigs.SSL_PRINCIPAL_MAPPING_RULES_CONFIG, Type.LIST, BrokerSecurityConfigs.DEFAULT_SSL_PRINCIPAL_MAPPING_RULES,
                     Importance.LOW, BrokerSecurityConfigs.SSL_PRINCIPAL_MAPPING_RULES_DOC)
             .withClientSslSupport()
-            .withClientSaslSupport();
+            .withClientSaslSupport()
+            .define(ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG, Type.STRING, ConfluentConfigs.MULTITENANT_METADATA_CLASS_DEFAULT, Importance.LOW, "")
+            .define("broker.session.uuid", Type.STRING, "uuid", Importance.LOW, "Unique broker UUID used for accessing cloud physical cluster metadata");
 
     public TestSecurityConfig(Map<?, ?> originals) {
         super(CONFIG, originals, false);

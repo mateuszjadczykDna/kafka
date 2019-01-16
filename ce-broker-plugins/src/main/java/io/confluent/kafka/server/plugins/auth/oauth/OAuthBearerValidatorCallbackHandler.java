@@ -4,7 +4,9 @@ package io.confluent.kafka.server.plugins.auth.oauth;
 
 import io.confluent.common.security.util.PemUtils;
 import io.confluent.common.security.util.CloudUtils;
+import io.confluent.kafka.multitenant.PhysicalClusterMetadata;
 import io.confluent.kafka.multitenant.oauth.OAuthBearerJwsToken;
+import kafka.server.KafkaConfig$;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 import org.apache.kafka.common.security.oauthbearer.OAuthBearerExtensionsValidatorCallback;
@@ -48,8 +50,10 @@ import static io.confluent.kafka.multitenant.MultiTenantPrincipalBuilder.OAUTH_N
 public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallbackHandler {
   private static final Logger log = LoggerFactory.getLogger(
           OAuthBearerValidatorCallbackHandler.class);
+  private static final String AUTH_ERROR_MESSAGE = "Authentication failed";
 
   private JwtConsumer jwtConsumer;
+  private PhysicalClusterMetadata clusterMetadata;
 
   static class JwtVerificationException extends Exception {
     JwtVerificationException(String message) {
@@ -92,6 +96,14 @@ public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallback
               moduleOptions.get("publicKeyPath")), e);
     }
 
+    Object uuid = configs.get(KafkaConfig$.MODULE$.BrokerSessionUuidProp());
+    if (uuid == null || uuid.toString().isEmpty())
+      throw new ConfigException("Broker session UUID must be set in the Kafka config!");
+
+    this.clusterMetadata = PhysicalClusterMetadata.getInstance(uuid.toString());
+    if (this.clusterMetadata == null)
+      throw new ConfigException("Could not to get a PhysicalClusterMetadata instance with broker session UUID " + uuid.toString());
+
     configured = true;
   }
 
@@ -108,7 +120,7 @@ public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallback
           handleValidatorCallback(validationCallback);
         } catch (JwtVerificationException e) {
           log.debug("Failed to verify token: {}", e);
-          validationCallback.error("invalid_token", null, null);
+          validationCallback.error(AUTH_ERROR_MESSAGE, null, null);
         }
       } else if (callback instanceof OAuthBearerExtensionsValidatorCallback) {
         handleExtensionsCallback((OAuthBearerExtensionsValidatorCallback) callback);
@@ -145,18 +157,30 @@ public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallback
             .get(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY);
 
     if (logicalCluster == null || logicalCluster.isEmpty()) {
-      callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY,
-              "The logical cluster extension is missing or is empty");
+      log.debug("The logical cluster extension is missing or is empty");
+      callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
       return;
     }
 
     if (!token.allowedClusters().contains(logicalCluster)) {
-      String errorMessage = String.format(
-              "The principal's (%s) logical cluster %s is not part of the "
-                      + "allowed clusters in his token (%s).",
-              token.principalName(), logicalCluster, String.join(",", token.allowedClusters())
-      );
-      callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, errorMessage);
+      log.debug("The principal {}'s logical cluster {} is not part of the allowed clusters in his token ({}).",
+              token.principalName(), logicalCluster, String.join(",", token.allowedClusters()));
+      callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
+      return;
+    }
+
+    try {
+      if (!clusterMetadata.logicalClusterIds().contains(logicalCluster)) {
+        if (clusterMetadata.logicalClusterIdsIncludingStale().contains(logicalCluster))
+          log.info("Failing OAuth authentication because the metadata for the logical cluster {} is stale.", logicalCluster);
+
+        log.debug("The principal {}'s logical cluster {} is not hosted on this broker.", token.principalName(), logicalCluster);
+        callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
+        return;
+      }
+    } catch (IllegalStateException e) {
+      log.error("Could not get physical cluster metadata to validate the token. ", e);
+      callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
       return;
     }
 

@@ -125,7 +125,15 @@ public class KafkaTestUtils {
       SecurityProtocol securityProtocol,
       String saslMechanism,
       String jaasConfig) {
-    Properties props = new Properties();
+    return createAdminClient(bootstrapServers, securityProtocol, saslMechanism, jaasConfig, new Properties());
+  }
+
+  public static AdminClient createAdminClient(
+      String bootstrapServers,
+      SecurityProtocol securityProtocol,
+      String saslMechanism,
+      String jaasConfig,
+      Properties props) {
     props.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     props.setProperty(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, securityProtocol.name);
     props.setProperty(SaslConfigs.SASL_MECHANISM, saslMechanism);

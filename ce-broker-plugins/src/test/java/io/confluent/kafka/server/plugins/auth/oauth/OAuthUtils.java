@@ -19,10 +19,10 @@ import java.security.PublicKey;
 
 import static org.apache.kafka.test.TestUtils.tempFile;
 
-class OAuthUtils {
+public class OAuthUtils {
   private static final Logger log = LoggerFactory.getLogger(OAuthUtils.class);
 
-  static class JwsContainer {
+  public static class JwsContainer {
     private final String jwsToken;
     private final File publicKeyFile;
 
@@ -31,11 +31,11 @@ class OAuthUtils {
       this.publicKeyFile = publicKeyFile;
     }
 
-    File getPublicKeyFile() {
+    public File getPublicKeyFile() {
       return publicKeyFile;
     }
 
-    String getJwsToken() {
+    public String getJwsToken() {
       return jwsToken;
     }
   }
@@ -44,7 +44,7 @@ class OAuthUtils {
    *  Create the public/private key pair, create a JWS signed with the private key
    *    and write the public key in the expected path
    */
-  static JwsContainer setUpJws(Integer expiration, String issuer, String subject, String[] allowedClusters) throws Exception {
+  public static JwsContainer setUpJws(Integer expiration, String issuer, String subject, String[] allowedClusters) throws Exception {
     KeyPair keyPair = generateKeyPair();
     String jws = sign(keyPair.getPrivate(), expiration, issuer, subject, allowedClusters);
     File publicKeyFile = tempFile();

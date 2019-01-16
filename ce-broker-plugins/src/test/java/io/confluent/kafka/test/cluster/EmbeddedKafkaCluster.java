@@ -61,6 +61,8 @@ public class EmbeddedKafkaCluster {
     brokerConfig.put(KafkaConfig$.MODULE$.ZkConnectProp(), zkConnect());
     brokerConfig.put(KafkaConfig$.MODULE$.PortProp(), DEFAULT_BROKER_PORT);
     brokerConfig.putAll(overrideProps);
+    // use delay of 0ms otherwise failed authentications never get a response due to MockTime
+    putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.FailedAuthenticationDelayMsProp(), 0);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.GroupInitialRebalanceDelayMsProp(), 0);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.OffsetsTopicReplicationFactorProp(), (short) 1);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.AutoCreateTopicsEnableProp(), true);

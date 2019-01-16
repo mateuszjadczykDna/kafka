@@ -45,7 +45,7 @@ public class LogicalClusterMetadataTest {
   @Test
   public void testLoadMetadataWithNonDefaultOverheadAndRequestRate() throws IOException {
     final Path metaFile = tempFolder.newFile("lkc-abc.json").toPath();
-    Files.write(metaFile, jsonString(LC_META_ABC, true, true).getBytes());
+    Files.write(metaFile, Utils.logicalClusterJsonString(LC_META_ABC, true, true).getBytes());
 
     // load metadata and verify
     LogicalClusterMetadata meta = loadFromFile(metaFile);
@@ -113,29 +113,6 @@ public class LogicalClusterMetadataTest {
   }
 
   private static String jsonString(LogicalClusterMetadata lcMeta) {
-    return jsonString(lcMeta, false, false);
-  }
-
-  private static String jsonString(
-      LogicalClusterMetadata lcMeta, boolean setQuotaOverhead, boolean setReqPercent) {
-    String json = "{" +
-                  "\"logical_cluster_id\": \"" + lcMeta.logicalClusterId() + "\"," +
-                  "\"physical_cluster_id\": \"" + lcMeta.physicalClusterId() + "\"," +
-                  "\"logical_cluster_name\": \"" + lcMeta.logicalClusterName() + "\"," +
-                  "\"account_id\": \"" + lcMeta.accountId() + "\"," +
-                  "\"k8s_cluster_id\": \"" + lcMeta.k8sClusterId() + "\"," +
-                  "\"logical_cluster_type\": \"" + lcMeta.logicalClusterType() + "\"," +
-                  "\"storage_bytes\": " + lcMeta.storageBytes() + "," +
-                  "\"network_ingress_byte_rate\": " + lcMeta.producerByteRate() + "," +
-                  "\"network_egress_byte_rate\": " + lcMeta.consumerByteRate();
-
-    if (setQuotaOverhead) {
-      json += ", \"network_quota_overhead\": " + lcMeta.networkQuotaOverhead();
-    }
-    if (setReqPercent) {
-      json += ", \"request_percentage\": " + lcMeta.requestPercentage();
-    }
-    json += "}";
-    return json;
+    return Utils.logicalClusterJsonString(lcMeta, false, false);
   }
 }

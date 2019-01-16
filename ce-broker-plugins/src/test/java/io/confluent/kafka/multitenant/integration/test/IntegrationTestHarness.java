@@ -72,6 +72,17 @@ public class IntegrationTestHarness {
     return consumer;
   }
 
+  public AdminClient createOAuthAdminClient(String jaasConfig, Properties properties) {
+    AdminClient adminClient = KafkaTestUtils.createAdminClient(
+            physicalCluster.bootstrapServers(),
+            SecurityProtocol.SASL_PLAINTEXT,
+            "OAUTHBEARER",
+            jaasConfig,
+            properties);
+    adminClients.add(adminClient);
+    return adminClient;
+  }
+
   public AdminClient createAdminClient(LogicalClusterUser user) {
     AdminClient adminClient = KafkaTestUtils.createAdminClient(
         physicalCluster.bootstrapServers(),
