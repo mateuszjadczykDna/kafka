@@ -59,6 +59,7 @@ import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -123,6 +124,7 @@ public class MultiTenantRequestContext extends RequestContext {
 
     ApiKeys api = header.apiKey();
     short apiVersion = header.apiVersion();
+    log.trace("Parsing request of type {} with version {}", api, apiVersion);
     if (!MultiTenantApis.isApiAllowed(header.apiKey())) {
       tenantApiException = Errors.CLUSTER_AUTHORIZATION_FAILED.exception();
     }
@@ -140,7 +142,7 @@ public class MultiTenantRequestContext extends RequestContext {
           body = transformDescribeAclsRequest((DescribeAclsRequest) body);
         } else if (body instanceof DeleteAclsRequest) {
           body = transformDeleteAclsRequest((DeleteAclsRequest) body);
-        } else if (body instanceof CreateTopicsRequest && partitionAssignor != null) {
+        } else if (body instanceof CreateTopicsRequest) {
           body = transformCreateTopicsRequest((CreateTopicsRequest) body, apiVersion);
         } else if (body instanceof CreatePartitionsRequest && partitionAssignor != null) {
           body = transformCreatePartitionsRequest((CreatePartitionsRequest) body, apiVersion);
@@ -242,38 +244,35 @@ public class MultiTenantRequestContext extends RequestContext {
     Map<String, CreateTopicsRequest.TopicDetails> topics = topicsRequest.topics();
 
     Map<String, CreateTopicsRequest.TopicDetails> transformedTopics = new HashMap<>();
-    Map<String, TenantPartitionAssignor.TopicInfo> topicInfos = new HashMap<>();
-    for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
-      CreateTopicsRequest.TopicDetails topicDetails = entry.getValue();
-      int partitions = topicDetails.numPartitions;
-      short replication = topicDetails.replicationFactor;
-      if (!topicDetails.replicasAssignments.isEmpty()) {
-        log.debug("Overriding replica assignments provided in CreateTopicsRequest");
-        partitions = topicDetails.replicasAssignments.size();
-        replication = (short) topicDetails.replicasAssignments.get(0).size();
+    Map<String, List<List<Integer>>> assignments = new HashMap<>();
+
+    if (partitionAssignor != null) {
+      Map<String, TenantPartitionAssignor.TopicInfo> topicInfos = new HashMap<>();
+      for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
+        CreateTopicsRequest.TopicDetails topicDetails = entry.getValue();
+        int partitions = topicDetails.numPartitions;
+        short replication = topicDetails.replicationFactor;
+        if (!topicDetails.replicasAssignments.isEmpty()) {
+          log.debug("Overriding replica assignments provided in CreateTopicsRequest");
+          partitions = topicDetails.replicasAssignments.size();
+          replication = (short) topicDetails.replicasAssignments.get(0).size();
+        }
+        if (partitions <= 0) {
+          throw new InvalidRequestException("Invalid partition count " + partitions);
+        }
+        if (replication <= 0) {
+          throw new InvalidRequestException("Invalid replication factor " + replication);
+        }
+        String topic = entry.getKey();
+        topicInfos.put(topic, new TenantPartitionAssignor.TopicInfo(partitions, replication, 0));
       }
-      if (partitions <= 0) {
-        throw new InvalidRequestException("Invalid partition count " + partitions);
-      }
-      if (replication <= 0) {
-        throw new InvalidRequestException("Invalid replication factor " + replication);
-      }
-      String topic = entry.getKey();
-      topicInfos.put(topic, new TenantPartitionAssignor.TopicInfo(partitions, replication, 0));
+
+      String tenant = tenantContext.principal.tenantMetadata().tenantName;
+      assignments = partitionAssignor.assignPartitionsForNewTopics(tenant, topicInfos);
     }
 
-    String tenant = tenantContext.principal.tenantMetadata().tenantName;
-    Map<String, List<List<Integer>>> assignments =
-        partitionAssignor.assignPartitionsForNewTopics(tenant, topicInfos);
-
-    for (Map.Entry<String, List<List<Integer>>> entry : assignments.entrySet()) {
+    for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
       String topic = entry.getKey();
-      List<List<Integer>> assignment = entry.getValue();
-      Map<Integer, List<Integer>> topicAssignment = new HashMap<>(assignment.size());
-      for (int i = 0; i < assignment.size(); i++) {
-        topicAssignment.put(i, assignment.get(i));
-      }
-
       Map<String, String> configs = new HashMap<>();
       for (Map.Entry<String, String> configEntry : topics.get(topic).configs.entrySet()) {
         if (allowConfigInRequest(configEntry.getKey())) {
@@ -283,14 +282,26 @@ public class MultiTenantRequestContext extends RequestContext {
         }
       }
 
+      // If the TenantPartitionAssignor ran, use its assignments
+      List<List<Integer>> assignment = assignments.getOrDefault(topic, Collections.emptyList());
+      Map<Integer, List<Integer>> topicAssignment = new HashMap<>(assignment.size());
+      for (int i = 0; i < assignment.size(); i++) {
+        topicAssignment.put(i, assignment.get(i));
+      }
+
       CreateTopicsRequest.TopicDetails topicDetails;
       if (!topicAssignment.isEmpty()) {
         topicDetails = new CreateTopicsRequest.TopicDetails(topicAssignment, configs);
       } else {
-        TenantPartitionAssignor.TopicInfo topicInfo = topicInfos.get(topic);
-        topicDetails = new CreateTopicsRequest.TopicDetails(topicInfo.totalPartitions(),
-            topicInfo.replicationFactor(), configs);
+        CreateTopicsRequest.TopicDetails originalTopicDetails = entry.getValue();
+        if (!originalTopicDetails.replicasAssignments.isEmpty()) {
+          topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.replicasAssignments, configs);
+        } else {
+          topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.numPartitions,
+                  originalTopicDetails.replicationFactor, configs);
+        }
       }
+
       transformedTopics.put(topic, topicDetails);
     }
 
@@ -330,6 +341,7 @@ public class MultiTenantRequestContext extends RequestContext {
   // For configs with a range of allowable values, and for min.insync.replicas (which must be equal to 2),
   // leave the configs in the request and let them fail the config policy, rather than changing their values.
   private boolean allowConfigInRequest(String key) {
+    log.trace("Allowing config {} in the request because it is updateable");
     return MultiTenantConfigRestrictions.UPDATABLE_TOPIC_CONFIGS.contains(key) ||
             key.equals(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG);
   }

@@ -229,6 +229,15 @@ public class CreateTopicPolicyTest {
     policy.validate(requestMetadata);
   }
 
+  @Test(expected = PolicyViolationException.class)
+  public void rejectSegmentMsTooLow() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+            .put(TopicConfig.SEGMENT_BYTES_CONFIG, "" + (3 * 60 * 60 * 1000))
+            .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
   @Test
   public void validateGetBootstrapBrokerFromConfig() {
     Map<String, String> config = new HashMap<>();

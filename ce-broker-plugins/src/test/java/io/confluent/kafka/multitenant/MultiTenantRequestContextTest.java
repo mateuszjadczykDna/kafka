@@ -10,7 +10,6 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import io.confluent.kafka.server.plugins.policy.TopicPolicyConfig;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -160,8 +159,6 @@ public class MultiTenantRequestContextTest {
   private TenantMetrics tenantMetrics = new TenantMetrics();
   private TenantPartitionAssignor partitionAssignor;
   private TestCluster testCluster;
-  private Map<String, Object> configs = mkMap(mkEntry(TopicPolicyConfig.REPLICATION_FACTOR_CONFIG, (short) 3),
-          mkEntry(TopicPolicyConfig.MIN_IN_SYNC_REPLICAS_CONFIG, (short) 2));
 
   @Before
   public void setUp() {
@@ -659,13 +656,7 @@ public class MultiTenantRequestContextTest {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
       Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
 
-      Map<String, String> topicConfigs = mkMap(
-              mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
-              mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
-              mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
-              mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"),
-              mkEntry(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, "0.5"));
-      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, topicConfigs));
+      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, getTestConfigs()));
 
       Map<Integer, List<Integer>> unbalancedAssignment = new HashMap<>();
       unbalancedAssignment.put(0, Arrays.asList(0, 1));
@@ -680,14 +671,9 @@ public class MultiTenantRequestContextTest {
       assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
 
       assertEquals(4, intercepted.topics().get("tenant_foo").replicasAssignments.size());
-      // Min ISR config should be stripped out. Max message bytes and segment bytes will not be stripped out
-      // and will cause an exception to be raised in the config policy
-      assertEquals(mkMap(
-              mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
-              mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"),
-              mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
-              mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024")),
-          intercepted.topics().get("tenant_foo").configs);
+
+      // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
+      assertEquals(getTransformedTestConfig(), intercepted.topics().get("tenant_foo").configs);
 
       assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
       assertNotEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
@@ -706,23 +692,35 @@ public class MultiTenantRequestContextTest {
     for (short ver = ApiKeys.CREATE_TOPICS.oldestVersion(); ver <= ApiKeys.CREATE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
       Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
-      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1));
+
+      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, getTestConfigs()));
+
       Map<Integer, List<Integer>> unbalancedAssignment = new HashMap<>();
       unbalancedAssignment.put(0, Arrays.asList(0, 1));
       unbalancedAssignment.put(1, Arrays.asList(0, 1));
       requestTopics.put("bar", new CreateTopicsRequest.TopicDetails(unbalancedAssignment));
+
       requestTopics.put("invalid", new CreateTopicsRequest.TopicDetails(3, (short) 5));
+
       CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(requestTopics, 30000, false).build(ver);
       CreateTopicsRequest intercepted = (CreateTopicsRequest) parseRequest(context, inbound);
+
       assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
+
       assertTrue(intercepted.topics().get("tenant_foo").replicasAssignments.isEmpty());
       assertEquals(4, intercepted.topics().get("tenant_foo").numPartitions);
       assertEquals(1, intercepted.topics().get("tenant_foo").replicationFactor);
+
+      // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
+      assertEquals(getTransformedTestConfig(),  intercepted.topics().get("tenant_foo").configs);
+
       assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
       assertEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
+
       assertTrue(intercepted.topics().get("tenant_invalid").replicasAssignments.isEmpty());
       assertEquals(3, intercepted.topics().get("tenant_invalid").numPartitions);
       assertEquals(5, intercepted.topics().get("tenant_invalid").replicationFactor);
+
       verifyRequestMetrics(ApiKeys.CREATE_TOPICS);
     }
   }
@@ -1614,12 +1612,11 @@ public class MultiTenantRequestContextTest {
     for (short ver = ApiKeys.ALTER_CONFIGS.oldestVersion(); ver <= ApiKeys.ALTER_CONFIGS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.ALTER_CONFIGS, ver);
       Map<ConfigResource, AlterConfigsRequest.Config> resourceConfigs = new HashMap<>();
-      resourceConfigs.put(new ConfigResource(ConfigResource.Type.TOPIC, "foo"), new AlterConfigsRequest.Config(
-          mkSet(new AlterConfigsRequest.ConfigEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
-                  new AlterConfigsRequest.ConfigEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
-                  new AlterConfigsRequest.ConfigEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
-                  new AlterConfigsRequest.ConfigEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "2"),
-                  new AlterConfigsRequest.ConfigEntry(TopicConfig.MIN_CLEANABLE_DIRTY_RATIO_CONFIG, "0.5"))));
+      resourceConfigs.put(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
+          new AlterConfigsRequest.Config(getTestConfigs().entrySet()
+              .stream()
+              .map(entry -> new AlterConfigsRequest.ConfigEntry(entry.getKey(), entry.getValue()))
+              .collect(Collectors.toSet())));
       resourceConfigs.put(new ConfigResource(ConfigResource.Type.BROKER, "blah"), new AlterConfigsRequest.Config(
           Collections.<AlterConfigsRequest.ConfigEntry>emptyList()));
       resourceConfigs.put(new ConfigResource(ConfigResource.Type.TOPIC, "bar"), new AlterConfigsRequest.Config(
@@ -1636,14 +1633,9 @@ public class MultiTenantRequestContextTest {
       for (AlterConfigsRequest.ConfigEntry configEntry : configEntries) {
         resultsMap.put(configEntry.name(), configEntry.value());
       }
-      // Min ISR config should be stripped out. Max message bytes and segment bytes will not be stripped out
-      // and will cause an exception to be raised in the config policy
-      assertEquals(mkMap(
-              mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
-              mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
-              mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
-              mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "2")),
-          resultsMap);
+
+      // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
+      assertEquals(getTransformedTestConfig(), resultsMap);
       verifyRequestMetrics(ApiKeys.ALTER_CONFIGS);
     }
   }
@@ -1806,5 +1798,39 @@ public class MultiTenantRequestContextTest {
       sensors.add(sensor);
     }
     return sensors;
+  }
+
+  // Gets a map of configs containing all modifiable configs, plus min.insync.replicas, plus
+  // an unmodifiable config (compression.type)
+  private Map<String, String> getTestConfigs() {
+    return mkMap(
+            mkEntry(TopicConfig.CLEANUP_POLICY_CONFIG, "compact"),
+            mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
+            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG, "31536000000"),
+            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG, "LogAppendTime"),
+            mkEntry(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "0"),
+            mkEntry(TopicConfig.RETENTION_BYTES_CONFIG, "107374182400"),
+            mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
+            mkEntry(TopicConfig.DELETE_RETENTION_MS_CONFIG, "31536000000"),
+            mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
+            mkEntry(TopicConfig.SEGMENT_MS_CONFIG, "100"),
+            mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"),
+            mkEntry(TopicConfig.COMPRESSION_TYPE_CONFIG, "lz4"));
+  }
+
+  // Returns the test config map with compression.type stripped out
+  private Map<String, String> getTransformedTestConfig() {
+    return mkMap(
+            mkEntry(TopicConfig.CLEANUP_POLICY_CONFIG, "compact"),
+            mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
+            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG, "31536000000"),
+            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG, "LogAppendTime"),
+            mkEntry(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "0"),
+            mkEntry(TopicConfig.RETENTION_BYTES_CONFIG, "107374182400"),
+            mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
+            mkEntry(TopicConfig.DELETE_RETENTION_MS_CONFIG, "31536000000"),
+            mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
+            mkEntry(TopicConfig.SEGMENT_MS_CONFIG, "100"),
+            mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"));
   }
 }

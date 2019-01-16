@@ -80,6 +80,15 @@ public class AlterConfigPolicyTest {
     policy.validate(requestMetadata);
   }
 
+  @Test(expected = PolicyViolationException.class)
+  public void rejectSegmentMsTooLow() {
+    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+            .put(TopicConfig.SEGMENT_MS_CONFIG, "" + (3 * 60 * 60 * 1000))
+            .build();
+    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    policy.validate(requestMetadata);
+  }
+
   @Test
   public void validateAllAllowedProperties() throws Exception {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()

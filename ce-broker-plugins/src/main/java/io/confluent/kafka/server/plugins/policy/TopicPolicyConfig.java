@@ -29,6 +29,12 @@ public class TopicPolicyConfig extends AbstractConfig {
   protected static final String SEGMENT_BYTES_MAX_CONFIG_DOC =
       "The maximum allowed value for the segment.bytes topic config property.";
 
+  public static final String SEGMENT_MS_MIN_CONFIG =
+          TopicPolicyConfig.TOPIC_PREFIX + "segment.ms.min";
+  public static final int DEFAULT_SEGMENT_MS_MIN = 4 * 60 * 60 * 1000;
+  protected static final String SEGMENT_MS_MIN_CONFIG_DOC =
+      "The minimum allowed value for the segment.ms topic config property.";
+
   public static final String RETENTION_MS_MAX_CONFIG =
       TopicPolicyConfig.TOPIC_PREFIX + "retention.ms.max";
 
@@ -99,6 +105,11 @@ public class TopicPolicyConfig extends AbstractConfig {
             DEFAULT_SEGMENT_BYTES_MAX,
             ConfigDef.Importance.MEDIUM,
             SEGMENT_BYTES_MAX_CONFIG_DOC
+        ).define(SEGMENT_MS_MIN_CONFIG,
+            ConfigDef.Type.INT,
+            DEFAULT_SEGMENT_MS_MIN,
+            ConfigDef.Importance.MEDIUM,
+            SEGMENT_MS_MIN_CONFIG_DOC
         ).define(DELETE_RETENTION_MS_MAX_CONFIG,
             ConfigDef.Type.LONG,
             DEFAULT_DELETE_RETENTION_MS_MAX,
@@ -196,6 +207,8 @@ public class TopicPolicyConfig extends AbstractConfig {
 
     checkPolicyMin(configs, TopicPolicyConfig.SEGMENT_BYTES_MIN_CONFIG,
         TopicConfig.SEGMENT_BYTES_CONFIG);
+    checkPolicyMin(configs, TopicPolicyConfig.SEGMENT_MS_MIN_CONFIG,
+        TopicConfig.SEGMENT_MS_CONFIG);
   }
 
   public void validateTopicConfigs(Map<String, String> configs) {

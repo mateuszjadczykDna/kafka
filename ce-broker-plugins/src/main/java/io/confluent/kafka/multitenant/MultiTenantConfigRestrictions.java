@@ -31,6 +31,7 @@ public class MultiTenantConfigRestrictions {
       "retention.bytes",
       "retention.ms",
       "delete.retention.ms",
-      "segment.bytes"
+      "segment.bytes",
+      "segment.ms"
   );
 }
