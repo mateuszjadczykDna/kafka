@@ -2,7 +2,7 @@
 
 ##########
 
-FROM gradle:4.10-jdk10 as kafka-builder
+FROM gradle:5.1.1-jdk11 as kafka-builder
 USER root
 
 COPY . /home/gradle
@@ -20,7 +20,7 @@ RUN tar -xzvf /home/gradle/core/build/distributions/kafka_*-SNAPSHOT.tgz --strip
 
 ##########
 
-FROM confluent-docker.jfrog.io/confluentinc/cc-base:v2.4.0
+FROM confluent-docker.jfrog.io/confluentinc/cc-base:v2.4.1
 
 ARG version
 ARG confluent_version
