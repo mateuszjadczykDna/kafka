@@ -216,19 +216,16 @@ class GroupCoordinator(val brokerId: Int,
         assert(groupInstanceId == JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)
         addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, memberId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
           ,clientId, clientHost, protocolType, protocols, group, responseCallback)
-      } else if (!group.has(memberId)) {
-        if (isStaticMember && group.getStaticMemberId(groupInstanceId) != memberId) {
-          group.remove(groupInstanceId)
-          // the given member id doesn't match with the groupInstanceId. Should be shut down immediately.
-          responseCallback(joinError(memberId, Errors.MEMBER_ID_MISMATCH))
-        } else {
-          // if the dynamic member trying to register with a un-recognized id, send the response to let
-          // it reset its member id and retry.
-          responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
-        }
       } else if (isStaticMember && !group.hasStaticMember(groupInstanceId)) {
         // The given static member is not found within the storage.
         responseCallback(joinError(memberId, Errors.GROUP_INSTANCE_ID_NOT_FOUND))
+      } else if (isStaticMember && group.getStaticMemberId(groupInstanceId) != memberId) {
+        // the given member id doesn't match with the groupInstanceId. Should be shut down immediately.
+        responseCallback(joinError(memberId, Errors.MEMBER_ID_MISMATCH))
+      } else if (!group.has(memberId)) {
+        // if the dynamic member trying to register with a un-recognized id, send the response to let
+        // it reset its member id and retry.
+        responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))
       } else {
         group.currentState match {
           case PreparingRebalance =>

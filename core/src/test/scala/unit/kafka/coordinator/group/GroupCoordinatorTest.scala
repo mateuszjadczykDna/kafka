@@ -402,7 +402,6 @@ class GroupCoordinatorTest extends JUnitSuite {
     assertEquals(Errors.MEMBER_ID_MISMATCH, joinGroupResult.error)
   }
 
-  // with leader id, changed meta follower id, known id and unknown id
   @Test
   def staticMemberRejoinWithKnownMemberId() {
     var joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, groupInstanceId, protocolType, protocols)
@@ -487,7 +486,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   def staticMemberRejoinWithFollowerIdWithUnknownMemberId() {
     val (assignedLeaderId, assignedFollowerId, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
 
-    // A static follower rejoin with no protocol change will not trigger .
+    // A static follower rejoin with no protocol change will not trigger rebalance.
     EasyMock.reset(replicaManager)
     // Timeout old leader in the meantime.
     val joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, followerInstanceId, protocolType, protocolSuperset, clockAdvance = 1)
@@ -506,7 +505,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   def staticMemberRejoinWithFollowerIdWithKnownMemberId() {
     val (assignedLeaderId, assignedFollowerId, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
 
-    // A static follower rejoin with no protocol change will not trigger .
+    // A static follower rejoin with no protocol change will not trigger rebalance.
     EasyMock.reset(replicaManager)
     // Timeout old leader in the meantime.
     val joinGroupResult = staticJoinGroup(groupId, assignedFollowerId, followerInstanceId, protocolType, protocolSuperset, clockAdvance = 1)
@@ -519,6 +518,39 @@ class GroupCoordinatorTest extends JUnitSuite {
       0,
       groupId,
       Stable)
+  }
+
+  @Test
+  def staticMemberRejoinWithMismatchedMemberIdAsFollower() {
+    val (_, assignedFollowerId, _) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    // A static follower rejoin with no protocol change will not trigger .
+    EasyMock.reset(replicaManager)
+    val joinGroupResult = staticJoinGroup(groupId, assignedFollowerId, leaderInstanceId, protocolType, protocolSuperset, clockAdvance = 1)
+
+    assertEquals(Errors.MEMBER_ID_MISMATCH, joinGroupResult.error)
+  }
+
+  @Test
+  def staticMemberRejoinWithMismatchedMemberIdAsLeader() {
+    val (assignedLeaderId, _, _) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    // A static follower rejoin with no protocol change will not trigger .
+    EasyMock.reset(replicaManager)
+    val joinGroupResult = staticJoinGroup(groupId, assignedLeaderId, followerInstanceId, protocolType, protocolSuperset, clockAdvance = 1)
+
+    assertEquals(Errors.MEMBER_ID_MISMATCH, joinGroupResult.error)
+  }
+
+  @Test
+  def staticMemberJoinWithUnknownInstanceIdAndKnownMemberId() {
+    val (assignedLeaderId, _, _) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    // A static follower rejoin with no protocol change will not trigger .
+    EasyMock.reset(replicaManager)
+    val joinGroupResult = staticJoinGroup(groupId, assignedLeaderId, "unknown_instance", protocolType, protocolSuperset, clockAdvance = 1)
+
+    assertEquals(Errors.GROUP_INSTANCE_ID_NOT_FOUND, joinGroupResult.error)
   }
 
   private def staticMembersJoinAndRebalance(leaderInstanceId: String,
