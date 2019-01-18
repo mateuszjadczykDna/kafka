@@ -76,6 +76,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   private val followerInstanceId = "follower"
   private val metadata = Array[Byte]()
   private val protocols = List(("range", metadata))
+  private val protocolSuperset =  List(("range", metadata), ("roundrobin", metadata))
   private var groupPartitionId: Int = -1
 
   // we use this string value since its hashcode % #.partitions is different
@@ -425,20 +426,41 @@ class GroupCoordinatorTest extends JUnitSuite {
   }
 
   @Test
-  def staticMemberRejoinWithLeaderId() {
+  def staticMemberRejoinWithLeaderIdAndUnknownMemberId() {
     val (assignedLeaderId, _, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
 
     // A static leader rejoin will trigger rebalance.
     EasyMock.reset(replicaManager)
     // Timeout follower in the meantime.
-    val joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, leaderInstanceId, protocolType, protocols, clockAdvance = DefaultSessionTimeout + 1)
+    val joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, leaderInstanceId, protocolType, protocolSuperset, clockAdvance = DefaultSessionTimeout + 1)
 
-    assertEquals(Errors.NONE, joinGroupResult.error)
-    // The group has promoted to the new generation
-    assertEquals(latestGeneration + 1, joinGroupResult.generationId)
-    assertEquals(assignedLeaderId, joinGroupResult.memberId)
-    assertEquals(1, joinGroupResult.members.size)
-    assertTrue(getGroup(groupId).is(CompletingRebalance))
+    checkJoinGroupResult(joinGroupResult,
+      Errors.NONE,
+      latestGeneration + 1, // The group has promoted to the new generation
+      assignedLeaderId,
+      assignedLeaderId,
+      1,
+      groupId,
+      CompletingRebalance)
+  }
+
+  @Test
+  def staticMemberRejoinWithLeaderIdAndKnownMemberId() {
+    val (assignedLeaderId, _, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    // A static leader rejoin will trigger rebalance.
+    EasyMock.reset(replicaManager)
+    // Timeout follower in the meantime.
+    val joinGroupResult = staticJoinGroup(groupId, assignedLeaderId, leaderInstanceId, protocolType, protocolSuperset, clockAdvance = DefaultSessionTimeout + 1)
+
+    checkJoinGroupResult(joinGroupResult,
+      Errors.NONE,
+      latestGeneration + 1, // The group has promoted to the new generation.
+      assignedLeaderId,
+      assignedLeaderId,
+      1,
+      groupId,
+      CompletingRebalance)
   }
 
   @Test
@@ -451,35 +473,56 @@ class GroupCoordinatorTest extends JUnitSuite {
     // Timeout old leader in the meantime.
     val joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, followerInstanceId, protocolType, newProtocols, clockAdvance = DefaultSessionTimeout + 1)
 
-    assertEquals(Errors.NONE, joinGroupResult.error)
-    // The group has promoted to the new generation, and leader has changed because old one times out.
-    assertEquals(latestGeneration + 1, joinGroupResult.generationId)
-    assertEquals(assignedFollowerId, joinGroupResult.memberId)
-    assertEquals(1, joinGroupResult.members.size)
-    assertTrue(getGroup(groupId).is(CompletingRebalance))
+    checkJoinGroupResult(joinGroupResult,
+      Errors.NONE,
+      latestGeneration + 1, // The group has promoted to the new generation, and leader has changed because old one times out.
+      assignedFollowerId,
+      assignedFollowerId,
+      1,
+      groupId,
+      CompletingRebalance)
   }
 
   @Test
-  def staticMemberRejoinWithFollowerId() {
+  def staticMemberRejoinWithFollowerIdWithUnknownMemberId() {
     val (assignedLeaderId, assignedFollowerId, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
 
     // A static follower rejoin with no protocol change will not trigger .
     EasyMock.reset(replicaManager)
     // Timeout old leader in the meantime.
-    val joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, followerInstanceId, protocolType, protocols, clockAdvance = 1)
+    val joinGroupResult = staticJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, followerInstanceId, protocolType, protocolSuperset, clockAdvance = 1)
 
-    assertEquals(Errors.NONE, joinGroupResult.error)
-    // The group has no change.
-    assertEquals(latestGeneration, joinGroupResult.generationId)
-    assertEquals(assignedLeaderId, joinGroupResult.leaderId)
-    assertEquals(assignedFollowerId, joinGroupResult.memberId)
-    assertEquals(Map(), joinGroupResult.members)
-    assertTrue(getGroup(groupId).is(Stable))
+    checkJoinGroupResult(joinGroupResult,
+      Errors.NONE,
+      latestGeneration, // The group has no change.
+      assignedLeaderId,
+      assignedFollowerId,
+      0,
+      groupId,
+      Stable)
+  }
+
+  @Test
+  def staticMemberRejoinWithFollowerIdWithKnownMemberId() {
+    val (assignedLeaderId, assignedFollowerId, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    // A static follower rejoin with no protocol change will not trigger .
+    EasyMock.reset(replicaManager)
+    // Timeout old leader in the meantime.
+    val joinGroupResult = staticJoinGroup(groupId, assignedFollowerId, followerInstanceId, protocolType, protocolSuperset, clockAdvance = 1)
+
+    checkJoinGroupResult(joinGroupResult,
+      Errors.NONE,
+      latestGeneration, // The group has no change.
+      assignedLeaderId,
+      assignedFollowerId,
+      0,
+      groupId,
+      Stable)
   }
 
   private def staticMembersJoinAndRebalance(leaderInstanceId: String,
                                             followerInstanceId: String): (String, String, Int) = {
-    val protocolSuperset =  List(("range", metadata), ("roundrobin", metadata))
     EasyMock.reset(replicaManager)
     val leaderResponseFuture = sendJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, protocolType, protocolSuperset, leaderInstanceId)
 
@@ -509,6 +552,23 @@ class GroupCoordinatorTest extends JUnitSuite {
     assertEquals(Errors.NONE, syncGroupResult._2)
     assertTrue(getGroup(groupId).is(Stable))
     (leaderId, followerJoinGroupResult.memberId, newGeneration)
+  }
+
+  private def checkJoinGroupResult(joinGroupResult: JoinGroupResult,
+                                   expectedError: Errors,
+                                   expectedGeneration: Int,
+                                   expectedLeaderId: String,
+                                   expectedMemberId: String,
+                                   expectedMemberSize: Int,
+                                   groupId: String,
+                                   expectedGroupState: GroupState,
+                                  ) {
+    assertEquals(Errors.NONE, joinGroupResult.error)
+    assertEquals(expectedGeneration, joinGroupResult.generationId)
+    assertEquals(expectedLeaderId, joinGroupResult.leaderId)
+    assertEquals(expectedMemberId, joinGroupResult.memberId)
+    assertEquals(expectedMemberSize, joinGroupResult.members.size)
+    assertTrue(getGroup(groupId).is(expectedGroupState))
   }
 
   @Test
