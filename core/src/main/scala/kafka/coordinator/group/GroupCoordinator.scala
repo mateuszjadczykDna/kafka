@@ -162,7 +162,8 @@ class GroupCoordinator(val brokerId: Int,
       } else if (!group.supportsProtocols(protocolType, MemberMetadata.plainProtocolSet(protocols))) {
         responseCallback(joinError(JoinGroupRequest.UNKNOWN_MEMBER_ID, Errors.INCONSISTENT_GROUP_PROTOCOL))
       } else if (group.hasStaticMember(groupInstanceId)) {
-        // Known static member rejoin will not trigger rebalance, while immediately return with current generation assignment.
+        // Known static member rejoin will not trigger rebalance, while immediately return current generation assignment if
+        // group is currently stable.
         val memberId = group.getStaticMemberId(groupInstanceId)
         if (!maybeRebalanceOnMemberRejoin(group, memberId, protocols, responseCallback)) {
           responseCallback(JoinGroupResult(
@@ -281,8 +282,6 @@ class GroupCoordinator(val brokerId: Int,
       }
     }
   }
-
-  private def isStaticMember(groupInstanceId: String) : Boolean = groupInstanceId != JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
 
   private def maybeRebalanceOnMemberRejoin(group: GroupMetadata,
                              memberId: String,
@@ -853,11 +852,9 @@ class GroupCoordinator(val brokerId: Int,
     // to invoke the callback before removing the member. We return UNKNOWN_MEMBER_ID so that the consumer
     // will retry the JoinGroup request if is still active.
     group.maybeInvokeJoinCallback(member, joinError(NoMemberId, Errors.UNKNOWN_MEMBER_ID))
-
     group.remove(member.memberId)
     group.removeStaticMember(member.groupInstanceId)
 
-    group.removeStaticMember(member.groupInstanceId)
     group.currentState match {
       case Dead | Empty =>
       case Stable | CompletingRebalance => maybePrepareRebalance(group, reason)
