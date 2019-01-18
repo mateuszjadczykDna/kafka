@@ -354,7 +354,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   }
 
   @Test
-  def testJoinGroupUnknownConsumerDeadGroup() {
+  def testJoinGroupUnknownConsumerNewDeadGroup() {
     val memberId = JoinGroupRequest.UNKNOWN_MEMBER_ID
 
     val deadGroupId = "deadGroupId"
@@ -463,6 +463,29 @@ class GroupCoordinatorTest extends JUnitSuite {
   }
 
   @Test
+  def staticMemberRejoinWithLeaderIdAndUnexpectedDeadGroup() {
+    val (assignedLeaderId, _, _) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    getGroup(groupId).transitionTo(Dead)
+
+    EasyMock.reset(replicaManager)
+    val joinGroupResult = staticJoinGroup(groupId, assignedLeaderId, leaderInstanceId, protocolType, protocols, clockAdvance = 1)
+    assertEquals(Errors.UNKNOWN_MEMBER_ID, joinGroupResult.error)
+  }
+
+  @Test
+  def staticMemberRejoinWithLeaderIdAndUnexpectedEmptyGroup() {
+    val (assignedLeaderId, _, _) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    getGroup(groupId).transitionTo(PreparingRebalance)
+    getGroup(groupId).transitionTo(Empty)
+
+    EasyMock.reset(replicaManager)
+    val joinGroupResult = staticJoinGroup(groupId, assignedLeaderId, leaderInstanceId, protocolType, protocols, clockAdvance = 1)
+    assertEquals(Errors.UNKNOWN_MEMBER_ID, joinGroupResult.error)
+  }
+
+  @Test
   def staticMemberRejoinWithFollowerIdAndChangeOfProtocol() {
     val (_, assignedFollowerId, latestGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
 
@@ -480,6 +503,57 @@ class GroupCoordinatorTest extends JUnitSuite {
       1,
       groupId,
       CompletingRebalance)
+  }
+
+  @Test
+  def staticMemberRejoinWithLeaderToTriggerRebalanceAndFollowerWithChangeofProtocol() {
+    val (assignedLeaderId, assignedFollowerId, initialGeneration) = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId)
+
+    // A static leader rejoin will trigger rebalance.
+    EasyMock.reset(replicaManager)
+    val leaderRejoinGroupFuture = sendJoinGroup(groupId, assignedLeaderId, protocolType, protocolSuperset, leaderInstanceId)
+    EasyMock.reset(replicaManager)
+    val followerRejoinWithFuture = sendJoinGroup(groupId, JoinGroupRequest.UNKNOWN_MEMBER_ID, protocolType, protocolSuperset, followerInstanceId)
+
+    timer.advanceClock(DefaultRebalanceTimeout + 1)
+
+    // Leader should get the same assignment as last round.
+    checkJoinGroupResult(await(leaderRejoinGroupFuture, 1),
+      Errors.NONE,
+      initialGeneration + 1, // The group has promoted to the new generation.
+      assignedLeaderId,
+      assignedLeaderId,
+      2,
+      groupId,
+      CompletingRebalance
+    )
+
+    checkJoinGroupResult(await(followerRejoinWithFuture, 1),
+      Errors.NONE,
+      initialGeneration + 1, // The group has promoted to the new generation.
+      assignedLeaderId,
+      assignedFollowerId,
+      0,
+      groupId,
+      CompletingRebalance
+    )
+
+    EasyMock.reset(replicaManager)
+    // The follower protocol changed from protocolSuperset to general protocols.
+    val followerRejoinWithProtocolChangeFuture = sendJoinGroup(groupId, assignedFollowerId, protocolType, protocols, followerInstanceId)
+    // The group will transit to PreparingRebalance due to protocol change from follower.
+    assertTrue(getGroup(groupId).is(PreparingRebalance))
+
+    timer.advanceClock(DefaultRebalanceTimeout + 1)
+    checkJoinGroupResult(await(followerRejoinWithProtocolChangeFuture, 1),
+      Errors.NONE,
+      initialGeneration + 2, // The group has promoted to the new generation.
+      assignedFollowerId,
+      assignedFollowerId,
+      1,
+      groupId,
+      CompletingRebalance
+    )
   }
 
   @Test
