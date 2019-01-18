@@ -49,15 +49,14 @@
 
     <suppress checks="BooleanExpressionComplexity"
               files="(Utils|Topic|KafkaLZ4BlockOutputStream|AclData).java"/>
-
     <suppress checks="CyclomaticComplexity"
-              files="(ResourcePatternFilter|ConsumerCoordinator|Fetcher|Sender|KafkaProducer|BufferPool|ConfigDef|RecordAccumulator|KerberosLogin|AbstractRequest|AbstractResponse|Selector|SslFactory|SslTransportLayer|SaslClientAuthenticator|SaslClientCallbackHandler|SaslServerAuthenticator).java"/>
+              files="(ConsumerCoordinator|Fetcher|Sender|KafkaProducer|BufferPool|ConfigDef|RecordAccumulator|KerberosLogin|AbstractRequest|AbstractResponse|Selector|SslFactory|SslTransportLayer|SaslClientAuthenticator|SaslClientCallbackHandler|SaslServerAuthenticator|SchemaGenerator).java"/>
 
     <suppress checks="JavaNCSS"
               files="AbstractRequest.java|KerberosLogin.java|WorkerSinkTaskTest.java|TransactionManagerTest.java"/>
 
     <suppress checks="NPathComplexity"
-              files="(ResourcePatternFilter|BufferPool|Fetcher|MetricName|Node|ConfigDef|RecordBatch|SslFactory|SslTransportLayer|MetadataResponse|KerberosLogin|Selector|Sender|Serdes|TokenInformation|Agent|Values|PluginUtils|MiniTrogdorCluster|TasksRequest).java"/>
+              files="(BufferPool|Fetcher|MetricName|Node|ConfigDef|RecordBatch|SslFactory|SslTransportLayer|MetadataResponse|KerberosLogin|Selector|Sender|Serdes|TokenInformation|Agent|Values|PluginUtils|MiniTrogdorCluster|TasksRequest).java"/>
 
     <!-- clients tests -->
     <suppress checks="ClassDataAbstractionCoupling"
@@ -218,8 +217,22 @@
     <suppress checks="JavaNCSS"
               files="RequestResponseTest.java"/>
 
+    <suppress checks="(NPathComplexity|ClassFanOutComplexity|CyclomaticComplexity|ClassDataAbstractionCoupling)"
+            files="clients/src/generated/.+.java$"/>
+    <suppress checks="NPathComplexity"
+            files="MessageTest.java"/>
+
+    <suppress checks="CyclomaticComplexity" files="MessageDataGenerator.java"/>
+
     <suppress checks=".+"
               files="ce-serializers/build/generated/.+.java$"/>
+
+    <!-- ce-kafka adds additional suppressions.  It's useful to group them together here at the end of the file, to avoid merge conflicts. -->
+    <!-- ce-kafka suppressions for clients -->
+    <suppress checks="CyclomaticComplexity"
+              files="(ResourcePatternFilter)"/>
+    <suppress checks="NPathComplexity"
+              files="(ResourcePatternFilter)"/>
 
     <!-- ce-broker-plugins exclusions -->
     <!--TODO: we dont use the same header-->
@@ -256,5 +269,4 @@
               files="LicenseManagerTest.java"/>
     <suppress checks="MethodLength"
               files="LicenseManagerTest.java"/>
-
 </suppressions>

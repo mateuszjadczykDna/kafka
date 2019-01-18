@@ -30,9 +30,6 @@ TAGS
 Vagrantfile.local
 /logs
 .DS_Store
-.ssh
-.netrc
-.semaphore-cache/
 
 config/server-*
 config/zookeeper-*
@@ -55,6 +52,9 @@ docs/generated/
 kafkatest.egg-info/
 systest/
 *.swp
-vendor/
+clients/src/generated
 
-cc-services/soak_cluster/mk-include
+.netrc
+.semaphore-cache/
+.ssh
+vendor/
