@@ -6,10 +6,11 @@ package kafka.tier.state;
 
 import kafka.tier.domain.AbstractTierMetadata;
 import kafka.tier.domain.TierObjectMetadata;
-import kafka.tier.serdes.ObjectMetadata;
+import org.apache.kafka.common.TopicPartition;
 
+import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
+import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -28,6 +29,31 @@ public interface TierPartitionState {
     }
 
     /**
+     * The topic-partition corresponding to this TierPartition.
+     * @return topic-partition
+     */
+    TopicPartition topicPartition();
+
+    /**
+     * The directory where the TierPartition is stored on disk.
+     * @return file handle for the directory
+     */
+    File dir();
+
+    /**
+     * Path to where the TierPartition is stored on disk.
+     * @return path
+     */
+    String path();
+
+    /**
+     * Determine start offset spanned by the TierPartitionState.
+     * @return start offset
+     * @throws IOException
+     */
+    OptionalLong startOffset() throws IOException;
+
+    /**
      * Determine end offset spanned by the TierPartitionState.
      * @return end offset
      * @throws IOException
@@ -35,11 +61,44 @@ public interface TierPartitionState {
     OptionalLong endOffset() throws IOException;
 
     /**
-     * Determine beginning offset spanned by the TierPartitionState.
-     * @return beginning offset
+     * Scan the ObjectMetadata (segment) entries in this tier partition, and return the count.
+     * @return number of tiered segments
+     */
+    int numSegments();
+
+    /**
+     * Get the set of base offsets for all tiered segments. The returned set is sorted by base offset.
+     * @return Set of base offset for tiered segments
+     */
+    NavigableSet<Long> segmentOffsets();
+
+    /**
+     * Get the set of base offsets for all tiered segments in a given range. The returned set is sorted by base offset.
+     * @param from Start of the range, include segment which contains "from" (inclusive)
+     * @param to End of the range, upper bound exclusive offset to include or the end of the log if "to" is past the end
+     * @return Set of base offset for tiered segments
+     */
+    NavigableSet<Long> segmentOffsets(long from, long to) throws IOException;
+
+    /**
+     * Lookup the TierObjectMetadata which will contain data for a target offset.
+     * @param targetOffset the target offset to lookup the overlapping or next metadata for.
+     * @return The TierObjectMetadata, if any.
+     * @throws IOException if disk error encountered
+     */
+    Optional<TierObjectMetadata> metadata(long targetOffset) throws IOException;
+
+    /**
+     * Appends abstract metadata to the tier partition.
+     * Dispatches to more specific append method.
+     * When appending a TierTopicInitLeader entry, it may advance the tierEpoch.
+     * When appending a TierObjectMetadata entry, it may append the tier metadata to the tier
+     * partition log file.
+     * @param tierMetadata AbstractTierMetadata entry to be appended to the tier partition log.
+     * @return Returns an AppendResult denoting the result of the append action.
      * @throws IOException
      */
-    OptionalLong beginningOffset() throws IOException;
+    AppendResult append(AbstractTierMetadata tierMetadata) throws IOException;
 
     /**
      * Sum the size of all segment spanned by this TierPartitionState.
@@ -54,72 +113,15 @@ public interface TierPartitionState {
      * tierEpoch is equal to the TierPartitionState's tierEpoch.
      * @return tierEpoch
      */
-    int tierEpoch();
+    int tierEpoch() throws IOException;
+
+    boolean tieringEnabled();
 
     /**
-     * Appends abstract metadata to the tier partition.
-     * Dispatches to more specific append method.
-     * When appending a TierTopicInitLeader entry, it may advance the tierEpoch.
-     * When appending a TierObjectMetadata entry, it may append the tier metadata to the tier
-     * partition log file.
-     * @param entry AbstractTierMetadata entry to be appended to the tier partition log.
-     * @return Returns an AppendResult denoting the result of the append action.
+     * Called when tiering is enabled for this tier topic partition.
      * @throws IOException
      */
-    AppendResult append(AbstractTierMetadata entry) throws IOException;
-
-    /**
-     * Lookup the TierObjectMetadata which will contain data for a target offset.
-     * @param targetOffset the target offset to lookup the overlapping or next metadata for.
-     * @return The TierObjectMetadata, if any.
-     * @throws IOException if disk error encountered
-     */
-    Optional<TierObjectMetadata> getObjectMetadataForOffset(long targetOffset)
-            throws IOException;
-
-    /**
-     * Path to where the TierPartition is stored on disk.
-     * @return path
-     */
-    String path();
-
-    /**
-     * The topic corresponding to this TierPartition.
-     * @return topic
-     */
-    String topic();
-
-    /**
-     * The partition corresponding to this TierPartition.
-     * @return partition
-     */
-    int partition();
-
-    /**
-     * @return ObjectMetadata iterator corresponding to entries contained in this TierPartition
-     * @throws java.io.IOException
-     */
-    Iterator<ObjectMetadata> iterator() throws java.io.IOException;
-
-    /**
-     * Transition TierPartitionState to a new TierPartitionStatus
-     * @param status The new status
-     * @throws IOException
-     */
-    void targetStatus(TierPartitionStatus status) throws IOException;
-
-    /**
-     * Return the current status of the TierPartitionState.
-     * @return TierPartitionStatus
-     */
-    TierPartitionStatus status();
-
-    /**
-     * Scan the ObjectMetadata (segment) entries in this tier partition, and return the count.
-     * @return number of tiered segments
-     * @throws IOException
-     */
-    long numSegments() throws IOException;
+    void onTieringEnable() throws IOException;
 
     /**
      * flush data contained in this TierPartitionState to disk.
@@ -128,14 +130,43 @@ public interface TierPartitionState {
     void flush() throws IOException;
 
     /**
+     * Begin catchup phase for tier partition state.
+     */
+    void beginCatchup();
+
+    /**
+     * Mark catchup completed for tier partition state.
+     */
+    void onCatchUpComplete();
+
+    /**
+     * Return the current status of the TierPartitionState.
+     * @return TierPartitionStatus
+     */
+    TierPartitionStatus status();
+
+    /**
+     * Update the directory reference for the log and indices in this segment. This would typically be called after a
+     * directory is renamed.
+     * @param dir The new directory
+     */
+    void updateDir(File dir);
+
+    /**
+     * Delete this TierPartitionState from local storage.
+     * @throws IOException
+     */
+    void delete() throws IOException;
+
+    /**
      * Close TierPartition, flushing to disk.
      * @throws IOException
      */
     void close() throws IOException;
 
     /**
-     * Delete this TierPartitionState from storage.
+     *
      * @throws IOException
      */
-    void delete() throws IOException;
+    void closeHandlers() throws IOException;
 }

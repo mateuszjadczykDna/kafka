@@ -36,8 +36,9 @@ import kafka.network.SocketServer
 import kafka.security.CredentialProvider
 import kafka.security.auth.Authorizer
 import kafka.tier.archiver.{TierArchiver, TierArchiverConfig}
-import kafka.tier.store.{MockInMemoryTierObjectStore}
-import kafka.tier.{TierTopicManager, TierTopicManagerConfig}
+import kafka.tier.state.FileTierPartitionStateFactory
+import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.{TierMetadataManager, TierTopicManager, TierTopicManagerConfig}
 import kafka.utils._
 import kafka.zk.{BrokerInfo, KafkaZkClient}
 import org.apache.kafka.clients.{ApiVersions, ClientDnsLookup, ManualMetadataUpdater, NetworkClient, NetworkClientUtils}
@@ -141,8 +142,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
   var transactionCoordinator: TransactionCoordinator = null
 
+  var tierMetadataManager: TierMetadataManager = null
   var tierTopicManager: TierTopicManager = null
-  var tierObjectStore: MockInMemoryTierObjectStore = null
+  var tierObjectStore: Option[MockInMemoryTierObjectStore] = None
   var tierArchiver: TierArchiver = null
 
   var kafkaController: KafkaController = null
@@ -245,8 +247,12 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
         logDirFailureChannel = new LogDirFailureChannel(config.logDirs.size)
 
+        if (config.tierFeature)
+          tierObjectStore = Some(new MockInMemoryTierObjectStore("testbucket"))
+        tierMetadataManager = new TierMetadataManager(new FileTierPartitionStateFactory(), tierObjectStore, logDirFailureChannel, config.tierFeature)
+
         /* start log manager */
-        logManager = LogManager(config, initialOfflineDirs, zkClient, brokerState, kafkaScheduler, time, brokerTopicStats, logDirFailureChannel)
+        logManager = LogManager(config, initialOfflineDirs, zkClient, brokerState, kafkaScheduler, time, brokerTopicStats, logDirFailureChannel, tierMetadataManager)
         logManager.startup()
 
         metadataCache = new MetadataCache(config.brokerId)
@@ -300,12 +306,11 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
             _clusterId)
 
           /* tiered storage components */
-          tierTopicManager = new TierTopicManager(metrics, tierTopicManagerConfig)
+          tierTopicManager = new TierTopicManager(tierMetadataManager, tierTopicManagerConfig, metrics)
           tierTopicManager.startup()
 
           val tierArchiverConfig = TierArchiverConfig()
-          tierObjectStore = new MockInMemoryTierObjectStore("testbucket")
-          tierArchiver = new TierArchiver(tierArchiverConfig, replicaManager, tierTopicManager, tierObjectStore)
+          tierArchiver = new TierArchiver(tierArchiverConfig, replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore.get)
           tierArchiver.start()
         }
 
@@ -323,7 +328,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         /* start processing requests */
         apis = new KafkaApis(socketServer.requestChannel, replicaManager, adminManager, groupCoordinator, transactionCoordinator,
           kafkaController, zkClient, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers,
-          fetchManager, brokerTopicStats, clusterId, time, tokenManager, tierTopicManager, tierArchiver)
+          fetchManager, brokerTopicStats, clusterId, time, tokenManager, tierMetadataManager)
 
 
         requestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.requestChannel, apis, time,
@@ -605,8 +610,17 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         CoreUtils.swallow(controlledShutdown(), this)
         brokerState.newState(BrokerShuttingDown)
 
+        if (tierArchiver != null)
+          CoreUtils.swallow(tierArchiver.shutdown(), this)
+
         if (tierTopicManager != null)
           CoreUtils.swallow(tierTopicManager.shutdown(), this)
+
+        if (tierMetadataManager != null)
+          CoreUtils.swallow(tierMetadataManager.close(), this)
+
+        if (tierObjectStore.isDefined)
+          CoreUtils.swallow(tierObjectStore.get.close(), this)
 
         if (dynamicConfigManager != null)
           CoreUtils.swallow(dynamicConfigManager.shutdown(), this)
@@ -639,12 +653,6 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           CoreUtils.swallow(replicaManager.shutdown(), this)
         if (logManager != null)
           CoreUtils.swallow(logManager.shutdown(), this)
-
-        if (tierArchiver != null)
-          CoreUtils.swallow(tierArchiver.shutdown(), this)
-
-        if (tierObjectStore != null)
-          CoreUtils.swallow(tierObjectStore.close(), this)
 
         if (kafkaController != null)
           CoreUtils.swallow(kafkaController.shutdown(), this)

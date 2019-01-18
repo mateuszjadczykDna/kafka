@@ -63,7 +63,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
 
     val firstDirty = log.activeSegment.baseOffset
     checkLastCleaned("log", 0, firstDirty)
-    val compactedSize = log.logSegments.map(_.size).sum
+    val compactedSize = log.localLogSegments.map(_.size).sum
     assertTrue(s"log should have been compacted: startSize=$startSize compactedSize=$compactedSize", startSize > compactedSize)
 
     checkLogAfterAppendingDups(log, startSize, appends)
@@ -95,7 +95,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
     logProps.put(LogConfig.RetentionMsProp, retentionMs: Integer)
     logProps.put(LogConfig.CleanupPolicyProp, "compact,delete")
 
-    def runCleanerAndCheckCompacted(numKeys: Int): (Log, Seq[(Int, String, Long)]) = {
+    def runCleanerAndCheckCompacted(numKeys: Int): (AbstractLog, Seq[(Int, String, Long)]) = {
       cleaner = makeCleaner(partitions = topicPartitions.take(1), propertyOverrides = logProps, backOffMs = 100L)
       val log = cleaner.logs.get(topicPartitions(0))
 
@@ -109,14 +109,14 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
 
       // should compact the log
       checkLastCleaned("log", 0, firstDirty)
-      val compactedSize = log.logSegments.map(_.size).sum
+      val compactedSize = log.localLogSegments.map(_.size).sum
       assertTrue(s"log should have been compacted: startSize=$startSize compactedSize=$compactedSize", startSize > compactedSize)
       (log, messages)
     }
 
     val (log, _) = runCleanerAndCheckCompacted(100)
     // should delete old segments
-    log.logSegments.foreach(_.lastModified = time.milliseconds - (2 * retentionMs))
+    log.localLogSegments.foreach(_.lastModified = time.milliseconds - (2 * retentionMs))
 
     TestUtils.waitUntilTrue(() => log.numberOfSegments == 1, "There should only be 1 segment remaining", 10000L)
     assertEquals(1, log.numberOfSegments)
@@ -152,7 +152,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
     val log = cleaner.logs.get(topicPartitions(0))
     val props = logConfigProperties(maxMessageSize = maxMessageSize)
     props.put(LogConfig.MessageFormatVersionProp, KAFKA_0_9_0.version)
-    log.config = new LogConfig(props)
+    log.updateConfig(new LogConfig(props))
 
     val appends = writeDups(numKeys = 100, numDups = 3, log = log, codec = codec, magicValue = RecordBatch.MAGIC_VALUE_V0)
     val startSize = log.size
@@ -160,7 +160,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
 
     val firstDirty = log.activeSegment.baseOffset
     checkLastCleaned("log", 0, firstDirty)
-    val compactedSize = log.logSegments.map(_.size).sum
+    val compactedSize = log.localLogSegments.map(_.size).sum
     assertTrue(s"log should have been compacted: startSize=$startSize compactedSize=$compactedSize", startSize > compactedSize)
 
     checkLogAfterAppendingDups(log, startSize, appends)
@@ -172,7 +172,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
 
       // also add some messages with version 1 and version 2 to check that we handle mixed format versions correctly
       props.put(LogConfig.MessageFormatVersionProp, KAFKA_0_11_0_IV0.version)
-      log.config = new LogConfig(props)
+      log.updateConfig(new LogConfig(props))
       val dupsV1 = writeDups(startKey = 30, numKeys = 40, numDups = 3, log = log, codec = codec, magicValue = RecordBatch.MAGIC_VALUE_V1)
       val dupsV2 = writeDups(startKey = 15, numKeys = 5, numDups = 3, log = log, codec = codec, magicValue = RecordBatch.MAGIC_VALUE_V2)
       appends ++ dupsV0 ++ Seq((largeMessageKey, largeMessageValue, largeMessageOffset)) ++ dupsV1 ++ dupsV2
@@ -195,7 +195,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
     val log = cleaner.logs.get(topicPartitions(0))
     val props = logConfigProperties(maxMessageSize = maxMessageSize, segmentSize = 256)
     props.put(LogConfig.MessageFormatVersionProp, KAFKA_0_9_0.version)
-    log.config = new LogConfig(props)
+    log.updateConfig(new LogConfig(props))
 
     // with compression enabled, these messages will be written as a single message containing
     // all of the individual messages
@@ -203,7 +203,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
     appendsV0 ++= writeDupsSingleMessageSet(numKeys = 2, startKey = 3, numDups = 2, log = log, codec = codec, magicValue = RecordBatch.MAGIC_VALUE_V0)
 
     props.put(LogConfig.MessageFormatVersionProp, KAFKA_0_10_0_IV1.version)
-    log.config = new LogConfig(props)
+    log.updateConfig(new LogConfig(props))
 
     var appendsV1 = writeDupsSingleMessageSet(startKey = 4, numKeys = 2, numDups = 2, log = log, codec = codec, magicValue = RecordBatch.MAGIC_VALUE_V1)
     appendsV1 ++= writeDupsSingleMessageSet(startKey = 4, numKeys = 2, numDups = 2, log = log, codec = codec, magicValue = RecordBatch.MAGIC_VALUE_V1)
@@ -218,7 +218,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
     assertTrue(firstDirty > appendsV0.size) // ensure we clean data from V0 and V1
 
     checkLastCleaned("log", 0, firstDirty)
-    val compactedSize = log.logSegments.map(_.size).sum
+    val compactedSize = log.localLogSegments.map(_.size).sum
     assertTrue(s"log should have been compacted: startSize=$startSize compactedSize=$compactedSize", startSize > compactedSize)
 
     checkLogAfterAppendingDups(log, startSize, appends)
@@ -270,7 +270,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
 
     assertEquals(2, cleaner.cleanerCount)
     checkLastCleaned("log", 0, firstDirty)
-    val compactedSize = log.logSegments.map(_.size).sum
+    val compactedSize = log.localLogSegments.map(_.size).sum
     assertTrue(s"log should have been compacted: startSize=$startSize compactedSize=$compactedSize", startSize > compactedSize)
   }
 
@@ -284,7 +284,7 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
       lastCleaned >= firstDirty)
   }
 
-  private def checkLogAfterAppendingDups(log: Log, startSize: Long, appends: Seq[(Int, String, Long)]) {
+  private def checkLogAfterAppendingDups(log: AbstractLog, startSize: Long, appends: Seq[(Int, String, Long)]) {
     val read = readFromLog(log)
     assertEquals("Contents of the map shouldn't change", toMap(appends), toMap(read))
     assertTrue(startSize > log.size)
@@ -294,16 +294,16 @@ class LogCleanerParameterizedIntegrationTest(compressionCodec: String) extends A
     messages.map { case (key, value, offset) => key -> (value, offset) }.toMap
   }
 
-  private def readFromLog(log: Log): Iterable[(Int, String, Long)] = {
+  private def readFromLog(log: AbstractLog): Iterable[(Int, String, Long)] = {
     import JavaConverters._
-    for (segment <- log.logSegments; deepLogEntry <- segment.log.records.asScala) yield {
+    for (segment <- log.localLogSegments; deepLogEntry <- segment.log.records.asScala) yield {
       val key = TestUtils.readString(deepLogEntry.key).toInt
       val value = TestUtils.readString(deepLogEntry.value)
       (key, value, deepLogEntry.offset)
     }
   }
 
-  private def writeDupsSingleMessageSet(numKeys: Int, numDups: Int, log: Log, codec: CompressionType,
+  private def writeDupsSingleMessageSet(numKeys: Int, numDups: Int, log: AbstractLog, codec: CompressionType,
                                         startKey: Int = 0, magicValue: Byte): Seq[(Int, String, Long)] = {
     val kvs = for (_ <- 0 until numDups; key <- startKey until (startKey + numKeys)) yield {
       val payload = counter.toString

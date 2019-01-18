@@ -49,7 +49,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   val cleanerCheckpoints: mutable.Map[TopicPartition, Long] = mutable.Map[TopicPartition, Long]()
 
   class LogCleanerManagerMock(logDirs: Seq[File],
-                              logs: Pool[TopicPartition, Log],
+                              logs: Pool[TopicPartition, AbstractLog],
                               logDirFailureChannel: LogDirFailureChannel) extends LogCleanerManager(logDirs, logs, logDirFailureChannel) {
     override def allCleanerCheckpoints: Map[TopicPartition, Long] = {
       cleanerCheckpoints.toMap
@@ -64,11 +64,11 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testGrabFilthiestCompactedLogReturnsLogWithDirtiestRatio(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes)
-    val log1: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
-    val log2: Log = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
-    val log3: Log = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
+    val log1: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
+    val log2: AbstractLog = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
+    val log3: AbstractLog = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
 
-    val logs = new Pool[TopicPartition, Log]()
+    val logs = new Pool[TopicPartition, AbstractLog]()
     val tp1 = new TopicPartition("wishing well", 0) // active segment starts at 0
     logs.put(tp1, log1)
     val tp2 = new TopicPartition("wishing well", 1) // active segment starts at 10
@@ -89,11 +89,11 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testGrabFilthiestCompactedLogIgnoresUncleanablePartitions(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes)
-    val log1: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
-    val log2: Log = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
-    val log3: Log = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
+    val log1: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
+    val log2: AbstractLog = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
+    val log3: AbstractLog = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
 
-    val logs = new Pool[TopicPartition, Log]()
+    val logs = new Pool[TopicPartition, AbstractLog]()
     val tp1 = new TopicPartition("wishing well", 0) // active segment starts at 0
     logs.put(tp1, log1)
     val tp2 = new TopicPartition("wishing well", 1) // active segment starts at 10
@@ -115,11 +115,11 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testGrabFilthiestCompactedLogIgnoresInProgressPartitions(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes)
-    val log1: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
-    val log2: Log = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
-    val log3: Log = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
+    val log1: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
+    val log2: AbstractLog = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
+    val log3: AbstractLog = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
 
-    val logs = new Pool[TopicPartition, Log]()
+    val logs = new Pool[TopicPartition, AbstractLog]()
     val tp1 = new TopicPartition("wishing well", 0) // active segment starts at 0
     logs.put(tp1, log1)
     val tp2 = new TopicPartition("wishing well", 1) // active segment starts at 10
@@ -141,11 +141,11 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testGrabFilthiestCompactedLogIgnoresBothInProgressPartitionsAndUncleanablePartitions(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes)
-    val log1: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
-    val log2: Log = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
-    val log3: Log = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
+    val log1: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact, 1)
+    val log2: AbstractLog = createLog(records.sizeInBytes * 10, LogConfig.Compact, 2)
+    val log3: AbstractLog = createLog(records.sizeInBytes * 15, LogConfig.Compact, 3)
 
-    val logs = new Pool[TopicPartition, Log]()
+    val logs = new Pool[TopicPartition, AbstractLog]()
     val tp1 = new TopicPartition("wishing well", 0) // active segment starts at 0
     logs.put(tp1, log1)
     val tp2 = new TopicPartition("wishing well", 1) // active segment starts at 10
@@ -172,7 +172,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testLogsWithSegmentsToDeleteShouldNotConsiderCleanupPolicyDeleteLogs(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
     val readyToDelete = cleanerManager.deletableLogs().size
@@ -185,7 +185,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testLogsWithSegmentsToDeleteShouldConsiderCleanupPolicyCompactDeleteLogs(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact + "," + LogConfig.Delete)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact + "," + LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
     val readyToDelete = cleanerManager.deletableLogs().size
@@ -199,7 +199,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testLogsWithSegmentsToDeleteShouldConsiderCleanupPolicyCompactLogs(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
     val readyToDelete = cleanerManager.deletableLogs().size
@@ -212,7 +212,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testLogsUnderCleanupIneligibleForCompaction(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
+    val log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
     log.appendAsLeader(records, leaderEpoch = 0)
@@ -231,7 +231,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
     logProps.put(LogConfig.MinCleanableDirtyRatioProp, 0: Integer)
     val config = LogConfig(logProps)
-    log.config = config
+    log.updateConfig(config)
 
     // log cleanup inprogress, the log is not available for compaction
     val cleanable = cleanerManager.grabFilthiestCompactedLog(time)
@@ -245,7 +245,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     // update cleanup policy to delete
     logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Delete)
     val config2 = LogConfig(logProps)
-    log.config = config2
+    log.updateConfig(config2)
 
     // compaction in progress, should have 0 log eligible for log cleanup
     val deletableLog2 = cleanerManager.pauseCleaningForNonCompactedPartitions()
@@ -263,7 +263,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testConcurrentLogCleanupAndLogTruncation(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
     // log cleanup starts
@@ -283,7 +283,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testConcurrentLogCleanupAndTopicDeletion(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key = "test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
 
     // log cleanup starts
@@ -303,7 +303,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testLogsWithSegmentsToDeleteShouldNotConsiderUncleanablePartitions(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
     cleanerManager.markPartitionUncleanable(log.dir.getParent, topicPartition)
 
@@ -461,7 +461,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   @Test
   def testDoneDeleting(): Unit = {
     val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
-    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Compact + "," + LogConfig.Delete)
+    val log: AbstractLog = createLog(records.sizeInBytes * 5, LogConfig.Compact + "," + LogConfig.Delete)
     val cleanerManager: LogCleanerManager = createCleanerManager(log)
     val tp = new TopicPartition("log", 0)
 
@@ -479,20 +479,20 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     assertEquals(LogCleaningPaused(1), cleanerManager.cleaningState(tp).get)
   }
 
-  private def createCleanerManager(log: Log): LogCleanerManager = {
-    val logs = new Pool[TopicPartition, Log]()
+  private def createCleanerManager(log: AbstractLog): LogCleanerManager = {
+    val logs = new Pool[TopicPartition, AbstractLog]()
     logs.put(topicPartition, log)
     createCleanerManager(logs)
   }
 
-  private def createCleanerManager(pool: Pool[TopicPartition, Log], toMock: Boolean = false): LogCleanerManager = {
+  private def createCleanerManager(pool: Pool[TopicPartition, AbstractLog], toMock: Boolean = false): LogCleanerManager = {
     if (toMock)
       new LogCleanerManagerMock(Array(logDir), pool, null)
     else
       new LogCleanerManager(Array(logDir), pool, null)
   }
 
-  private def createLog(segmentSize: Int, cleanupPolicy: String, segmentsCount: Int = 0): Log = {
+  private def createLog(segmentSize: Int, cleanupPolicy: String, segmentsCount: Int = 0): MergedLog = {
     val logProps = new Properties()
     logProps.put(LogConfig.SegmentBytesProp, segmentSize: Integer)
     logProps.put(LogConfig.RetentionMsProp, 1: Integer)

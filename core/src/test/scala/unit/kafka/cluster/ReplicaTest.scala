@@ -18,7 +18,7 @@ package kafka.cluster
 
 import java.util.Properties
 
-import kafka.log.{Log, LogConfig, LogManager}
+import kafka.log.{AbstractLog, Log, LogConfig, LogManager}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel, LogOffsetMetadata}
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
@@ -33,7 +33,7 @@ class ReplicaTest {
   val logDir = TestUtils.randomPartitionLogDir(tmpDir)
   val time = new MockTime()
   val brokerTopicStats = new BrokerTopicStats
-  var log: Log = _
+  var log: AbstractLog = _
   var replica: Replica = _
 
   @Before
@@ -112,11 +112,11 @@ class ReplicaTest {
 
       // verify that all segments up to the high watermark have been deleted
 
-      log.logSegments.headOption.foreach { segment =>
+      log.localLogSegments.headOption.foreach { segment =>
         assertTrue(segment.baseOffset <= hw)
         assertTrue(segment.baseOffset >= replica.logStartOffset)
       }
-      log.logSegments.tail.foreach { segment =>
+      log.localLogSegments.tail.foreach { segment =>
         assertTrue(segment.baseOffset > hw)
         assertTrue(segment.baseOffset >= replica.logStartOffset)
       }

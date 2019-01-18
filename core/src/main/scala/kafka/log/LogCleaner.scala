@@ -91,7 +91,7 @@ import scala.util.control.ControlThrowable
  */
 class LogCleaner(initialConfig: CleanerConfig,
                  val logDirs: Seq[File],
-                 val logs: Pool[TopicPartition, Log],
+                 val logs: Pool[TopicPartition, AbstractLog],
                  val logDirFailureChannel: LogDirFailureChannel,
                  time: Time = Time.SYSTEM) extends Logging with KafkaMetricsGroup with BrokerReconfigurable
 {
@@ -252,7 +252,7 @@ class LogCleaner(initialConfig: CleanerConfig,
     * retention threads need to make this call to obtain:
     * @return A list of log partitions that retention threads can safely work on
     */
-  def pauseCleaningForNonCompactedPartitions(): Iterable[(TopicPartition, Log)] = {
+  def pauseCleaningForNonCompactedPartitions(): Iterable[(TopicPartition, AbstractLog)] = {
     cleanerManager.pauseCleaningForNonCompactedPartitions()
   }
 
@@ -307,7 +307,7 @@ class LogCleaner(initialConfig: CleanerConfig,
       * @return whether a log was cleaned
       */
     private def cleanFilthiestLog(): Boolean = {
-      var currentLog: Option[Log] = None
+      var currentLog: Option[AbstractLog] = None
 
       try {
         val cleaned = cleanerManager.grabFilthiestCompactedLog(time) match {
@@ -319,7 +319,7 @@ class LogCleaner(initialConfig: CleanerConfig,
             cleanLog(cleanable)
             true
         }
-        val deletable: Iterable[(TopicPartition, Log)] = cleanerManager.deletableLogs()
+        val deletable: Iterable[(TopicPartition, AbstractLog)] = cleanerManager.deletableLogs()
         try {
           deletable.foreach { case (topicPartition, log) =>
             currentLog = Some(log)
@@ -417,20 +417,25 @@ object LogCleaner {
 
   }
 
-  def createNewCleanedSegment(log: Log, baseOffset: Long): LogSegment = {
-    LogSegment.deleteIfExists(log.dir, baseOffset, fileSuffix = Log.CleanedFileSuffix)
-    LogSegment.open(log.dir, baseOffset, log.config, Time.SYSTEM, fileAlreadyExists = false,
-      fileSuffix = Log.CleanedFileSuffix, initFileSize = log.initFileSize, preallocate = log.config.preallocate)
+  def createNewCleanedSegment(dir: File, logConfig: LogConfig, baseOffset: Long): LogSegment = {
+    val initFileSize =
+      if (logConfig.preallocate)
+        logConfig.segmentSize.intValue
+      else
+        0
+    LogSegment.deleteIfExists(dir, baseOffset, fileSuffix = Log.CleanedFileSuffix)
+    LogSegment.open(dir, baseOffset, logConfig, Time.SYSTEM, fileAlreadyExists = false,
+      fileSuffix = Log.CleanedFileSuffix, initFileSize = initFileSize, preallocate = logConfig.preallocate)
   }
 
   /**
     * Given the first dirty offset and an uncleanable offset, calculates the total cleanable bytes for this log
     * @return the biggest uncleanable offset and the total amount of cleanable bytes
     */
-  def calculateCleanableBytes(log: Log, firstDirtyOffset: Long, uncleanableOffset: Long): (Long, Long) = {
-    val firstUncleanableSegment = log.logSegments(uncleanableOffset, log.activeSegment.baseOffset).headOption.getOrElse(log.activeSegment)
+  def calculateCleanableBytes(log: AbstractLog, firstDirtyOffset: Long, uncleanableOffset: Long): (Long, Long) = {
+    val firstUncleanableSegment = log.localLogSegments(uncleanableOffset, log.activeSegment.baseOffset).headOption.getOrElse(log.activeSegment)
     val firstUncleanableOffset = firstUncleanableSegment.baseOffset
-    val cleanableBytes = log.logSegments(firstDirtyOffset, math.max(firstDirtyOffset, firstUncleanableOffset)).map(_.size.toLong).sum
+    val cleanableBytes = log.localLogSegments(firstDirtyOffset, math.max(firstDirtyOffset, firstUncleanableOffset)).map(_.size.toLong).sum
 
     (firstUncleanableOffset, cleanableBytes)
   }
@@ -481,7 +486,7 @@ private[log] class Cleaner(val id: Int,
     // figure out the timestamp below which it is safe to remove delete tombstones
     // this position is defined to be a configurable time beneath the last modified time of the last clean segment
     val deleteHorizonMs =
-      cleanable.log.logSegments(0, cleanable.firstDirtyOffset).lastOption match {
+      cleanable.log.localLogSegments(0, cleanable.firstDirtyOffset).lastOption match {
         case None => 0L
         case Some(seg) => seg.lastModified - cleanable.log.config.deleteRetentionMs
     }
@@ -504,11 +509,11 @@ private[log] class Cleaner(val id: Int,
 
     // determine the timestamp up to which the log will be cleaned
     // this is the lower of the last active segment and the compaction lag
-    val cleanableHorizonMs = log.logSegments(0, cleanable.firstUncleanableOffset).lastOption.map(_.lastModified).getOrElse(0L)
+    val cleanableHorizonMs = log.localLogSegments(0, cleanable.firstUncleanableOffset).lastOption.map(_.lastModified).getOrElse(0L)
 
     // group the segments and clean the groups
     info("Cleaning log %s (cleaning prior to %s, discarding tombstones prior to %s)...".format(log.name, new Date(cleanableHorizonMs), new Date(deleteHorizonMs)))
-    for (group <- groupSegmentsBySize(log.logSegments(0, endOffset), log.config.segmentSize, log.config.maxIndexSize, cleanable.firstUncleanableOffset))
+    for (group <- groupSegmentsBySize(log.localLogSegments(0, endOffset), log.config.segmentSize, log.config.maxIndexSize, cleanable.firstUncleanableOffset))
       cleanSegments(log, group, offsetMap, deleteHorizonMs, stats)
 
     // record buffer utilization
@@ -528,13 +533,13 @@ private[log] class Cleaner(val id: Int,
    * @param deleteHorizonMs The time to retain delete tombstones
    * @param stats Collector for cleaning statistics
    */
-  private[log] def cleanSegments(log: Log,
+  private[log] def cleanSegments(log: AbstractLog,
                                  segments: Seq[LogSegment],
                                  map: OffsetMap,
                                  deleteHorizonMs: Long,
                                  stats: CleanerStats) {
     // create a new segment with a suffix appended to the name of the log and indexes
-    val cleaned = LogCleaner.createNewCleanedSegment(log, segments.head.baseOffset)
+    val cleaned = LogCleaner.createNewCleanedSegment(log.dir, log.config, segments.head.baseOffset)
 
     try {
       // clean segments into the new destination segment
@@ -833,13 +838,13 @@ private[log] class Cleaner(val id: Int,
    * @param map The map in which to store the mappings
    * @param stats Collector for cleaning statistics
    */
-  private[log] def buildOffsetMap(log: Log,
+  private[log] def buildOffsetMap(log: AbstractLog,
                                   start: Long,
                                   end: Long,
                                   map: OffsetMap,
                                   stats: CleanerStats) {
     map.clear()
-    val dirty = log.logSegments(start, end).toBuffer
+    val dirty = log.localLogSegments(start, end).toBuffer
     info("Building offset map for log %s for %d segments in offset range [%d, %d).".format(log.name, dirty.size, start, end))
 
     val abortedTransactions = log.collectAbortedTransactions(start, end)
@@ -985,8 +990,8 @@ private class CleanerStats(time: Time = Time.SYSTEM) {
 /**
  * Helper class for a log, its topic/partition, the first cleanable position, and the first uncleanable dirty position
  */
-private case class LogToClean(topicPartition: TopicPartition, log: Log, firstDirtyOffset: Long, uncleanableOffset: Long) extends Ordered[LogToClean] {
-  val cleanBytes = log.logSegments(-1, firstDirtyOffset).map(_.size.toLong).sum
+private case class LogToClean(topicPartition: TopicPartition, log: AbstractLog, firstDirtyOffset: Long, uncleanableOffset: Long) extends Ordered[LogToClean] {
+  val cleanBytes = log.localLogSegments(-1, firstDirtyOffset).map(_.size.toLong).sum
   val (firstUncleanableOffset, cleanableBytes) = LogCleaner.calculateCleanableBytes(log, firstDirtyOffset, uncleanableOffset)
   val totalBytes = cleanBytes + cleanableBytes
   val cleanableRatio = cleanableBytes / totalBytes.toDouble

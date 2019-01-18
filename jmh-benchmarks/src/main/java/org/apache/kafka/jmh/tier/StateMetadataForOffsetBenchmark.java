@@ -21,7 +21,6 @@ import kafka.tier.domain.TierObjectMetadata;
 import kafka.tier.domain.TierTopicInitLeader;
 import kafka.tier.state.FileTierPartitionStateFactory;
 import kafka.tier.state.TierPartitionState;
-import kafka.tier.state.TierPartitionStatus;
 import org.apache.kafka.common.TopicPartition;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -59,11 +58,9 @@ public class StateMetadataForOffsetBenchmark {
     // accessing same status to be benchmarked
     public static class DiskState {
         private static final String BASE_DIR = System.getProperty("java.io.tmpdir") + "/" + UUID.randomUUID();
-        private static final String TOPIC = "mytopic";
-        private static final int PARTITION = 0;
+        private static final TopicPartition TOPIC_PARTITION = new TopicPartition("mytopic", 0);
         private static final int EPOCH = 0;
         private static final int COUNT = 10000;
-        private static final double SPARSITY = 0.001;
         private FileTierPartitionStateFactory factory;
         private TierPartitionState state;
 
@@ -72,13 +69,11 @@ public class StateMetadataForOffsetBenchmark {
             if (!new File(BASE_DIR).mkdir()) {
                 throw new Exception("could not create status directory.");
             }
-            factory = new FileTierPartitionStateFactory(BASE_DIR, SPARSITY);
-            state = factory.newTierPartition(new TopicPartition(TOPIC, PARTITION));
-            state.targetStatus(TierPartitionStatus.CATCHUP);
-            state.append(new TierTopicInitLeader(TOPIC, PARTITION, EPOCH,
-                    java.util.UUID.randomUUID(), 0));
+            factory = new FileTierPartitionStateFactory();
+            state = factory.initState(new File(BASE_DIR), TOPIC_PARTITION, true);
+            state.append(new TierTopicInitLeader(TOPIC_PARTITION, EPOCH, java.util.UUID.randomUUID(), 0));
             for (int i = 0; i < COUNT; i++) {
-                state.append(new TierObjectMetadata(TOPIC, PARTITION, EPOCH, i * 2,
+                state.append(new TierObjectMetadata(TOPIC_PARTITION, EPOCH, i * 2,
                         1, i, i, i, i, false,  (byte) 0));
             }
             state.flush();
@@ -93,9 +88,9 @@ public class StateMetadataForOffsetBenchmark {
 
     @Benchmark
     @Threads(1)
-    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    @OutputTimeUnit(TimeUnit.NANOSECONDS)
     public Optional<TierObjectMetadata> randomOffsetSeek(DiskState diskState) throws IOException {
         int offset = RANDOM.nextInt((DiskState.COUNT - 1) * 2);
-        return diskState.state.getObjectMetadataForOffset(offset);
+        return diskState.state.metadata(offset);
     }
 }

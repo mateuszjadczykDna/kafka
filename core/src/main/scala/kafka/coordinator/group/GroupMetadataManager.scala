@@ -29,7 +29,7 @@ import com.yammer.metrics.core.Gauge
 import kafka.api.{ApiVersion, KAFKA_0_10_1_IV0, KAFKA_2_1_IV0, KAFKA_2_1_IV1}
 import kafka.common.{MessageFormatter, OffsetAndMetadata}
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.ReplicaManager
+import kafka.server.{FetchDataInfo, FetchHighWatermark, FetchLogEnd, ReplicaManager}
 import kafka.utils.CoreUtils.inLock
 import kafka.utils._
 import kafka.zk.KafkaZkClient
@@ -530,7 +530,10 @@ class GroupMetadataManager(brokerId: Int,
 
         while (currOffset < logEndOffset && !shuttingDown.get()) {
           val fetchDataInfo = log.read(currOffset, config.loadBufferSize, maxOffset = None,
-            minOneMessage = true, includeAbortedTxns = false)
+            minOneMessage = true, includeAbortedTxns = false) match {
+            case localFetchInfo: FetchDataInfo => localFetchInfo
+            case _ => throw new IllegalStateException("Unexpected tiered segment for __consumer_offsets topic")
+          }
           val memRecords = fetchDataInfo.records match {
             case records: MemoryRecords => records
             case fileRecords: FileRecords =>

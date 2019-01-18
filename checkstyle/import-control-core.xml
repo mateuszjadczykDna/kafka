@@ -54,12 +54,15 @@
     <allow pkg="kafka.tier.state" />
     <allow pkg="kafka.tier.exceptions" />
     <allow pkg="kafka.tier.serdes" />
+    <allow pkg="kafka.tier.store" />
     <allow pkg="kafka.tier.topic" />
     <allow pkg="org.apache.kafka.clients.admin" />
     <allow pkg="org.apache.kafka.clients.consumer" />
     <allow pkg="org.apache.kafka.clients.producer" />
     <allow class="kafka.server.KafkaConfig" />
-
+    <allow class="kafka.log.LogConfig" />
+    <allow class="kafka.server.LogDirFailureChannel" />
+    <allow class="org.apache.kafka.test.TestUtils" />
     <subpackage name="client">
       <allow pkg="kafka.tier" />
     </subpackage>

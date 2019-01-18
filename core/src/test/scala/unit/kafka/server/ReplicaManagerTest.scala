@@ -22,7 +22,7 @@ import java.util.{Optional, Properties}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import kafka.log.{Log, LogConfig, LogManager, ProducerStateManager}
+import kafka.log._
 import kafka.utils.{MockScheduler, MockTime, TestUtils}
 import TestUtils.createBroker
 import kafka.cluster.BrokerEndPoint
@@ -46,7 +46,7 @@ import org.junit.Assert._
 import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
-import scala.collection.Map
+import scala.collection.{Map, Seq}
 
 class ReplicaManagerTest {
 
@@ -606,11 +606,13 @@ class ReplicaManagerTest {
     EasyMock.expect(mockLeaderEpochCache.latestEpoch).andReturn(leaderEpochFromLeader)
     EasyMock.expect(mockLeaderEpochCache.endOffsetFor(leaderEpochFromLeader))
       .andReturn((leaderEpochFromLeader, localLogOffset))
+    EasyMock.expect(mockLeaderEpochCache.truncateFromStart(0))
     EasyMock.replay(mockLeaderEpochCache)
-    val mockLog = new Log(
+    val logDirs = config.logDirs.map(new File(_))
+
+    val localLog = new Log(
       dir = new File(new File(config.logDirs.head), s"$topic-0"),
       config = LogConfig(),
-      logStartOffset = 0L,
       recoveryPoint = 0L,
       scheduler = mockScheduler,
       brokerTopicStats = mockBrokerTopicStats,
@@ -620,7 +622,15 @@ class ReplicaManagerTest {
       topicPartition = new TopicPartition(topic, topicPartition),
       producerStateManager = new ProducerStateManager(new TopicPartition(topic, topicPartition),
         new File(new File(config.logDirs.head), s"$topic-$topicPartition"), 30000),
-      logDirFailureChannel = mockLogDirFailureChannel) {
+      logDirFailureChannel = mockLogDirFailureChannel)
+
+    val tierMetadataManager = TestUtils.createTierMetadataManager(logDirs)
+    val tierPartitionState = tierMetadataManager.initState(new TopicPartition(topic, topicPartition),
+      logDirs.head, localLog.config)
+    val mockLog = new MergedLog(localLog,
+      logStartOffset = 0L,
+      tierPartitionState = tierPartitionState,
+      tierMetadataManager = tierMetadataManager) {
 
       override def leaderEpochCache: LeaderEpochFileCache = mockLeaderEpochCache
 

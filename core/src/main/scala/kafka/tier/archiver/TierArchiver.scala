@@ -8,15 +8,13 @@ import java.util.Comparator
 import java.util.concurrent._
 import java.util.function.Predicate
 
-import kafka.log.LogConfig
 import kafka.server.ReplicaManager
-import kafka.tier.TierTopicManager
+import kafka.tier.{TierMetadataManager, TierTopicManager}
 import kafka.tier.archiver.TierArchiverState.BeforeLeader
 import kafka.tier.exceptions.{TierArchiverFatalException, TierArchiverFencedException}
 import kafka.tier.store.TierObjectStore
 import kafka.utils.ShutdownableThread
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.utils.Time
 
 import scala.collection.mutable
@@ -43,6 +41,7 @@ case class TierArchiverConfig(updateIntervalMs: Int = 500,
   */
 class TierArchiver(config: TierArchiverConfig,
                    replicaManager: ReplicaManager,
+                   tierMetadataManager: TierMetadataManager,
                    tierTopicManager: TierTopicManager,
                    tierObjectStore: TierObjectStore,
                    time: Time = Time.SYSTEM) extends ShutdownableThread(name = "tier-archiver") {
@@ -54,16 +53,18 @@ class TierArchiver(config: TierArchiverConfig,
   // consists of running status transitions that have yet to be completed.
   private[tier] val stateTransitionsInProgress = mutable.Map.empty[TopicPartition, CompletableFuture[TierArchiverState]]
 
+  tierMetadataManager.addListener(new TierMetadataManager.ChangeListener {
+    override def onBecomeLeader(topicPartition: TopicPartition, leaderEpoch: Int): Unit = handleImmigration(topicPartition, leaderEpoch)
+    override def onBecomeFollower(topicPartition: TopicPartition): Unit = handleEmigration(topicPartition)
+    override def onDelete(topicPartition: TopicPartition): Unit = handleEmigration(topicPartition)
+  })
+
   def handleImmigration(topicPartition: TopicPartition, leaderEpoch: Int): Unit = {
     immigrationEmigrationQueue.add(ImmigratingTopicPartition(topicPartition, leaderEpoch))
   }
 
   def handleEmigration(topicPartition: TopicPartition): Unit = {
     immigrationEmigrationQueue.add(EmigratingTopicPartition(topicPartition))
-  }
-
-  def tierable(topicPartition: TopicPartition, logConfig: LogConfig): Boolean = {
-    logConfig.tierEnable && logConfig.delete && !Topic.isInternal(topicPartition.topic())
   }
 
   /**
@@ -88,10 +89,8 @@ class TierArchiver(config: TierArchiverConfig,
             .getLog(topicPartition)
             .getOrElse(throw new TierArchiverFatalException(s"No log found for topic partition: $immigrationEvent.topicPartition"))
 
-          if (tierable(topicPartition, log.config)) {
-            val state = BeforeLeader(log, tierTopicManager, tierObjectStore, immigrationEvent.topicPartition, immigrationEvent.leaderEpoch, blockingTaskExecutor, config)
-            pausedStates.put(state)
-          }
+          val state = BeforeLeader(log, tierTopicManager, tierObjectStore, immigrationEvent.topicPartition, immigrationEvent.leaderEpoch, blockingTaskExecutor, config)
+          pausedStates.put(state)
           didWork = true
         case emigrationEvent: EmigratingTopicPartition =>
           pausedStates.removeIf(new Predicate[TierArchiverState] {

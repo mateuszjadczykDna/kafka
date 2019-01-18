@@ -18,7 +18,7 @@
 package kafka.cluster
 
 import kafka.server.epoch.LeaderEpochFileCache
-import kafka.log.{Log, LogOffsetSnapshot}
+import kafka.log.{AbstractLog, Log, LogOffsetSnapshot}
 import kafka.utils.Logging
 import kafka.server.{LogOffsetMetadata, LogReadResult}
 import org.apache.kafka.common.{KafkaException, TopicPartition}
@@ -29,7 +29,7 @@ class Replica(val brokerId: Int,
               val topicPartition: TopicPartition,
               time: Time = Time.SYSTEM,
               initialHighWatermarkValue: Long = 0L,
-              @volatile var log: Option[Log] = None) extends Logging {
+              @volatile var log: Option[AbstractLog] = None) extends Logging {
   // the high watermark offset value, in non-leader replicas only its message offsets are kept
   @volatile private[this] var highWatermarkMetadata = new LogOffsetMetadata(initialHighWatermarkValue)
   // the log end offset value, kept in all replicas;
@@ -171,15 +171,12 @@ class Replica(val brokerId: Int,
   /*
    * Convert hw to local offset metadata by reading the log at the hw offset.
    * If the hw offset is out of range, return the first offset of the first log segment as the offset metadata.
+   * Use this with caution as it could cause reads from tiered store. Currently, this method is only being called on
+   * new leader election.
    */
-  def convertHWToLocalOffsetMetadata() {
+  private[cluster] def convertHWToLocalOffsetMetadata() {
     if (isLocal) {
-      highWatermarkMetadata = log.get.convertToOffsetMetadata(highWatermarkMetadata.messageOffset).getOrElse {
-        log.get.convertToOffsetMetadata(logStartOffset).getOrElse {
-          val firstSegmentOffset = log.get.logSegments.head.baseOffset
-          new LogOffsetMetadata(firstSegmentOffset, firstSegmentOffset, 0)
-        }
-      }
+      highWatermarkMetadata = log.get.convertToLocalOffsetMetadata(highWatermarkMetadata.messageOffset).getOrElse(log.get.firstOffsetMetadata)
     } else {
       throw new KafkaException(s"Should not construct complete high watermark on partition $topicPartition's non-local replica $brokerId")
     }

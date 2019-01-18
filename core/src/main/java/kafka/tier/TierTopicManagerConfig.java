@@ -16,10 +16,14 @@ public class TierTopicManagerConfig {
     public final List<String> logDirs;
 
     public TierTopicManagerConfig(String bootstrapServers,
-                                  String tierNamespace, short numPartitions,
-                                  short replicationFactor, int brokerId,
-                                  String clusterId, Long pollDurationMs,
-                                  Integer requestTimeoutMs, List<String> logDirs) {
+                                  String tierNamespace,
+                                  short numPartitions,
+                                  short replicationFactor,
+                                  int brokerId,
+                                  String clusterId,
+                                  Long pollDurationMs,
+                                  Integer requestTimeoutMs,
+                                  List<String> logDirs) {
         this.bootstrapServers = bootstrapServers;
         this.tierNamespace = tierNamespace;
         this.numPartitions = numPartitions;

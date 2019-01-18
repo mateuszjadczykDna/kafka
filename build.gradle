@@ -611,6 +611,7 @@ project(':core') {
     compile libs.scalaReflect
     compile libs.scalaLogging
     compile libs.slf4jApi
+    compile libs.scalaJava8Compat
     compile libs.flatbuffers
     compile(libs.zkclient) {
       exclude module: 'zookeeper'

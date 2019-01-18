@@ -6,26 +6,25 @@ package kafka.tier.domain;
 
 import com.google.flatbuffers.FlatBufferBuilder;
 import kafka.tier.serdes.ObjectMetadata;
+import org.apache.kafka.common.TopicPartition;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
 public class TierObjectMetadata extends AbstractTierMetadata {
     public final static byte ID = 1;
-    private final String topic;
-    private final int partition;
+    private final TopicPartition topicPartition;
     private final ObjectMetadata metadata;
     private final static byte VERSION_VO = 0;
     private final static byte CURRENT_VERSION = VERSION_VO;
     private final static int BASE_BUFFER_SIZE = 100;
 
-    public TierObjectMetadata(String topic, int partition, ObjectMetadata metadata) {
-        this.topic = topic;
-        this.partition = partition;
+    public TierObjectMetadata(TopicPartition topicPartition, ObjectMetadata metadata) {
+        this.topicPartition = topicPartition;
         this.metadata = metadata;
     }
 
-    public TierObjectMetadata(String topic, int partition, int tierEpoch,
+    public TierObjectMetadata(TopicPartition topicPartition, int tierEpoch,
                               long startOffset, int endOffsetDelta,
                               long lastStableOffset, long maxTimestamp,
                               long lastModifiedTime, int size,
@@ -34,8 +33,7 @@ public class TierObjectMetadata extends AbstractTierMetadata {
             throw new IllegalArgumentException(String.format("Illegal tierEpoch supplied %d.", tierEpoch));
         }
         final FlatBufferBuilder builder = new FlatBufferBuilder(BASE_BUFFER_SIZE).forceDefaults(true);
-        this.topic = topic;
-        this.partition = partition;
+        this.topicPartition = topicPartition;
         final int entryId = ObjectMetadata.createObjectMetadata(
                 builder,
                 tierEpoch,
@@ -96,12 +94,8 @@ public class TierObjectMetadata extends AbstractTierMetadata {
         return metadata.size();
     }
 
-    public String topic() {
-        return topic;
-    }
-
-    public int partition() {
-        return partition;
+    public TopicPartition topicPartition() {
+        return topicPartition;
     }
 
     public boolean hasAborts() {
@@ -122,12 +116,12 @@ public class TierObjectMetadata extends AbstractTierMetadata {
                         + " tierEpoch=%s, version=%s, startOffset=%s,"
                         + " endOffsetDelta=%s, lastStableOffset=%s, hasAborts=%s,"
                         + " maxTimestamp=%s, lastModifiedTime=%s, size=%s, status=%s)",
-                topic, partition, tierEpoch(), version(), startOffset(), endOffsetDelta(), lastStableOffset(),
-                hasAborts(), maxTimestamp(), lastModifiedTime(), size(), state());
+                topicPartition.topic(), topicPartition.partition(), tierEpoch(), version(), startOffset(),
+                endOffsetDelta(), lastStableOffset(), hasAborts(), maxTimestamp(), lastModifiedTime(), size(), state());
     }
 
     public int hashCode() {
-        return Objects.hash(topic, partition, tierEpoch(),
+        return Objects.hash(topicPartition, tierEpoch(),
                 startOffset(), endOffsetDelta(), lastStableOffset(),
                 hasAborts(), maxTimestamp(), lastModifiedTime(), size(),
                 version(), state());
@@ -143,8 +137,7 @@ public class TierObjectMetadata extends AbstractTierMetadata {
         }
 
         TierObjectMetadata that = (TierObjectMetadata) o;
-        return Objects.equals(topic, that.topic)
-                && Objects.equals(partition, that.partition)
+        return Objects.equals(topicPartition, that.topicPartition)
                 && Objects.equals(tierEpoch(), that.tierEpoch())
                 && Objects.equals(startOffset(), that.startOffset())
                 && Objects.equals(endOffsetDelta(), that.endOffsetDelta())

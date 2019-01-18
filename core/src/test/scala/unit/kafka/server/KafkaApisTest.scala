@@ -30,8 +30,7 @@ import kafka.network.RequestChannel
 import kafka.network.RequestChannel.SendResponse
 import kafka.security.auth.Authorizer
 import kafka.server.QuotaFactory.QuotaManagers
-import kafka.tier.TierTopicManager
-import kafka.tier.archiver.TierArchiver
+import kafka.tier.TierMetadataManager
 import kafka.utils.{MockTime, TestUtils}
 import kafka.zk.KafkaZkClient
 import org.apache.kafka.common.TopicPartition
@@ -73,9 +72,8 @@ class KafkaApisTest {
   private val replicaQuotaManager: ReplicationQuotaManager = EasyMock.createNiceMock(classOf[ReplicationQuotaManager])
   private val quotas = QuotaManagers(clientQuotaManager, clientQuotaManager, clientRequestQuotaManager,
     replicaQuotaManager, replicaQuotaManager, replicaQuotaManager, None)
-  private val fetchManager : FetchManager = EasyMock.createNiceMock(classOf[FetchManager])
-  private val tierArchiver : TierArchiver = EasyMock.createNiceMock(classOf[TierArchiver])
-  private val tierTopicManager : TierTopicManager = EasyMock.createNiceMock(classOf[TierTopicManager])
+  private val fetchManager: FetchManager = EasyMock.createNiceMock(classOf[FetchManager])
+  private val tierMetadataManager : TierMetadataManager = EasyMock.createNiceMock(classOf[TierMetadataManager])
   private val brokerTopicStats = new BrokerTopicStats
   private val clusterId = "clusterId"
   private val time = new MockTime
@@ -108,8 +106,7 @@ class KafkaApisTest {
       clusterId,
       time,
       null,
-      tierTopicManager,
-      tierArchiver
+      tierMetadataManager
     )
   }
 

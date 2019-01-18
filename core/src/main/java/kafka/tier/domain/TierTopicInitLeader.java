@@ -17,17 +17,15 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
     private final static byte VERSION_VO = 0;
     private final static byte CURRENT_VERSION = VERSION_VO;
     private final static int INITIAL_BUFFER_SIZE = 60;
-    private final String topic;
-    private final int partition;
+    private final TopicPartition topicPartition;
     private final InitLeader init;
 
-    public TierTopicInitLeader(String topic, int partition, int tierEpoch, UUID messageId, int brokerId) {
+    public TierTopicInitLeader(TopicPartition topicPartition, int tierEpoch, UUID messageId, int brokerId) {
         if (tierEpoch < 0) {
             throw new IllegalArgumentException(String.format("Illegal tierEpoch supplied %d.", tierEpoch));
         }
 
-        this.topic = topic;
-        this.partition = partition;
+        this.topicPartition = topicPartition;
         final FlatBufferBuilder builder = new FlatBufferBuilder(INITIAL_BUFFER_SIZE)
                 .forceDefaults(true);
         InitLeader.startInitLeader(builder);
@@ -41,9 +39,8 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
         this.init = InitLeader.getRootAsInitLeader(builder.dataBuffer());
     }
 
-    public TierTopicInitLeader(String topic, int partition, InitLeader init) {
-        this.topic = topic;
-        this.partition = partition;
+    public TierTopicInitLeader(TopicPartition topicPartition, InitLeader init) {
+        this.topicPartition = topicPartition;
         this.init = init;
     }
 
@@ -55,12 +52,8 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
         return init.getByteBuffer().duplicate();
     }
 
-    public String topic() {
-        return topic;
-    }
-
-    public int partition() {
-        return partition;
+    public TopicPartition topicPartition() {
+        return topicPartition;
     }
 
     public int tierEpoch() {
@@ -80,7 +73,7 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
     }
 
     public int hashCode() {
-        return Objects.hash(topic, partition, version(), tierEpoch(), brokerId(), messageId());
+        return Objects.hash(topicPartition, version(), tierEpoch(), brokerId(), messageId());
     }
 
     public boolean equals(Object o) {
@@ -93,8 +86,7 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
         }
 
         TierTopicInitLeader that = (TierTopicInitLeader) o;
-        return topic.equals(that.topic)
-                && partition == that.partition
+        return topicPartition.equals(that.topicPartition)
                 && version() == that.version()
                 && tierEpoch() == that.tierEpoch()
                 && brokerId() == that.brokerId()
@@ -106,6 +98,6 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
         return String.format(
                 "TierInitLeader(topic='%s', partition=%s, tierEpoch=%s, "
                         + "magic=%s, messageId='%s', brokerId=%s)",
-                topic, partition, tierEpoch(), version(), messageId(), brokerId());
+                topicPartition.topic(), topicPartition.partition(), tierEpoch(), version(), messageId(), brokerId());
     }
 }

@@ -13,7 +13,7 @@
 package kafka.api
 
 import kafka.integration.KafkaServerTestHarness
-import kafka.log.Log
+import kafka.log.AbstractLog
 import kafka.server.KafkaConfig
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
@@ -46,13 +46,13 @@ class GroupCoordinatorIntegrationTest extends KafkaServerTestHarness {
     consumer.commitSync(offsetMap)
     val logManager = servers.head.getLogManager
 
-    def getGroupMetadataLogOpt: Option[Log] =
+    def getGroupMetadataLogOpt: Option[AbstractLog] =
       logManager.getLog(new TopicPartition(Topic.GROUP_METADATA_TOPIC_NAME, 0))
 
-    TestUtils.waitUntilTrue(() => getGroupMetadataLogOpt.exists(_.logSegments.exists(_.log.batches.asScala.nonEmpty)),
+    TestUtils.waitUntilTrue(() => getGroupMetadataLogOpt.exists(_.localLogSegments.exists(_.log.batches.asScala.nonEmpty)),
                             "Commit message not appended in time")
 
-    val logSegments = getGroupMetadataLogOpt.get.logSegments
+    val logSegments = getGroupMetadataLogOpt.get.localLogSegments
     val incorrectCompressionCodecs = logSegments
       .flatMap(_.log.batches.asScala.map(_.compressionType))
       .filter(_ != offsetsTopicCompressionCodec)

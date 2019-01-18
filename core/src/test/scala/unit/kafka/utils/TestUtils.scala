@@ -36,6 +36,9 @@ import kafka.server._
 import kafka.server.checkpoints.OffsetCheckpointFile
 import Implicits._
 import kafka.controller.LeaderIsrAndControllerEpoch
+import kafka.tier.TierMetadataManager
+import kafka.tier.state.MemoryTierPartitionStateFactory
+import kafka.tier.store.MockInMemoryTierObjectStore
 import kafka.zk._
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, AlterConfigsResult, Config, ConfigEntry}
@@ -958,6 +961,12 @@ object TestUtils extends Logging {
     assertEquals(0, threadCount)
   }
 
+  def createTierMetadataManager(logDirs: Seq[File]): TierMetadataManager =
+    new TierMetadataManager(new MemoryTierPartitionStateFactory,
+      Some(new MockInMemoryTierObjectStore("myBucket")),
+      new LogDirFailureChannel(logDirs.size),
+      false)
+
   def allThreadStackTraces(): String = {
     Thread.getAllStackTraces.asScala.map { case (thread, stackTrace) =>
       thread.getName + "\n\t" + stackTrace.toList.map(_.toString).mkString("\n\t")
@@ -986,7 +995,8 @@ object TestUtils extends Logging {
                    time = time,
                    brokerState = BrokerState(),
                    brokerTopicStats = new BrokerTopicStats,
-                   logDirFailureChannel = new LogDirFailureChannel(logDirs.size))
+                   logDirFailureChannel = new LogDirFailureChannel(logDirs.size),
+                   tierMetadataManager = createTierMetadataManager(logDirs))
   }
 
   def produceMessages(servers: Seq[KafkaServer],

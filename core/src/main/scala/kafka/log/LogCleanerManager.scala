@@ -56,7 +56,7 @@ private[log] case class LogCleaningPaused(pausedCount: Int) extends LogCleaningS
   *                              Valid previous state is LogCleaningPaused(i-1) or LogCleaningPaused(i+1).
   */
 private[log] class LogCleanerManager(val logDirs: Seq[File],
-                                     val logs: Pool[TopicPartition, Log],
+                                     val logs: Pool[TopicPartition, AbstractLog],
                                      val logDirFailureChannel: LogDirFailureChannel) extends Logging with KafkaMetricsGroup {
 
   protected override def loggerName = classOf[LogCleaner].getName
@@ -203,7 +203,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * switch topic configuration between compacted and non-compacted topic.
     * @return retention logs that have log cleaning successfully paused
     */
-  def pauseCleaningForNonCompactedPartitions(): Iterable[(TopicPartition, Log)] = {
+  def pauseCleaningForNonCompactedPartitions(): Iterable[(TopicPartition, AbstractLog)] = {
     inLock(lock) {
       val deletableLogs = logs.filter {
         case (_, log) => !log.config.compact // pick non-compacted logs
@@ -223,7 +223,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * Include logs without delete enabled, as they may have segments
     * that precede the start offset.
     */
-  def deletableLogs(): Iterable[(TopicPartition, Log)] = {
+  def deletableLogs(): Iterable[(TopicPartition, AbstractLog)] = {
     inLock(lock) {
       val toClean = logs.filter { case (topicPartition, log) =>
         !inProgress.contains(topicPartition) && log.config.compact &&
@@ -463,7 +463,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     }
   }
 
-  private def isUncleanablePartition(log: Log, topicPartition: TopicPartition): Boolean = {
+  private def isUncleanablePartition(log: AbstractLog, topicPartition: TopicPartition): Boolean = {
     inLock(lock) {
       uncleanablePartitions.get(log.dir.getParent).exists(partitions => partitions.contains(topicPartition))
     }
@@ -472,7 +472,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
 
 private[log] object LogCleanerManager extends Logging {
 
-  def isCompactAndDelete(log: Log): Boolean = {
+  def isCompactAndDelete(log: AbstractLog): Boolean = {
     log.config.compact && log.config.delete
   }
 
@@ -485,14 +485,14 @@ private[log] object LogCleanerManager extends Logging {
     * @param now the current time in milliseconds of the cleaning operation
     * @return the lower (inclusive) and upper (exclusive) offsets
     */
-  def cleanableOffsets(log: Log, topicPartition: TopicPartition, lastClean: immutable.Map[TopicPartition, Long], now: Long): (Long, Long) = {
+  def cleanableOffsets(log: AbstractLog, topicPartition: TopicPartition, lastClean: immutable.Map[TopicPartition, Long], now: Long): (Long, Long) = {
 
     // the checkpointed offset, ie., the first offset of the next dirty segment
     val lastCleanOffset: Option[Long] = lastClean.get(topicPartition)
 
     // If the log segments are abnormally truncated and hence the checkpointed offset is no longer valid;
     // reset to the log starting offset and log the error
-    val logStartOffset = log.logSegments.head.baseOffset
+    val logStartOffset = log.localLogSegments.head.baseOffset
     val firstDirtyOffset = {
       val offset = lastCleanOffset.getOrElse(logStartOffset)
       if (offset < logStartOffset) {
@@ -521,7 +521,7 @@ private[log] object LogCleanerManager extends Logging {
       // the first segment whose largest message timestamp is within a minimum time lag from now
       if (compactionLagMs > 0) {
         // dirty log segments
-        val dirtyNonActiveSegments = log.logSegments(firstDirtyOffset, log.activeSegment.baseOffset)
+        val dirtyNonActiveSegments = log.localLogSegments(firstDirtyOffset, log.activeSegment.baseOffset)
         dirtyNonActiveSegments.find { s =>
           val isUncleanable = s.largestTimestamp > now - compactionLagMs
           debug(s"Checking if log segment may be cleaned: log='${log.name}' segment.baseOffset=${s.baseOffset} segment.largestTimestamp=${s.largestTimestamp}; now - compactionLag=${now - compactionLagMs}; is uncleanable=$isUncleanable")

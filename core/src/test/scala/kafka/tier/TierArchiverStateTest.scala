@@ -4,14 +4,15 @@
 
 package kafka.tier
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util
 import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
-import java.util.{Collections, OptionalLong}
+import java.util.{Collections, OptionalLong, Properties}
 
 import kafka.log._
-import kafka.server.BrokerTopicStats
+import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.tier.state.TierPartitionState.AppendResult
 import kafka.tier.archiver.JavaFunctionConversions._
 import kafka.tier.archiver.TierArchiverState.{AfterUpload, BeforeLeader, BeforeUpload, Priority}
@@ -38,6 +39,10 @@ class TierArchiverStateTest {
   val tierTopicName = "__tier_topic"
   val tierTopicNumPartitions: Short = 1
   val logDirs = new util.ArrayList(Collections.singleton(System.getProperty("java.io.tmpdir")))
+  val tierMetadataManager = new TierMetadataManager(new MemoryTierPartitionStateFactory(),
+    Some(new MockInMemoryTierObjectStore("myBucket")),
+    new LogDirFailureChannel(1),
+    true)
   val blockingTaskExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
 
   @Test
@@ -62,11 +67,16 @@ class TierArchiverStateTest {
       tierTopicManagerConfig,
       consumerBuilder,
       producerBuilder,
-      new MemoryTierPartitionStateFactory())
+      tierMetadataManager)
+
+    val properties = new Properties()
+    properties.put("tier.enable", "true")
 
     tierTopicManager.becomeReady()
 
-    tierTopicManager.immigratePartitions(Collections.singletonList(topicPartition))
+    tierMetadataManager.initState(topicPartition, new File(logDirs.get(0)), new LogConfig(properties))
+    tierMetadataManager.becomeLeader(topicPartition, 1)
+
     while(tierTopicManager.doWork()) {}
 
     val tierObjectStore = new MockInMemoryTierObjectStore("bar")
@@ -91,7 +101,7 @@ class TierArchiverStateTest {
 
   @Test
   def testAwaitingLeaderResultFenced(): Unit = {
-    val log = mock(classOf[Log])
+    val log = mock(classOf[AbstractLog])
     val tierObjectStore = new MockInMemoryTierObjectStore("bucket")
     val topicPartition = new TopicPartition("foo", 0)
 
@@ -112,8 +122,7 @@ class TierArchiverStateTest {
   def testAwaitingUpload(): Unit = {
     val topicPartition = new TopicPartition("foo", 0)
     val metadata = new TierObjectMetadata(
-      "foo",
-      0,
+      new TopicPartition("foo", 0),
       0,
       0L,
       1,
@@ -125,9 +134,9 @@ class TierArchiverStateTest {
       1.asInstanceOf[Byte]
     )
     val tierObjectStore = new MockInMemoryTierObjectStore("bucket")
-    val log = mock(classOf[Log])
+    val log = mock(classOf[AbstractLog])
     when(log.getHighWatermark).thenReturn(None)
-    when(log.logSegments(0L, 0L)).thenReturn(List.empty[LogSegment])
+    when(log.localLogSegments(0L, 0L)).thenReturn(List.empty[LogSegment])
     when(log.activeSegment).thenReturn(null)
 
     val tierPartitionState = mock(classOf[TierPartitionState])
@@ -150,7 +159,7 @@ class TierArchiverStateTest {
 
   @Test
   def testBeforeUploadFenced(): Unit = {
-    val log = mock(classOf[Log])
+    val log = mock(classOf[AbstractLog])
     when(log.getHighWatermark).thenReturn(None)
 
     val tierObjectStore = new MockInMemoryTierObjectStore("bucket")
@@ -177,9 +186,9 @@ class TierArchiverStateTest {
     val tierTopicManager = mock(classOf[TierTopicManager])
     val tierObjectStore = new MockInMemoryTierObjectStore("bucket")
 
-    val log = mock(classOf[Log])
+    val log = mock(classOf[AbstractLog])
     when(log.getHighWatermark).thenReturn(None)
-    when(log.logSegments(0L, 0L)).thenReturn(List.empty[LogSegment])
+    when(log.tierableLogSegments).thenReturn(List.empty[LogSegment])
     when(log.activeSegment).thenReturn(null)
 
     val tierPartitionState = mock(classOf[TierPartitionState])
@@ -304,8 +313,8 @@ class TierArchiverStateTest {
       Priority.Higher, beforeUploadA.relativePriority(beforeUploadC))
   }
 
-  private def mockLogAtHighwatermark(hwm: Long): Log = {
-    val log = mock(classOf[Log])
+  private def mockLogAtHighwatermark(hwm: Long): AbstractLog = {
+    val log = mock(classOf[AbstractLog])
     when(log.getHighWatermark).thenReturn(Some(hwm))
     log
   }

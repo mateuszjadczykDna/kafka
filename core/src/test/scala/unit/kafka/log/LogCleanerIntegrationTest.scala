@@ -51,7 +51,7 @@ class LogCleanerIntegrationTest extends AbstractLogCleanerIntegrationTest {
       val log = cleaner.logs.get(tp)
       writeDups(numKeys = 20, numDups = 3, log = log, codec = codec)
 
-      val partitionFile = log.logSegments.last.log.file()
+      val partitionFile = log.activeSegment.log.file()
       val writer = new PrintWriter(partitionFile)
       writer.write("jogeajgoea")
       writer.close()
@@ -83,8 +83,8 @@ class LogCleanerIntegrationTest extends AbstractLogCleanerIntegrationTest {
     val uncleanableBytesGauge = getGauge[Long]("uncleanable-bytes", uncleanableDirectory)
 
     TestUtils.waitUntilTrue(() => uncleanablePartitionsCountGauge.value() == 2, "There should be 2 uncleanable partitions", 2000L)
-    val expectedTotalUncleanableBytes = LogCleaner.calculateCleanableBytes(log, 0, log.logSegments.last.baseOffset)._2 +
-      LogCleaner.calculateCleanableBytes(log2, 0, log2.logSegments.last.baseOffset)._2
+    val expectedTotalUncleanableBytes = LogCleaner.calculateCleanableBytes(log, 0, log.activeSegment.baseOffset)._2 +
+      LogCleaner.calculateCleanableBytes(log2, 0, log2.activeSegment.baseOffset)._2
     TestUtils.waitUntilTrue(() => uncleanableBytesGauge.value() == expectedTotalUncleanableBytes,
       s"There should be $expectedTotalUncleanableBytes uncleanable bytes", 1000L)
 

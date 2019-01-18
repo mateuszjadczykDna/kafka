@@ -20,7 +20,7 @@ package kafka.utils
 import kafka.server.{KafkaConfig, ReplicaFetcherManager, ReplicaManager}
 import kafka.api.LeaderAndIsr
 import kafka.controller.LeaderIsrAndControllerEpoch
-import kafka.log.{Log, LogManager}
+import kafka.log.{AbstractLog, LogManager}
 import kafka.zk._
 import org.apache.kafka.common.TopicPartition
 import org.junit.Assert._
@@ -49,7 +49,7 @@ class ReplicationUtilsTest extends ZooKeeperTestHarness {
   @Test
   def testUpdateLeaderAndIsr() {
     val configs = TestUtils.createBrokerConfigs(1, zkConnect).map(KafkaConfig.fromProps)
-    val log: Log = EasyMock.createMock(classOf[Log])
+    val log: AbstractLog = EasyMock.createMock(classOf[AbstractLog])
     EasyMock.expect(log.logEndOffset).andReturn(20).anyTimes()
     EasyMock.expect(log)
     EasyMock.replay(log)

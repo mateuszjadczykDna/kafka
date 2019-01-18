@@ -62,7 +62,7 @@ class LogCleanerLagIntegrationTest(compressionCodecName: String) extends Abstrac
 
     val activeSegAtT0 = log.activeSegment
     debug(s"active segment at T0 has base offset: ${activeSegAtT0.baseOffset}")
-    val sizeUpToActiveSegmentAtT0 = log.logSegments(0L, activeSegAtT0.baseOffset).map(_.size).sum
+    val sizeUpToActiveSegmentAtT0 = log.localLogSegments(0L, activeSegAtT0.baseOffset).map(_.size).sum
     debug(s"log size up to base offset of active segment at T0: $sizeUpToActiveSegmentAtT0")
 
     cleaner.startup()
@@ -89,7 +89,7 @@ class LogCleanerLagIntegrationTest(compressionCodecName: String) extends Abstrac
     val read1 = readFromLog(log)
     assertEquals("Contents of the map shouldn't change.", appends1.toMap, read1.toMap)
 
-    val compactedSize = log.logSegments(0L, activeSegAtT0.baseOffset).map(_.size).sum
+    val compactedSize = log.localLogSegments(0L, activeSegAtT0.baseOffset).map(_.size).sum
     debug(s"after cleaning the compacted size up to active segment at T0: $compactedSize")
     val lastCleaned = cleaner.cleanerManager.allCleanerCheckpoints(new TopicPartition("log", 0))
     assertTrue(s"log cleaner should have processed up to offset $firstBlock1SegmentBaseOffset, but lastCleaned=$lastCleaned", lastCleaned >= firstBlock1SegmentBaseOffset)
@@ -97,17 +97,17 @@ class LogCleanerLagIntegrationTest(compressionCodecName: String) extends Abstrac
       sizeUpToActiveSegmentAtT0 > compactedSize)
   }
 
-  private def readFromLog(log: Log): Iterable[(Int, Int)] = {
+  private def readFromLog(log: AbstractLog): Iterable[(Int, Int)] = {
     import JavaConverters._
 
-    for (segment <- log.logSegments; record <- segment.log.records.asScala) yield {
+    for (segment <- log.localLogSegments; record <- segment.log.records.asScala) yield {
       val key = TestUtils.readString(record.key).toInt
       val value = TestUtils.readString(record.value).toInt
       key -> value
     }
   }
 
-  private def writeDups(numKeys: Int, numDups: Int, log: Log, codec: CompressionType, timestamp: Long): Seq[(Int, Int)] = {
+  private def writeDups(numKeys: Int, numDups: Int, log: AbstractLog, codec: CompressionType, timestamp: Long): Seq[(Int, Int)] = {
     for (_ <- 0 until numDups; key <- 0 until numKeys) yield {
       val count = counter
       log.appendAsLeader(TestUtils.singletonRecords(value = counter.toString.getBytes, codec = codec,

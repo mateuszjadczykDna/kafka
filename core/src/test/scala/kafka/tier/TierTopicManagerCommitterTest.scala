@@ -3,10 +3,10 @@ package kafka.tier
 import java.io.File
 import java.util
 import java.util.{Collections, UUID}
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
+import java.util.concurrent.CountDownLatch
 
 import kafka.tier.state.TierPartitionState
-import org.apache.kafka.common.TopicPartition
+import org.easymock.EasyMock
 import org.junit.Assert._
 import org.junit.Test
 
@@ -50,13 +50,17 @@ class TierTopicManagerCommitterTest {
       Collections.singletonList(logDir))
 
 
-    val committer = new TierTopicManagerCommitter(tierTopicManagerConfig, new ConcurrentHashMap[TopicPartition, TierPartitionState](), new CountDownLatch(1))
+    val metadataManager : TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
+    EasyMock.expect(metadataManager.tierEnabledPartitionStateIterator()).andReturn(new util.ArrayList[TierPartitionState]().iterator)
+    EasyMock.replay(metadataManager)
+
+    val committer = new TierTopicManagerCommitter(tierTopicManagerConfig, metadataManager, new CountDownLatch(1))
     committer.updatePosition(3, 1L)
     committer.updatePosition(5, 4L)
     committer.updatePosition(5, 5L)
     committer.flush()
 
-    val committer2 = new TierTopicManagerCommitter(tierTopicManagerConfig, new ConcurrentHashMap[TopicPartition, TierPartitionState](), new CountDownLatch(1))
+    val committer2 = new TierTopicManagerCommitter(tierTopicManagerConfig, metadataManager, new CountDownLatch(1))
     val positions = committer2.positions
     val expected = new util.HashMap[Integer, Long]()
     expected.put(3,1L)

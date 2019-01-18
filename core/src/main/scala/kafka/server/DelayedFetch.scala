@@ -159,9 +159,14 @@ class DelayedFetch(delayMs: Long,
       readPartitionInfo = fetchMetadata.fetchPartitionStatus.map { case (tp, status) => tp -> status.fetchInfo },
       quota = quota)
 
-    val fetchPartitionData = logReadResults.map { case (tp, result) =>
-      tp -> FetchPartitionData(result.error, result.highWatermark, result.leaderLogStartOffset, result.info.records,
-        result.lastStableOffset, result.info.abortedTransactions)
+    val fetchPartitionData = logReadResults.map {
+      case (tp, result) =>
+        result match {
+          case result: LogReadResult =>
+            tp -> FetchPartitionData(result.error, result.highWatermark, result.leaderLogStartOffset, result.info.records,
+              result.lastStableOffset, result.info.abortedTransactions)
+          case _ => throw new IllegalStateException("Delayed fetch cannot handle non-local fetch")
+        }
     }
 
     responseCallback(fetchPartitionData)

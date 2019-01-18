@@ -25,6 +25,7 @@ import com.yammer.metrics.core.Gauge
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.server.{BrokerState, RecoveringFromUncleanShutdown, _}
+import kafka.tier.TierMetadataManager
 import kafka.utils._
 import kafka.zk.KafkaZkClient
 import org.apache.kafka.common.{KafkaException, TopicPartition}
@@ -61,6 +62,7 @@ class LogManager(logDirs: Seq[File],
                  val brokerState: BrokerState,
                  brokerTopicStats: BrokerTopicStats,
                  logDirFailureChannel: LogDirFailureChannel,
+                 tierMetadataManager: TierMetadataManager,
                  time: Time) extends Logging with KafkaMetricsGroup {
 
   import LogManager._
@@ -69,13 +71,13 @@ class LogManager(logDirs: Seq[File],
   val InitialTaskDelayMs = 30 * 1000
 
   private val logCreationOrDeletionLock = new Object
-  private val currentLogs = new Pool[TopicPartition, Log]()
+  private val currentLogs = new Pool[TopicPartition, AbstractLog]()
   // Future logs are put in the directory with "-future" suffix. Future log is created when user wants to move replica
   // from one log directory to another log directory on the same broker. The directory of the future log will be renamed
   // to replace the current log of the partition after the future log catches up with the current log
-  private val futureLogs = new Pool[TopicPartition, Log]()
+  private val futureLogs = new Pool[TopicPartition, AbstractLog]()
   // Each element in the queue contains the log object to be deleted and the time it is scheduled for deletion.
-  private val logsToBeDeleted = new LinkedBlockingQueue[(Log, Long)]()
+  private val logsToBeDeleted = new LinkedBlockingQueue[(AbstractLog, Long)]()
 
   private val _liveLogDirs: ConcurrentLinkedQueue[File] = createAndValidateLogDirs(logDirs, initialOfflineDirs)
   @volatile private var _currentDefaultConfig = initialDefaultConfig
@@ -248,7 +250,7 @@ class LogManager(logDirs: Seq[File],
     }
   }
 
-  private def addLogToBeDeleted(log: Log): Unit = {
+  private def addLogToBeDeleted(log: AbstractLog): Unit = {
     this.logsToBeDeleted.add((log, time.milliseconds()))
   }
 
@@ -262,17 +264,18 @@ class LogManager(logDirs: Seq[File],
     val logRecoveryPoint = recoveryPoints.getOrElse(topicPartition, 0L)
     val logStartOffset = logStartOffsets.getOrElse(topicPartition, 0L)
 
-    val log = Log(
-      dir = logDir,
-      config = config,
-      logStartOffset = logStartOffset,
-      recoveryPoint = logRecoveryPoint,
-      maxProducerIdExpirationMs = maxPidExpirationMs,
-      producerIdExpirationCheckIntervalMs = LogManager.ProducerIdExpirationCheckIntervalMs,
-      scheduler = scheduler,
-      time = time,
-      brokerTopicStats = brokerTopicStats,
-      logDirFailureChannel = logDirFailureChannel)
+    val log = MergedLog(
+      logDir,
+      config,
+      logStartOffset,
+      logRecoveryPoint,
+      scheduler,
+      brokerTopicStats,
+      time,
+      maxPidExpirationMs,
+      LogManager.ProducerIdExpirationCheckIntervalMs,
+      logDirFailureChannel,
+      Some(tierMetadataManager))
 
     if (logDir.getName.endsWith(Log.DeleteDirSuffix)) {
       addLogToBeDeleted(log)
@@ -497,7 +500,7 @@ class LogManager(logDirs: Seq[File],
    * @param isFuture True iff the truncation should be performed on the future log of the specified partitions
    */
   def truncateTo(partitionOffsets: Map[TopicPartition, Long], isFuture: Boolean) {
-    val affectedLogs = ArrayBuffer.empty[Log]
+    val affectedLogs = ArrayBuffer.empty[AbstractLog]
     for ((topicPartition, truncateOffset) <- partitionOffsets) {
       val log = {
         if (isFuture)
@@ -591,7 +594,7 @@ class LogManager(logDirs: Seq[File],
     * @param logsToCleanSnapshot logs whose snapshots need to be cleaned
     */
   // Only for testing
-  private[log] def checkpointRecoveryOffsetsAndCleanSnapshot(dir: File, logsToCleanSnapshot: Seq[Log]): Unit = {
+  private[log] def checkpointRecoveryOffsetsAndCleanSnapshot(dir: File, logsToCleanSnapshot: Seq[AbstractLog]): Unit = {
     try {
       checkpointLogRecoveryOffsetsInDir(dir)
       logsToCleanSnapshot.foreach(_.deleteSnapshotsAfterRecoveryPointCheckpoint())
@@ -621,7 +624,7 @@ class LogManager(logDirs: Seq[File],
     } {
       try {
         val logStartOffsets = partitionToLog.filter { case (_, log) =>
-          log.logStartOffset > log.logSegments.head.baseOffset
+          log.logStartOffset > log.baseOffsetOfFirstSegment
         }.mapValues(_.logStartOffset)
         checkpoint.write(logStartOffsets)
       } catch {
@@ -651,7 +654,7 @@ class LogManager(logDirs: Seq[File],
    * @param topicPartition the partition of the log
    * @param isFuture True iff the future log of the specified partition should be returned
    */
-  def getLog(topicPartition: TopicPartition, isFuture: Boolean = false): Option[Log] = {
+  def getLog(topicPartition: TopicPartition, isFuture: Boolean = false): Option[AbstractLog] = {
     if (isFuture)
       Option(futureLogs.get(topicPartition))
     else
@@ -669,7 +672,7 @@ class LogManager(logDirs: Seq[File],
    * @param isFuture True iff the future log of the specified partition should be returned or created
    * @throws KafkaStorageException if isNew=false, log is not found in the cache and there is offline log directory on the broker
    */
-  def getOrCreateLog(topicPartition: TopicPartition, config: LogConfig, isNew: Boolean = false, isFuture: Boolean = false): Log = {
+  def getOrCreateLog(topicPartition: TopicPartition, config: LogConfig, isNew: Boolean = false, isFuture: Boolean = false): AbstractLog = {
     logCreationOrDeletionLock synchronized {
       getLog(topicPartition, isFuture).getOrElse {
         // create the log if it has not already been created in another thread
@@ -703,17 +706,18 @@ class LogManager(logDirs: Seq[File],
           }
           Files.createDirectories(dir.toPath)
 
-          val log = Log(
-            dir = dir,
-            config = config,
+          val log = MergedLog(
+            dir,
+            config,
             logStartOffset = 0L,
             recoveryPoint = 0L,
-            maxProducerIdExpirationMs = maxPidExpirationMs,
+            scheduler,
+            brokerTopicStats,
+            time,
+            maxPidExpirationMs,
             producerIdExpirationCheckIntervalMs = LogManager.ProducerIdExpirationCheckIntervalMs,
-            scheduler = scheduler,
-            time = time,
-            brokerTopicStats = brokerTopicStats,
-            logDirFailureChannel = logDirFailureChannel)
+            logDirFailureChannel,
+            Some(tierMetadataManager))
 
           if (isFuture)
             futureLogs.put(topicPartition, log)
@@ -841,8 +845,8 @@ class LogManager(logDirs: Seq[File],
     * @param isFuture True iff the future log of the specified partition should be deleted
     * @return the removed log
     */
-  def asyncDelete(topicPartition: TopicPartition, isFuture: Boolean = false): Log = {
-    val removedLog: Log = logCreationOrDeletionLock synchronized {
+  def asyncDelete(topicPartition: TopicPartition, isFuture: Boolean = false): AbstractLog = {
+    val removedLog: AbstractLog = logCreationOrDeletionLock synchronized {
       if (isFuture)
         futureLogs.remove(topicPartition)
       else
@@ -932,9 +936,9 @@ class LogManager(logDirs: Seq[File],
   /**
    * Get all the partition logs
    */
-  def allLogs: Iterable[Log] = currentLogs.values ++ futureLogs.values
+  def allLogs: Iterable[AbstractLog] = currentLogs.values ++ futureLogs.values
 
-  def logsByTopic(topic: String): Seq[Log] = {
+  def logsByTopic(topic: String): Seq[AbstractLog] = {
     (currentLogs.toList ++ futureLogs.toList).filter { case (topicPartition, _) =>
       topicPartition.topic() == topic
     }.map { case (_, log) => log }
@@ -943,7 +947,7 @@ class LogManager(logDirs: Seq[File],
   /**
    * Map of log dir to logs by topic and partitions in that dir
    */
-  private def logsByDir: Map[String, Map[TopicPartition, Log]] = {
+  private def logsByDir: Map[String, Map[TopicPartition, AbstractLog]] = {
     (this.currentLogs.toList ++ this.futureLogs.toList).toMap
       .groupBy { case (_, log) => log.dir.getParent }
   }
@@ -991,7 +995,8 @@ object LogManager {
             kafkaScheduler: KafkaScheduler,
             time: Time,
             brokerTopicStats: BrokerTopicStats,
-            logDirFailureChannel: LogDirFailureChannel): LogManager = {
+            logDirFailureChannel: LogDirFailureChannel,
+            tierMetadataManager: TierMetadataManager): LogManager = {
     val defaultProps = KafkaServer.copyKafkaConfigToLog(config)
     val defaultLogConfig = LogConfig(defaultProps)
 
@@ -1016,6 +1021,7 @@ object LogManager {
       brokerState = brokerState,
       brokerTopicStats = brokerTopicStats,
       logDirFailureChannel = logDirFailureChannel,
+      tierMetadataManager = tierMetadataManager,
       time = time)
   }
 }

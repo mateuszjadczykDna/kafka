@@ -19,7 +19,7 @@ package kafka.coordinator.transaction
 import java.nio.ByteBuffer
 import java.util.concurrent.locks.ReentrantLock
 
-import kafka.log.Log
+import kafka.log.AbstractLog
 import kafka.server.{FetchDataInfo, LogOffsetMetadata, ReplicaManager}
 import kafka.utils.{MockScheduler, Pool}
 import kafka.utils.TestUtils.fail
@@ -573,7 +573,7 @@ class TransactionStateManagerTest {
                             records: MemoryRecords): Unit = {
     EasyMock.reset(replicaManager)
 
-    val logMock: Log = EasyMock.mock(classOf[Log])
+    val logMock: AbstractLog = EasyMock.mock(classOf[AbstractLog])
     val fileRecordsMock: FileRecords = EasyMock.mock(classOf[FileRecords])
 
     val endOffset = startOffset + records.records.asScala.size

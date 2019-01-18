@@ -21,7 +21,7 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.cluster.{Partition, Replica}
-import kafka.log.{Log, LogManager}
+import kafka.log.{AbstractLog, LogManager}
 import kafka.server.epoch.LeaderEpochFileCache
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
@@ -226,7 +226,7 @@ class IsrExpirationTest {
   }
 
   private def getPartitionWithAllReplicasInIsr(topic: String, partitionId: Int, time: Time, config: KafkaConfig,
-                                               localLog: Log): Partition = {
+                                               localLog: AbstractLog): Partition = {
     val leaderId = config.brokerId
     val tp = new TopicPartition(topic, partitionId)
     val partition = replicaManager.getOrCreatePartition(tp)
@@ -251,8 +251,8 @@ class IsrExpirationTest {
     partition
   }
 
-  private def logMock: Log = {
-    val log: Log = EasyMock.createMock(classOf[Log])
+  private def logMock: AbstractLog = {
+    val log: AbstractLog = EasyMock.createMock(classOf[AbstractLog])
     val cache: LeaderEpochFileCache = EasyMock.createNiceMock(classOf[LeaderEpochFileCache])
     EasyMock.expect(log.dir).andReturn(TestUtils.tempDir()).anyTimes()
     EasyMock.expect(log.leaderEpochCache).andReturn(cache).anyTimes()

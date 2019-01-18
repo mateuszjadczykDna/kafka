@@ -7,6 +7,7 @@ package kafka.tier.domain;
 import kafka.tier.serdes.InitLeader;
 import kafka.tier.serdes.ObjectMetadata;
 import kafka.tier.exceptions.TierMetadataDeserializationException;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,12 +22,12 @@ public abstract class AbstractTierMetadata {
     private static final int TYPE_LENGTH = 1;
 
     public byte[] serializeKey() {
-        byte[] topicBytes = Utils.utf8(topic());
+        byte[] topicBytes = Utils.utf8(topicPartition().topic());
         final ByteBuffer buf = ByteBuffer.allocate(
                 TOPIC_LENGTH_LENGTH + topicBytes.length + PARTITION_LENGTH);
-        buf.putShort((short) topic().length());
+        buf.putShort((short) topicPartition().topic().length());
         buf.put(topicBytes);
-        buf.putInt(partition());
+        buf.putInt(topicPartition().partition());
         return buf.array();
     }
 
@@ -56,16 +57,17 @@ public abstract class AbstractTierMetadata {
         keyBuf.get(topicStrBuf);
         final String topic = Utils.utf8(topicStrBuf);
         final int partition = keyBuf.getInt();
+        final TopicPartition topicPartition = new TopicPartition(topic, partition);
 
         // deserialize value header with record type and tierEpoch
         final byte type = valueBuf.get();
         switch (type) {
             case TierTopicInitLeader.ID:
                 final InitLeader init = InitLeader.getRootAsInitLeader(valueBuf);
-                return Optional.of(new TierTopicInitLeader(topic, partition, init));
+                return Optional.of(new TierTopicInitLeader(topicPartition, init));
             case TierObjectMetadata.ID:
                 final ObjectMetadata metadata = ObjectMetadata.getRootAsObjectMetadata(valueBuf);
-                return Optional.of(new TierObjectMetadata(topic, partition, metadata));
+                return Optional.of(new TierObjectMetadata(topicPartition, metadata));
             default:
                 log.debug("Unknown tier metadata type with ID {}. Ignoring record.", type);
                 return Optional.empty();
@@ -78,16 +80,10 @@ public abstract class AbstractTierMetadata {
     public abstract byte type();
 
     /**
-     * Topic corresponding to this tier metadata.
-     * @return topic
+     * Topic-partition corresponding to this tier metadata.
+     * @return topic partition
      */
-    public abstract String topic();
-
-    /**
-     * Partition corresponding to this tier metadata.
-     * @return partition
-     */
-    public abstract int partition();
+    public abstract TopicPartition topicPartition();
 
     /**
      * tierEpoch for the tier metadata

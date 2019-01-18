@@ -21,7 +21,7 @@ import java.util.Optional
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.cluster.Replica
-import kafka.log.{Log, LogManager}
+import kafka.log.{AbstractLog, LogManager}
 import kafka.server._
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
@@ -47,7 +47,7 @@ class OffsetsForLeaderEpochTest {
     val request = Map(tp -> new OffsetsForLeaderEpochRequest.PartitionData(Optional.empty(), epochRequested))
 
     //Stubs
-    val mockLog: Log = createNiceMock(classOf[Log])
+    val mockLog: AbstractLog = createNiceMock(classOf[AbstractLog])
     val mockCache: LeaderEpochFileCache = createNiceMock(classOf[LeaderEpochFileCache])
     val logManager: LogManager = createNiceMock(classOf[LogManager])
     expect(mockCache.endOffsetFor(epochRequested)).andReturn(epochAndOffset)

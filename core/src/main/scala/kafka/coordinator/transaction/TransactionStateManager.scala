@@ -24,8 +24,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import kafka.log.LogConfig
 import kafka.message.UncompressedCodec
-import kafka.server.Defaults
-import kafka.server.ReplicaManager
+import kafka.server.{Defaults, FetchDataInfo, ReplicaManager}
 import kafka.utils.CoreUtils.{inReadLock, inWriteLock}
 import kafka.utils.{Logging, Pool, Scheduler}
 import kafka.zk.KafkaZkClient
@@ -302,7 +301,10 @@ class TransactionStateManager(brokerId: Int,
             && inReadLock(stateLock) {loadingPartitions.exists { idAndEpoch: TransactionPartitionAndLeaderEpoch =>
               idAndEpoch.txnPartitionId == topicPartition.partition && idAndEpoch.coordinatorEpoch == coordinatorEpoch}}) {
             val fetchDataInfo = log.read(currOffset, config.transactionLogLoadBufferSize, maxOffset = None,
-              minOneMessage = true, includeAbortedTxns = false)
+              minOneMessage = true, includeAbortedTxns = false) match {
+              case localFetchInfo: FetchDataInfo => localFetchInfo
+              case _ => throw new IllegalStateException("Unexpected tiered segment for __transaction_state topic")
+            }
             val memRecords = fetchDataInfo.records match {
               case records: MemoryRecords => records
               case fileRecords: FileRecords =>

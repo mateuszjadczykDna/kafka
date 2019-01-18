@@ -9,7 +9,7 @@ import java.util.concurrent._
 import java.util.function
 import java.util.function.Supplier
 
-import kafka.log.{Log, LogSegment}
+import kafka.log.{AbstractLog, LogSegment}
 import kafka.tier.TierTopicManager
 import kafka.tier.state.TierPartitionState.AppendResult
 import kafka.tier.archiver.CompletableFutureExtensions._
@@ -72,7 +72,7 @@ object TierArchiverState {
   // BeforeLeader represents a TopicPartition waiting for a successful fence TierTopic message
   // to go through. Once this has been realized by the TierTopicManager, it is allowed to progress
   // to BeforeUpload.
-  final case class BeforeLeader(log: Log,
+  final case class BeforeLeader(log: AbstractLog,
                                 tierTopicManager: TierTopicManager,
                                 tierObjectStore: TierObjectStore,
                                 topicPartition: TopicPartition,
@@ -95,7 +95,7 @@ object TierArchiverState {
         .thenApply[TierArchiverState] { result: AppendResult =>
         result match {
           case AppendResult.ACCEPTED =>
-            val tierPartitionState = tierTopicManager.getPartitionState(topicPartition)
+            val tierPartitionState = tierTopicManager.partitionState(topicPartition)
             BeforeUpload(
               log, tierTopicManager, tierObjectStore,
               topicPartition, tierPartitionState, tierEpoch, blockingTaskExecutor, config
@@ -112,7 +112,7 @@ object TierArchiverState {
   // BeforeUpload represents a TopicPartition checking for eligible segments to upload. If there
   // are no eligible we remain in the current status, if there are eligible segments we transition
   // to AfterUpload on completion of segment (and associated metadata) upload.
-  final case class BeforeUpload(log: Log,
+  final case class BeforeUpload(log: AbstractLog,
                                 tierTopicManager: TierTopicManager,
                                 tierObjectStore: TierObjectStore,
                                 topicPartition: TopicPartition,
@@ -121,7 +121,7 @@ object TierArchiverState {
                                 blockingTaskExecutor: ScheduledExecutorService,
                                 config: TierArchiverConfig) extends TierArchiverState {
 
-    def lag(): Long = highWatermark() - archivedOffset()
+    def lag: Long = highWatermark - archivedOffset
 
     // Priority: BeforeLeader > AfterUpload > BeforeUpload (this)
     // When comparing two BeforeUpload states, prioritize the state with greater lag higher.
@@ -129,8 +129,8 @@ object TierArchiverState {
       other match {
         case _: BeforeLeader => Priority.Lower
         case otherBeforeUpload: BeforeUpload => {
-          val otherLag = otherBeforeUpload.lag()
-          val thisLag = this.lag()
+          val otherLag = otherBeforeUpload.lag
+          val thisLag = this.lag
           if (otherLag > thisLag) {
             Priority.Lower
           } else if (otherLag < thisLag) {
@@ -147,11 +147,12 @@ object TierArchiverState {
       if (tierPartitionState.tierEpoch() != tierEpoch) {
         CompletableFutureUtil.failed(new TierArchiverFencedException(topicPartition))
       } else {
-        log.logSegments(archivedOffset() + 1, highWatermark())
-          .find(logSegment => logSegment != log.activeSegment) match {
+        log.tierableLogSegments.headOption match {
           case None =>
             CompletableFutureUtil.completed(this)
           case Some(logSegment) =>
+            if (logSegment.baseOffset != archivedOffset + 1)
+              throw new IllegalStateException(s"Expected next tierable segment at ${archivedOffset + 1} but got ${logSegment.baseOffset}")
             putSegment(logSegment, blockingTaskExecutor)
               .thenApply[TierArchiverState] { objectMetadata: TierObjectMetadata =>
               AfterUpload(
@@ -167,9 +168,9 @@ object TierArchiverState {
       }
     }
 
-    private def archivedOffset(): Long = tierPartitionState.endOffset().orElse(-1L)
+    private def archivedOffset: Long = tierPartitionState.endOffset.orElse(-1L)
 
-    private def highWatermark(): Long = log.getHighWatermark.getOrElse(0L)
+    private def highWatermark: Long = log.getHighWatermark.getOrElse(0L)
 
     private def putSegment(logSegment: LogSegment, blockingTaskExecutor: ScheduledExecutorService): CompletableFuture[TierObjectMetadata] = {
       CompletableFuture.supplyAsync(new Supplier[TierObjectMetadata] {
@@ -191,8 +192,7 @@ object TierArchiverState {
       val lastStableOffset = logSegment.readNextOffset - 1 // TODO: get from producer status snapshot
       val offsetDelta = lastStableOffset - logSegment.baseOffset
       new TierObjectMetadata(
-        topicPartition.topic(),
-        topicPartition.partition(),
+        topicPartition,
         tierEpoch,
         logSegment.baseOffset,
         offsetDelta.intValue(),
@@ -236,7 +236,7 @@ object TierArchiverState {
   // transitions to BeforeUpload.
   final case class AfterUpload(objectMetadata: TierObjectMetadata,
                                logSegment: LogSegment,
-                               log: Log,
+                               log: AbstractLog,
                                tierTopicManager: TierTopicManager,
                                tierObjectStore: TierObjectStore,
                                topicPartition: TopicPartition,

@@ -4,14 +4,18 @@
 
 package kafka.tier.state;
 
+import kafka.log.Log;
+import kafka.log.Log$;
 import kafka.tier.domain.AbstractTierMetadata;
 import kafka.tier.domain.TierObjectMetadata;
 import kafka.tier.domain.TierTopicInitLeader;
 import kafka.tier.serdes.ObjectMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -19,185 +23,239 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.*;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileTierPartitionState implements TierPartitionState, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(FileTierPartitionState.class);
     private static final int ENTRY_LENGTH_SIZE = 2;
-    private static final int READ_BUFFER_SIZE = 4096;
-    private final String path;
+    private static final long FILE_OFFSET = 0;
+
     private final AtomicInteger currentEpoch = new AtomicInteger(-1);
-    private final String topic;
-    private final int partition;
-    private final SparsePositionMap positions;
-    private volatile TierPartitionStatus status;
+    private final TopicPartition topicPartition;
+    private final Object lock = new Object();
+
+    private File dir;
+    private String path;
+    private ConcurrentNavigableMap<Long, Long> segments = new ConcurrentSkipListMap<>();
     private FileChannel channel;
     private Long endOffset = null;
-    private AtomicBoolean closed = new AtomicBoolean(false);
 
-    public FileTierPartitionState(String baseDir,
-                                  TopicPartition topicPartition,
-                                  double positionIndexSparsity) {
-        this.status = TierPartitionStatus.INIT;
-        this.topic = topicPartition.topic();
-        this.partition = topicPartition.partition();
-        this.path = String.format("%s/%s_%s.tierlog",
-                baseDir,
-                topicPartition.topic(),
-                topicPartition.partition());
-        positions = new SparsePositionMap(positionIndexSparsity);
+    private volatile boolean tieringEnabled;
+    private volatile TierPartitionStatus status;
+
+    public FileTierPartitionState(File dir, TopicPartition topicPartition, boolean tieringEnabled) throws IOException {
+        this.topicPartition = topicPartition;
+        this.dir = dir;
+        this.path = Log.tierStateFile(dir, FILE_OFFSET, "").getAbsolutePath();
+        this.status = TierPartitionStatus.CLOSED;
+        this.tieringEnabled = tieringEnabled;
+        maybeOpenFile();
     }
 
-    public String topic() {
-        return topic;
+    @Override
+    public TopicPartition topicPartition() {
+        return topicPartition;
     }
 
-    public int partition() {
-        return partition;
+    @Override
+    public boolean tieringEnabled() {
+        return tieringEnabled;
     }
 
-    public OptionalLong beginningOffset() throws java.io.IOException {
-        Iterator<ObjectMetadata> iterator = iterator();
-        if (iterator.hasNext()) {
-            return OptionalLong.of(iterator.next().startOffset());
-        } else {
-            return OptionalLong.empty();
+    @Override
+    public void onTieringEnable() throws IOException {
+        synchronized (lock) {
+            this.tieringEnabled = true;
+            maybeOpenFile();
         }
     }
 
+    @Override
+    public OptionalLong startOffset() {
+        Map.Entry<Long, Long> firstEntry = segments.firstEntry();
+        if (firstEntry != null)
+            return OptionalLong.of(firstEntry.getKey());
+        return OptionalLong.empty();
+    }
+
+    @Override
     public OptionalLong endOffset() {
-        if (endOffset == null) {
+        if (endOffset == null || segments.isEmpty())
             return OptionalLong.empty();
-        } else {
+        else
             return OptionalLong.of(endOffset);
-        }
     }
 
-    public long totalSize() throws java.io.IOException {
+    @Override
+    public long totalSize() throws IOException {
         long size = 0;
-        Iterator<ObjectMetadata> iterator = iterator();
-        while (iterator.hasNext()) {
-            ObjectMetadata e = iterator.next();
-            size += e.size();
+        Map.Entry<Long, Long> firstEntry = segments.firstEntry();
+
+        if (firstEntry != null) {
+            FileTierPartitionIterator iterator = iterator(firstEntry.getValue());
+            while (iterator.hasNext())
+                size += iterator.next().size();
         }
         return size;
     }
 
+    @Override
     public void flush() throws IOException {
-        if (status != TierPartitionStatus.INIT) {
-            channel.force(true);
+        synchronized (lock) {
+            if (status.isOpenForWrite())
+                channel.force(true);
         }
     }
 
+    @Override
     public int tierEpoch() {
         return currentEpoch.get();
     }
 
+    @Override
+    public File dir() {
+        return dir;
+    }
+
+    @Override
     public String path() {
         return path;
     }
 
-    public void delete() {
-        if (status != TierPartitionStatus.INIT) {
-            try {
-                Files.delete(Paths.get(path));
-            } catch (IOException ioe) {
-                log.warn("Exception deleting tier partition status.", ioe);
+    @Override
+    public void delete() throws IOException {
+        synchronized (lock) {
+            segments.clear();
+            closeHandlers();
+            Files.deleteIfExists(Paths.get(path));
+        }
+    }
+
+    @Override
+    public void updateDir(File dir) {
+        synchronized (lock) {
+            this.path = Log.tierStateFile(dir, FILE_OFFSET, "").getAbsolutePath();
+            this.dir = dir;
+        }
+    }
+
+    @Override
+    public void closeHandlers() throws IOException {
+        synchronized (lock) {
+            if (status != TierPartitionStatus.CLOSED) {
+                try {
+                    if (channel != null)
+                        channel.close();
+                } finally {
+                    channel = null;
+                    segments.clear();
+                    status = TierPartitionStatus.CLOSED;
+                }
             }
         }
     }
 
+    @Override
     public TierPartitionStatus status() {
         return status;
     }
 
-    public void targetStatus(TierPartitionStatus state) throws IOException {
-        if (this.status != TierPartitionStatus.INIT && state == TierPartitionStatus.CATCHUP) {
-            throw new IllegalStateException();
+    @Override
+    public void beginCatchup() {
+        synchronized (lock) {
+            if (!tieringEnabled || !status.isOpen())
+                throw new IllegalStateException("Illegal state " + status + " for tier partition. " +
+                        "tieringEnabled: " + tieringEnabled + " file: " + path);
+            status = TierPartitionStatus.CATCHUP;
         }
-        if (this.status == TierPartitionStatus.INIT && state == TierPartitionStatus.CATCHUP) {
-            channel = FileChannel.open(Paths.get(path),
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.READ,
-                    StandardOpenOption.WRITE);
+    }
+
+    @Override
+    public void onCatchUpComplete() {
+        synchronized (lock) {
+            if (!tieringEnabled || !status.isOpen())
+                throw new IllegalStateException("Illegal state " + status + " for tier partition. " +
+                        "tieringEnabled: " + tieringEnabled + " file: " + path);
+            status = TierPartitionStatus.ONLINE;
+        }
+    }
+
+    @Override
+    public int numSegments() {
+        return segments.size();
+    }
+
+    @Override
+    public void close() throws IOException {
+        synchronized (lock) {
+            if (status != TierPartitionStatus.CLOSED) {
+                try {
+                    flush();
+                } finally {
+                    closeHandlers();
+                    status = TierPartitionStatus.CLOSED;
+                }
+            }
+        }
+    }
+
+    public AppendResult append(AbstractTierMetadata entry) throws IOException {
+        synchronized (lock) {
+            if (!status.isOpenForWrite()) {
+                return AppendResult.ILLEGAL;
+            } else if (entry instanceof TierTopicInitLeader) {
+                return append((TierTopicInitLeader) entry);
+            } else if (entry instanceof TierObjectMetadata) {
+                return append((TierObjectMetadata) entry);
+            } else {
+                throw new RuntimeException(String.format("Unknown TierTopicIndexEntryType %s", entry));
+            }
+        }
+    }
+
+    @Override
+    public NavigableSet<Long> segmentOffsets() {
+        return segments.keySet();
+    }
+
+    @Override
+    public NavigableSet<Long> segmentOffsets(long from, long to) {
+        return Log$.MODULE$.logSegments(segments, from, to, lock).keySet();
+    }
+
+    @Override
+    public Optional<TierObjectMetadata> metadata(long targetOffset) throws IOException {
+        Map.Entry<Long, Long> entry = segments.floorEntry(targetOffset);
+        if (entry != null) {
+            return read(entry.getValue());
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    private void maybeOpenFile() throws IOException {
+        if (tieringEnabled && !status.isOpen()) {
+            channel = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
             scanAndTruncate();
             channel.position(channel.size());
-        }
-        assert state != TierPartitionStatus.ONLINE || channel != null;
-        this.status = state;
-    }
-
-    public long numSegments() throws IOException {
-        long count = 0;
-        Iterator<ObjectMetadata> iterator = iterator();
-        while (iterator.hasNext()) {
-            iterator.next();
-            count++;
-        }
-        return count;
-    }
-
-    public void close() throws IOException {
-        if (closed.compareAndSet(false, true)) {
-            flush();
-            if (channel != null) {
-                channel.close();
-            }
+            status = TierPartitionStatus.READ_ONLY;
         }
     }
 
-    public AppendResult append(AbstractTierMetadata entry) throws java.io.IOException {
-        if (status == TierPartitionStatus.INIT) {
-            return AppendResult.ILLEGAL;
-        } else if (entry instanceof TierTopicInitLeader) {
-            return append((TierTopicInitLeader) entry);
-        } else if (entry instanceof TierObjectMetadata) {
-            return append((TierObjectMetadata) entry);
-        } else {
-            throw new RuntimeException(String.format("Unknown TierTopicIndexEntryType %s", entry));
+    private Optional<TierObjectMetadata> read(long position) throws IOException {
+        if (!segments.isEmpty() && position < channel.size()) {
+            FileTierPartitionIterator iterator = iterator(position);
+            // The entry at `position` must be known to be fully written to the underlying file
+            if (!iterator.hasNext())
+                throw new IllegalStateException("Could not read entry at " + position + " for partition " + topicPartition);
+            return Optional.of(iterator.next());
         }
-    }
-
-    public Iterator<ObjectMetadata> iterator() throws java.io.IOException {
-        if (status == TierPartitionStatus.INIT) {
-            return new ArrayList<ObjectMetadata>().iterator();
-        } else {
-            return new FileTierPartitionIterator(channel, 0);
-        }
-    }
-
-    public Optional<TierObjectMetadata> getObjectMetadataForOffset(long targetOffset)
-            throws IOException {
-        ByteBuffer bf = ByteBuffer.allocate(READ_BUFFER_SIZE).order(ByteOrder.LITTLE_ENDIAN);
-        long channelPosition = positions.floorPosition(targetOffset).orElse(0L);
-
-        channelPosition += channel.read(bf, channelPosition);
-        bf.flip();
-        while (bf.limit() > 0) {
-            short entryLength = getMetadataLength(bf);
-            while (entryLength > 0) {
-                final ObjectMetadata entry = ObjectMetadata.getRootAsObjectMetadata(bf);
-                if (entry.startOffset() >= targetOffset
-                        || (targetOffset >= entry.startOffset()
-                        && targetOffset < entry.startOffset() + entry.endOffsetDelta())) {
-                    // returning entry without copying entry bytes directly will cause
-                    // READ_BUFFER_SIZE memory usage until GC can occur.
-                    // We may want to copy the buffer if this is a problem.
-                    return Optional.of(new TierObjectMetadata(topic, partition, entry));
-                }
-                bf.position(bf.position() + entryLength);
-                entryLength = getMetadataLength(bf);
-            }
-            final int read = FileUtils.reloadBuffer(channel, bf, channelPosition);
-            if (read == -1) {
-                return Optional.empty();
-            }
-            channelPosition += read;
-        }
-
         return Optional.empty();
     }
 
@@ -207,10 +265,6 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
      */
     FileChannel channel() {
         return channel;
-    }
-
-    long fileSize() throws IOException {
-        return channel.size();
     }
 
     private AppendResult append(TierTopicInitLeader initLeader) {
@@ -223,118 +277,62 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
         }
     }
 
-    private AppendResult append(TierObjectMetadata m) throws java.io.IOException {
-        if (m.tierEpoch() == tierEpoch()) {
+    private AppendResult append(TierObjectMetadata objectMetadata) throws IOException {
+        if (objectMetadata.tierEpoch() == tierEpoch()) {
             OptionalLong endOffset = endOffset();
-            if (!endOffset.isPresent() || m.startOffset() > endOffset.getAsLong()) {
-                final ByteBuffer buffer = m.payloadBuffer();
-                final long byteOffset = appendWithSizePrefix(channel, buffer);
-                updateEndPosition(m.objectMetadata(), byteOffset);
+            if (!endOffset.isPresent() || objectMetadata.startOffset() > endOffset.getAsLong()) {
+                final ByteBuffer metadataBuffer = objectMetadata.payloadBuffer();
+                final long byteOffset = appendWithSizePrefix(channel, metadataBuffer);
+                addSegment(objectMetadata.objectMetadata(), byteOffset);
                 return AppendResult.ACCEPTED;
             }
         }
         return AppendResult.FENCED;
     }
 
-    private static long appendWithSizePrefix(FileChannel channel,
-                                             ByteBuffer buffer)
-            throws IOException {
+    private static long appendWithSizePrefix(FileChannel channel, ByteBuffer metadataBuffer) throws IOException {
         final long byteOffset = channel.position();
-        final short sizePrefix = (short) buffer.remaining();
-        final ByteBuffer sizeBuf = ByteBuffer.allocate(ENTRY_LENGTH_SIZE)
-                .order(ByteOrder.LITTLE_ENDIAN);
+        final short sizePrefix = (short) metadataBuffer.remaining();
+        final ByteBuffer sizeBuf = ByteBuffer.allocate(ENTRY_LENGTH_SIZE).order(ByteOrder.LITTLE_ENDIAN);
         sizeBuf.putShort(0, sizePrefix);
-        final int sizeWritten = channel.write(sizeBuf);
-        assert sizeWritten != 0;
-        final int written = channel.write(buffer);
-        assert written != 0;
+        Utils.writeFully(channel, sizeBuf);
+        Utils.writeFully(channel, metadataBuffer);
         return byteOffset;
     }
 
-    private short getMetadataLength(ByteBuffer bf) {
-        if (bf.position() + ENTRY_LENGTH_SIZE <= bf.limit()) {
-            bf.mark();
-            final short length = bf.getShort();
-            if (bf.position() + length <= bf.limit()) {
-                // sufficient capacity to read the entry
-                return length;
-            }
-            bf.reset();
-        }
-        return -1;
-    }
-
-
     private void scanAndTruncate() throws IOException {
-        final ByteBuffer sizeBuf = ByteBuffer.allocate(ENTRY_LENGTH_SIZE)
-                .order(ByteOrder.LITTLE_ENDIAN);
-        long position = 0;
-        int read = channel.read(sizeBuf, position);
-        while (read == ENTRY_LENGTH_SIZE) {
-            sizeBuf.flip();
-            short entrySize = sizeBuf.getShort();
-            sizeBuf.flip();
+        FileTierPartitionIterator iterator = iterator(0);
+        long currentPosition = 0;
 
-            // read metadata entry
-            assert entrySize > 0;
-            final ByteBuffer entryBuf = ByteBuffer.allocate(entrySize)
-                    .order(ByteOrder.LITTLE_ENDIAN);
-            int entryRead = channel.read(entryBuf, position + ENTRY_LENGTH_SIZE);
-            entryBuf.flip();
+        while (iterator.hasNext()) {
+            TierObjectMetadata metadata = iterator.next();
 
-            if (entryRead != entrySize) {
-                channel.truncate(position);
-                break;
-            }
-            ObjectMetadata metadata = ObjectMetadata.getRootAsObjectMetadata(entryBuf);
+            // epoch must not go backwards
+            if (metadata.tierEpoch() < currentEpoch.get())
+                throw new IllegalStateException("Read unexpected epoch " + metadata.tierEpoch() + " currentEpoch: " +
+                        currentEpoch + " position: " + currentPosition + "topicPartition: " + topicPartition);
 
-            // tier partition status epoch is known to be good
+            // set the epoch
             currentEpoch.set(metadata.tierEpoch());
-            updateEndPosition(metadata, position);
+            addSegment(metadata.objectMetadata(), currentPosition);
 
-            position = position + ENTRY_LENGTH_SIZE + entrySize;
-            read = channel.read(sizeBuf, position);
+            // advance position
+            currentPosition = iterator.position();
         }
 
-        if (position < channel.size()) {
-            channel.truncate(position);
+        if (currentPosition < channel.size()) {
+            log.debug("Truncating to {}/{} for partition {}", currentPosition, channel.size(), topicPartition);
+            channel.truncate(currentPosition);
         }
     }
 
-    private void updateEndPosition(ObjectMetadata metadata, long byteOffset) {
+    private void addSegment(ObjectMetadata metadata, long byteOffset) {
+        segments.put(metadata.startOffset(), byteOffset);
         // store end offset for immediate access
-        this.endOffset = metadata.startOffset() + metadata.endOffsetDelta();
-
-        // add to quick offset lookup map
-        positions.add(metadata.startOffset(), byteOffset);
+        endOffset = metadata.startOffset() + metadata.endOffsetDelta();
     }
 
-    private static class SparsePositionMap {
-        ConcurrentSkipListMap<Long, Long> positions;
-        private long frequency;
-        private long count = 0;
-
-        SparsePositionMap(Double sparsity) {
-            frequency = (long) (1.0 / sparsity);
-        }
-
-        public void add(Long offset, Long position) {
-            if (count % frequency == 0) {
-                // lazily setup skip list, as small partitions won't require a sparse map at all
-                if (positions == null) {
-                    positions = new ConcurrentSkipListMap<>();
-                }
-
-                positions.put(offset, position);
-            }
-            count++;
-        }
-
-        Optional<Long> floorPosition(Long offset) {
-            if (positions == null) {
-                return Optional.empty();
-            }
-            return Optional.ofNullable(positions.floorEntry(offset)).map(Map.Entry::getValue);
-        }
+    private FileTierPartitionIterator iterator(long position) throws IOException {
+        return new FileTierPartitionIterator(topicPartition, channel, position);
     }
 }

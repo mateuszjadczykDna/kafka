@@ -21,7 +21,7 @@ import java.io.{File, RandomAccessFile}
 import java.util.Properties
 
 import kafka.api.ApiVersion
-import kafka.log.Log
+import kafka.log.{AbstractLog, Log}
 import kafka.server.KafkaConfig._
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.tools.DumpLogSegments
@@ -419,12 +419,12 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
   }
 
   private def getLogFile(broker: KafkaServer, partition: Int): File = {
-    val log: Log = getLog(broker, partition)
+    val log: AbstractLog = getLog(broker, partition)
     log.flush()
     log.dir.listFiles.filter(_.getName.endsWith(".log"))(0)
   }
 
-  private def getLog(broker: KafkaServer, partition: Int): Log = {
+  private def getLog(broker: KafkaServer, partition: Int): AbstractLog = {
     broker.logManager.getLog(new TopicPartition(topic, partition)).orNull
   }
 

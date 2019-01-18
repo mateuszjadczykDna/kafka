@@ -10,15 +10,14 @@ import java.util
 import java.util.Collections
 import java.util.function.Consumer
 
-import kafka.log.{Log, LogConfig, LogManager, LogTest}
-import kafka.server.{BrokerTopicStats, ReplicaManager}
-import kafka.tier.archiver.{TierArchiver, TierArchiverConfig, TierArchiverState}
+import kafka.log.{MergedLog, AbstractLog, LogConfig, LogManager, LogTest}
+import kafka.server.{LogDirFailureChannel, ReplicaManager, BrokerTopicStats}
+import kafka.tier.archiver.{TierArchiverConfig, TierArchiverState, TierArchiver}
 import kafka.tier.client.{MockConsumerBuilder, MockProducerBuilder}
-import kafka.tier.domain.TierObjectMetadata
 import kafka.tier.state.MemoryTierPartitionStateFactory
 import kafka.tier.store.MockInMemoryTierObjectStore
 import kafka.tier.store.TierObjectStore.TierObjectStoreFileType
-import kafka.utils.{MockTime, TestUtils}
+import kafka.utils.{TestUtils, MockTime}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.MemoryRecords.RecordFilter
 import org.apache.kafka.common.record._
@@ -47,6 +46,11 @@ class TierIntegrationTest {
     logDirs
   )
 
+  val tierMetadataManager = new TierMetadataManager(new MemoryTierPartitionStateFactory(),
+    Some(new MockInMemoryTierObjectStore("bucket")),
+    new LogDirFailureChannel(1),
+    true)
+
   @Test
   def testArchiverEmigrate(): Unit = {
     val (tierTopicManager, consumerBuilder) = setupTierTopicManager
@@ -59,13 +63,16 @@ class TierIntegrationTest {
 
     val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
 
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierTopicManager, tierObjectStore, mockTime)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     // Immigrate all test logs
-    logs.foreach { log => tierArchiver.handleImmigration(log.topicPartition, 1) }
+    logs.foreach { log =>
+      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
+      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    }
 
-    tierTopicManager.immigratePartitions(logs.map(_.topicPartition).toList.asJava)
-    while (tierTopicManager.doWork()) {}
+    while (tierTopicManager.doWork()) {
+    }
 
     assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
     assertEquals("No transitions should be in progress.", 0, tierArchiver.stateTransitionsInProgress.size)
@@ -119,14 +126,18 @@ class TierIntegrationTest {
 
     val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
 
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierTopicManager, tierObjectStore, mockTime)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     tierTopicManager.becomeArchiver(logs.head.topicPartition, 2)
 
     // Immigrate all test logs
-    logs.foreach { log => tierArchiver.handleImmigration(log.topicPartition, 1) }
-    tierTopicManager.immigratePartitions(logs.map(_.topicPartition).toList.asJava)
-    while (tierTopicManager.doWork()) {}
+    logs.foreach { log =>
+      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
+      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    }
+
+    while(tierTopicManager.doWork()) {
+    }
 
     assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
 
@@ -154,14 +165,17 @@ class TierIntegrationTest {
 
     val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
 
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierTopicManager, tierObjectStore, mockTime)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     val leaderEpoch = 1
 
     // Immigrate all test logs
-    logs.foreach { log => tierArchiver.handleImmigration(log.topicPartition, leaderEpoch) }
-    tierTopicManager.immigratePartitions(logs.map(_.topicPartition).toList.asJava)
-    while (tierTopicManager.doWork()) {}
+    logs.foreach { log =>
+      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    }
+
+    while(tierTopicManager.doWork()) {
+    }
 
     assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
     assertEquals("No transitions should be in progress.", 0, tierArchiver.stateTransitionsInProgress.size)
@@ -183,7 +197,7 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals(s"topic manager should materialize entry for ${log.topicPartition}",
-        tierTopicManager.getPartitionState(log.topicPartition).tierEpoch, leaderEpoch)
+        tierTopicManager.partitionState(log.topicPartition).tierEpoch, leaderEpoch)
     }
 
     assertEquals(0, tierObjectStore.getStored.keySet().size())
@@ -234,9 +248,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 1: segment should be materialized with correct offset relationship",
-        0, tierTopicManager.getPartitionState(log.topicPartition).getObjectMetadataForOffset(0).get().startOffset)
+        0, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
       assertEquals("batch 1: segment should be materialized with correct end offset",
-        3, tierTopicManager.getPartitionState(log.topicPartition).endOffset.getAsLong)
+        3, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
@@ -284,9 +298,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 2: segment should be materialized with correct offset relationship",
-        4, tierTopicManager.getPartitionState(log.topicPartition).getObjectMetadataForOffset(6).get().startOffset)
+        4, tierTopicManager.partitionState(log.topicPartition).metadata(6).get().startOffset)
       assertEquals("batch 2: segment should be materialized with correct end offset",
-        7, tierTopicManager.getPartitionState(log.topicPartition).endOffset.getAsLong)
+        7, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
     }
 
     TestUtils.waitUntilTrue(
@@ -337,9 +351,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 3: segment should be materialized with correct offset relationship",
-        8, tierTopicManager.getPartitionState(log.topicPartition).getObjectMetadataForOffset(10).get().startOffset)
+        8, tierTopicManager.partitionState(log.topicPartition).metadata(10).get().startOffset)
       assertEquals("batch 3: segment should be materialized with correct end offset",
-        11, tierTopicManager.getPartitionState(log.topicPartition).endOffset.getAsLong)
+        11, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
@@ -358,15 +372,18 @@ class TierIntegrationTest {
 
     val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
 
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierTopicManager, tierObjectStore, mockTime)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 10), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     val leaderEpoch = 1
 
     // Immigrate all test logs
-    logs.foreach { log => tierArchiver.handleImmigration(log.topicPartition, leaderEpoch) }
-    tierTopicManager.immigratePartitions(logs.map(_.topicPartition).toList.asJava)
-    // process immigration
-    while (tierTopicManager.doWork()) {}
+    logs.foreach { log =>
+      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
+      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    }
+
+    while(tierTopicManager.doWork()) {
+    }
 
     assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
     assertEquals("No transitions should be in progress.", 0, tierArchiver.stateTransitionsInProgress.size)
@@ -384,7 +401,7 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals(s"topic manager should materialize entry for ${log.topicPartition}",
-        leaderEpoch, tierTopicManager.getPartitionState(log.topicPartition).tierEpoch)
+        leaderEpoch, tierTopicManager.partitionState(log.topicPartition).tierEpoch)
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
@@ -433,9 +450,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 1: segment should be materialized with correct offset relationship",
-        0, tierTopicManager.getPartitionState(log.topicPartition).getObjectMetadataForOffset(0).get().startOffset)
+        0, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
       assertEquals("batch 1: segment should be materialized with correct end offset",
-        3, tierTopicManager.getPartitionState(log.topicPartition).endOffset.getAsLong)
+        3, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
 
       validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
     }
@@ -454,15 +471,18 @@ class TierIntegrationTest {
 
     val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
 
-    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 2), replicaManager, tierTopicManager, tierObjectStore, mockTime)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 2), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     val leaderEpoch = 1
 
     // Immigrate all test logs
-    logs.foreach { log => tierArchiver.handleImmigration(log.topicPartition, leaderEpoch) }
-    tierTopicManager.immigratePartitions(logs.map(_.topicPartition).toList.asJava)
-    // process immigration
-    while (tierTopicManager.doWork()) {}
+    logs.foreach { log =>
+      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
+      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    }
+
+    while(tierTopicManager.doWork()) {
+    }
 
     // Write batches to all partitions
     logs.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, 2, 4) }
@@ -569,7 +589,7 @@ class TierIntegrationTest {
 
     val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
 
-    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 2), replicaManager, tierTopicManager, tierObjectStore, mockTime)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 2), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     val leaderEpoch = 1
 
@@ -577,8 +597,13 @@ class TierIntegrationTest {
     logs.tail.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, 1, 4) }
 
     // Immigrate all test logs
-    logs.foreach { log => tierArchiver.handleImmigration(log.topicPartition, leaderEpoch) }
-    tierTopicManager.immigratePartitions(logs.map(_.topicPartition).toList.asJava)
+    logs.foreach { log =>
+      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
+      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    }
+
+    while(tierTopicManager.doWork()) {
+    }
 
     // process immigration
     TestUtils.waitUntilTrue(() => !tierArchiver.processImmigrationEmigrationQueue() && !tierArchiver.tryRunPendingStates(), "archiver should process immigrations", 2000L)
@@ -639,15 +664,14 @@ class TierIntegrationTest {
   }
 
 
-  private def validatePartitionStateContainedInObjectStore
-  (tierTopicManager: TierTopicManager,
-   tierObjectStore: MockInMemoryTierObjectStore,
-   logs: Iterable[Log]): Unit = {
+  private def validatePartitionStateContainedInObjectStore(tierTopicManager: TierTopicManager,
+                                                           tierObjectStore: MockInMemoryTierObjectStore,
+                                                           logs: Iterable[AbstractLog]): Unit = {
     logs.foreach { log =>
-      val iterator = tierTopicManager.getPartitionState(log.topicPartition).iterator()
-      while (iterator.hasNext) {
-        val objectMetadata = iterator.next()
-        val tierObjectMetadata = new TierObjectMetadata(log.topicPartition.topic(), log.topicPartition.partition(), objectMetadata)
+      val tierPartitionState = tierMetadataManager.tierPartitionState(log.topicPartition).get
+      val tierSegmentOffsets = tierPartitionState.segmentOffsets
+      tierSegmentOffsets.asScala.foreach { offset =>
+        val tierObjectMetadata = tierPartitionState.metadata(offset).get
         assertNotNull(tierObjectStore.getObject(tierObjectMetadata, TierObjectStoreFileType.SEGMENT, 0, 1000).getObjectSize)
       }
     }
@@ -661,25 +685,27 @@ class TierIntegrationTest {
       tierTopicManagerConfig,
       consumerBuilder,
       producerBuilder,
-      new MemoryTierPartitionStateFactory())
+      tierMetadataManager)
     tierTopicManager.becomeReady()
     (tierTopicManager, consumerBuilder)
   }
 
-  private def createLogs(n: Int, logConfig: LogConfig, tempDir: File): IndexedSeq[Log] = {
+  private def createLogs(n: Int, logConfig: LogConfig, tempDir: File): IndexedSeq[AbstractLog] = {
+    val logDirFailureChannel = new LogDirFailureChannel(n)
     (0 until n).map { i =>
       val logDir = tempDir.toPath.resolve(s"tierlogtest-$i").toFile
       logDir.mkdir()
-      LogTest.createLog(logDir, logConfig, new BrokerTopicStats, mockTime.scheduler, mockTime,
-        0L, 0L, 60 * 60 * 1000, LogManager.ProducerIdExpirationCheckIntervalMs)
+      MergedLog(logDir, logConfig, 0L, 0L, mockTime.scheduler, new BrokerTopicStats, mockTime,
+        60 * 60 * 1000, LogManager.ProducerIdExpirationCheckIntervalMs, logDirFailureChannel,
+        Some(tierMetadataManager))
     }
   }
 
-  private def mockReplicaManager(logs: Iterable[Log]): ReplicaManager = {
+  private def mockReplicaManager(logs: Iterable[AbstractLog]): ReplicaManager = {
     val replicaManager = mock(classOf[ReplicaManager])
     when(replicaManager.getLog(ArgumentMatchers.any(classOf[TopicPartition])))
-      .thenAnswer(new Answer[Option[Log]] {
-        override def answer(invocation: InvocationOnMock): Option[Log] = {
+      .thenAnswer(new Answer[Option[AbstractLog]] {
+        override def answer(invocation: InvocationOnMock): Option[AbstractLog] = {
           val target: TopicPartition = invocation.getArgument(0)
           logs.find { log => log.topicPartition == target }
         }
@@ -687,7 +713,7 @@ class TierIntegrationTest {
     replicaManager
   }
 
-  private def writeRecordBatches(log: Log, leaderEpoch: Int, baseOffset: Long, batches: Int, recordsPerBatch: Int): Unit = {
+  private def writeRecordBatches(log: AbstractLog, leaderEpoch: Int, baseOffset: Long, batches: Int, recordsPerBatch: Int): Unit = {
     (0 until batches).foreach { idx =>
       val records = createRecords(log.topicPartition, leaderEpoch, baseOffset + idx * recordsPerBatch, recordsPerBatch)
       log.appendAsFollower(records)

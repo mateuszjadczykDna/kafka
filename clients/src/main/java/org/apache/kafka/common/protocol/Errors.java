@@ -97,6 +97,7 @@ import org.apache.kafka.common.errors.UnsupportedForMessageFormatException;
 import org.apache.kafka.common.errors.UnsupportedSaslMechanismException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.errors.StaleBrokerEpochException;
+import org.apache.kafka.common.errors.OffsetTieredException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -294,7 +295,14 @@ public enum Errors {
             StaleBrokerEpochException::new),
     OFFSET_NOT_AVAILABLE(78, "The leader high watermark has not caught up from a recent leader " +
             "election so the offsets cannot be guaranteed to be monotonically increasing",
-            OffsetNotAvailableException::new);
+            OffsetNotAvailableException::new),
+
+    /* ----- Begin internal errors: error codes must be incremented sequentially starting at 0 ----- */
+
+    OFFSET_TIERED(0, "The requested offset has been tiered and cannot be fetched",
+            OffsetTieredException::new, true);
+
+    /* ----- End internal errors ----- */
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
 
@@ -315,11 +323,20 @@ public enum Errors {
     private final short code;
     private final Function<String, ApiException> builder;
     private final ApiException exception;
+    private final boolean isInternal;
 
     Errors(int code, String defaultExceptionString, Function<String, ApiException> builder) {
-        this.code = (short) code;
+        this(code, defaultExceptionString, builder, false);
+    }
+
+    Errors(int code, String defaultExceptionString, Function<String, ApiException> builder, boolean isInternal) {
+        if (!isInternal)
+            this.code = (short) code;
+        else
+            this.code = (short) (Short.MAX_VALUE - code);
         this.builder = builder;
         this.exception = builder.apply(defaultExceptionString);
+        this.isInternal = isInternal;
     }
 
     /**
@@ -415,6 +432,8 @@ public enum Errors {
         b.append("<th>Description</th>\n");
         b.append("</tr>\n");
         for (Errors error : Errors.values()) {
+            if (error.isInternal)
+                continue;
             b.append("<tr>");
             b.append("<td>");
             b.append(error.name());

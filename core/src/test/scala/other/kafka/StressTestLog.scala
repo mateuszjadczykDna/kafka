@@ -21,7 +21,7 @@ import java.util.Properties
 import java.util.concurrent.atomic._
 
 import kafka.log._
-import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
+import kafka.server.{BrokerTopicStats, FetchDataInfo, LogDirFailureChannel}
 import kafka.utils._
 import org.apache.kafka.clients.consumer.OffsetOutOfRangeException
 import org.apache.kafka.common.record.FileRecords
@@ -118,7 +118,7 @@ object StressTestLog {
     }
   }
 
-  class WriterThread(val log: Log) extends WorkerThread with LogProgress {
+  class WriterThread(val log: AbstractLog) extends WorkerThread with LogProgress {
     override def work() {
       val logAppendInfo = log.appendAsLeader(TestUtils.singletonRecords(currentOffset.toString.getBytes), 0)
       require(logAppendInfo.firstOffset.forall(_ == currentOffset) && logAppendInfo.lastOffset == currentOffset)
@@ -128,21 +128,24 @@ object StressTestLog {
     }
   }
 
-  class ReaderThread(val log: Log) extends WorkerThread with LogProgress {
+  class ReaderThread(val log: AbstractLog) extends WorkerThread with LogProgress {
     override def work() {
       try {
         log.read(currentOffset,
           maxLength = 1024,
           maxOffset = Some(currentOffset + 1),
           minOneMessage = true,
-          includeAbortedTxns = false).records match {
-          case read: FileRecords if read.sizeInBytes > 0 => {
-            val first = read.batches.iterator.next()
-            require(first.lastOffset == currentOffset, "We should either read nothing or the message we asked for.")
-            require(first.sizeInBytes == read.sizeInBytes, "Expected %d but got %d.".format(first.sizeInBytes, read.sizeInBytes))
-            currentOffset += 1
-          }
-          case _ =>
+          includeAbortedTxns = false) match {
+          case localResult: FetchDataInfo =>
+            localResult.records match {
+              case read: FileRecords if read.sizeInBytes > 0 => {
+                val first = read.batches.iterator.next()
+                require(first.lastOffset == currentOffset, "We should either read nothing or the message we asked for.")
+                require(first.sizeInBytes == read.sizeInBytes, "Expected %d but got %d.".format(first.sizeInBytes, read.sizeInBytes))
+                currentOffset += 1
+              }
+              case _ =>
+            }
         }
       } catch {
         case _: OffsetOutOfRangeException => // this is okay

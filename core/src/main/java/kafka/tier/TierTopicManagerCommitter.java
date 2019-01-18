@@ -5,7 +5,6 @@
 package kafka.tier;
 
 import kafka.tier.state.TierPartitionState;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,26 +34,24 @@ public class TierTopicManagerCommitter implements Runnable {
     private final CountDownLatch managerShutdownLatch;
     private final TierTopicManagerConfig config;
     private final ConcurrentHashMap<Integer, Long> positions = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<TopicPartition, TierPartitionState> tierPartitionStates;
+    private final TierMetadataManager tierMetadataManager;
 
     /**
      * Instantiate a TierTopicManagerCommitter
      *
      * @param config               TierTopicManagerConfig containing tiering configuration
-     * @param tierPartitionStates  TierPartitions to fsync prior to committing offsets.
+     * @param tierMetadataManager  Tier metadata manager instance
      * @param managerShutdownLatch Shutdown latch to signal to the TierTopicManager that it's safe to shutdown
      * @throws IOException occurs for log failures
      */
-    TierTopicManagerCommitter(
-            TierTopicManagerConfig config,
-            ConcurrentHashMap<TopicPartition, TierPartitionState> tierPartitionStates,
-            CountDownLatch managerShutdownLatch) throws IOException {
-        this.tierPartitionStates = tierPartitionStates;
+    TierTopicManagerCommitter(TierTopicManagerConfig config,
+                              TierMetadataManager tierMetadataManager,
+                              CountDownLatch managerShutdownLatch) throws IOException {
         this.config = config;
+        this.tierMetadataManager = tierMetadataManager;
         this.managerShutdownLatch = managerShutdownLatch;
         if (config.logDirs.size() != 1) {
-            throw new RuntimeException(
-                    "TierTopicManager does not currently support multiple logdirs.");
+            throw new RuntimeException("TierTopicManager does not currently support multiple logdirs.");
         }
         clearTempFiles();
         loadOffsets();
@@ -89,12 +87,11 @@ public class TierTopicManagerCommitter implements Runnable {
      */
     public void flush() {
         try {
-            // take a copy of the positions so that we don't commit positions
-            // later than what we will flush.
+            // take a copy of the positions so that we don't commit positions later than what we will flush.
             HashMap<Integer, Long> flushPositions = new HashMap<>(positions);
-            for (TierPartitionState tierPartitionState : tierPartitionStates.values()) {
-                tierPartitionState.flush();
-            }
+            Iterator<TierPartitionState> metadataIterator = tierMetadataManager.tierEnabledPartitionStateIterator();
+            while (metadataIterator.hasNext())
+                metadataIterator.next().flush();
             writeOffsets(flushPositions);
         } catch (IOException ioe) {
             log.error("Error committing progress.", ioe);
@@ -111,9 +108,9 @@ public class TierTopicManagerCommitter implements Runnable {
             // take a copy of the positions so that we don't commit positions
             // later than what we will flush.
             HashMap<Integer, Long> flushPositions = new HashMap<>(positions);
-            for (TierPartitionState tierPartitionState : tierPartitionStates.values()) {
-                tierPartitionState.close();
-            }
+            Iterator<TierPartitionState> metadataIterator = tierMetadataManager.tierEnabledPartitionStateIterator();
+            while (metadataIterator.hasNext())
+                metadataIterator.next().close();
             writeOffsets(flushPositions);
         } catch (IOException ioe) {
             log.error("Error committing progress.", ioe);
@@ -125,9 +122,10 @@ public class TierTopicManagerCommitter implements Runnable {
      */
     public void run() {
         try {
-            while (!shutdownInitiated.await(COMMIT_PERIOD_MS, TimeUnit.MILLISECONDS)) {
+            while (!shutdownInitiated.await(COMMIT_PERIOD_MS, TimeUnit.MILLISECONDS))
                 flush();
-            }
+            // ensure we flush on shutdown
+            flush();
         } catch (InterruptedException ie) {
             log.debug("Committer thread interrupted. Shutting down.");
         } finally {

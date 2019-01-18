@@ -76,6 +76,22 @@ case class LogDeleteRecordsResult(requestedOffset: Long, lowWatermark: Long, exc
  *                         when the read was initiated, false otherwise
  * @param error Exception if error encountered while reading from the log
  */
+sealed trait AbstractLogReadResult {
+  def info: AbstractFetchDataInfo
+  def highWatermark: Long
+  def leaderLogStartOffset: Long
+  def leaderLogEndOffset: Long
+  def fetchTimeMs: Long
+  def readSize: Int
+  def lastStableOffset: Option[Long]
+  def exception: Option[Throwable]
+
+  def error: Errors = exception match {
+    case None => Errors.NONE
+    case Some(e) => Errors.forException(e)
+  }
+}
+
 case class LogReadResult(info: FetchDataInfo,
                          highWatermark: Long,
                          leaderLogStartOffset: Long,
@@ -84,20 +100,27 @@ case class LogReadResult(info: FetchDataInfo,
                          fetchTimeMs: Long,
                          readSize: Int,
                          lastStableOffset: Option[Long],
-                         exception: Option[Throwable] = None) {
-
-  def error: Errors = exception match {
-    case None => Errors.NONE
-    case Some(e) => Errors.forException(e)
-  }
-
+                         exception: Option[Throwable] = None) extends AbstractLogReadResult {
   def withEmptyFetchInfo: LogReadResult =
     copy(info = FetchDataInfo(LogOffsetMetadata.UnknownOffsetMetadata, MemoryRecords.EMPTY))
 
   override def toString =
     s"Fetch Data: [$info], HW: [$highWatermark], leaderLogStartOffset: [$leaderLogStartOffset], leaderLogEndOffset: [$leaderLogEndOffset], " +
     s"followerLogStartOffset: [$followerLogStartOffset], fetchTimeMs: [$fetchTimeMs], readSize: [$readSize], lastStableOffset: [$lastStableOffset], error: [$error]"
+}
 
+case class TierLogReadResult(info: TierFetchDataInfo,
+                             highWatermark: Long,
+                             leaderLogStartOffset: Long,
+                             leaderLogEndOffset: Long,
+                             followerLogStartOffset: Long,
+                             fetchTimeMs: Long,
+                             readSize: Int,
+                             lastStableOffset: Option[Long],
+                             exception: Option[Throwable] = None) extends AbstractLogReadResult {
+  override def toString =
+    s"Tiered Fetch Data: [$info], HW: [$highWatermark], leaderLogStartOffset: [$leaderLogStartOffset], leaderLogEndOffset: [$leaderLogEndOffset], " +
+      s"followerLogStartOffset: [$followerLogStartOffset], fetchTimeMs: [$fetchTimeMs], readSize: [$readSize], lastStableOffset: [$lastStableOffset], error: [$error]"
 }
 
 case class FetchPartitionData(error: Errors = Errors.NONE,
@@ -283,7 +306,7 @@ class ReplicaManager(val config: KafkaConfig,
     replicaAlterLogDirsManager.shutdownIdleFetcherThreads()
   }
 
-  def getLog(topicPartition: TopicPartition): Option[Log] = logManager.getLog(topicPartition)
+  def getLog(topicPartition: TopicPartition): Option[AbstractLog] = logManager.getLog(topicPartition)
 
   /**
    * Try to complete some delayed produce requests with the request key;
@@ -814,7 +837,7 @@ class ReplicaManager(val config: KafkaConfig,
       FetchHighWatermark
 
 
-    def readFromLog(): Seq[(TopicPartition, LogReadResult)] = {
+    def readFromLog(): Seq[(TopicPartition, AbstractLogReadResult)] = {
       val result = readFromLocalLog(
         replicaId = replicaId,
         fetchOnlyFromLeader = fetchOnlyFromLeader,
@@ -828,29 +851,35 @@ class ReplicaManager(val config: KafkaConfig,
     }
 
     val logReadResults = readFromLog()
+    val localReadResults = logReadResults.collect {
+      case (topicPartition, result: LogReadResult) => (topicPartition, result)
+    }
+    val tierReadResults = logReadResults.collect {
+      case (topicPartition, result: TierLogReadResult) => (topicPartition, result)
+    }
 
     // check if this fetch request can be satisfied right away
-    var bytesReadable: Long = 0
+    var localReadableBytes: Long = 0
     var errorReadingData = false
     val logReadResultMap = new mutable.HashMap[TopicPartition, LogReadResult]
-    logReadResults.foreach { case (topicPartition, logReadResult) =>
+    localReadResults.foreach { case (topicPartition, logReadResult) =>
       if (logReadResult.error != Errors.NONE)
         errorReadingData = true
-      bytesReadable = bytesReadable + logReadResult.info.records.sizeInBytes
+      localReadableBytes = localReadableBytes + logReadResult.info.records.sizeInBytes
       logReadResultMap.put(topicPartition, logReadResult)
     }
 
     // respond immediately if 1) fetch request does not want to wait
     //                        2) fetch request does not require any data
-    //                        3) has enough data to respond
+    //                        3) fetch request does not require any tiered data and has enough data available in local store to respond
     //                        4) some error happens while reading data
-    if (timeout <= 0 || fetchInfos.isEmpty || bytesReadable >= fetchMinBytes || errorReadingData) {
-      val fetchPartitionData = logReadResults.map { case (tp, result) =>
+    if (timeout <= 0 || fetchInfos.isEmpty || (tierReadResults.isEmpty && localReadableBytes >= fetchMinBytes) || errorReadingData) {
+      val fetchPartitionData = localReadResults.map { case (tp, result) =>
         tp -> FetchPartitionData(result.error, result.highWatermark, result.leaderLogStartOffset, result.info.records,
           result.lastStableOffset, result.info.abortedTransactions)
       }
       responseCallback(fetchPartitionData)
-    } else {
+    } else if (tierReadResults.isEmpty) {
       // construct the fetch results from the read results
       val fetchPartitionStatus = new mutable.ArrayBuffer[(TopicPartition, FetchPartitionStatus)]
       fetchInfos.foreach { case (topicPartition, partitionData) =>
@@ -870,6 +899,8 @@ class ReplicaManager(val config: KafkaConfig,
       // this is because while the delayed fetch operation is being created, new requests
       // may arrive and hence make this operation completable.
       delayedFetchPurgatory.tryCompleteElseWatch(delayedFetch, delayedFetchKeys)
+    } else {
+      // TODO: handle fetch with tiered data
     }
   }
 
@@ -882,9 +913,9 @@ class ReplicaManager(val config: KafkaConfig,
                        fetchMaxBytes: Int,
                        hardMaxBytesLimit: Boolean,
                        readPartitionInfo: Seq[(TopicPartition, PartitionData)],
-                       quota: ReplicaQuota): Seq[(TopicPartition, LogReadResult)] = {
+                       quota: ReplicaQuota): Seq[(TopicPartition, AbstractLogReadResult)] = {
 
-    def read(tp: TopicPartition, fetchInfo: PartitionData, limitBytes: Int, minOneMessage: Boolean): LogReadResult = {
+    def read(tp: TopicPartition, fetchInfo: PartitionData, limitBytes: Int, minOneMessage: Boolean): AbstractLogReadResult = {
       val offset = fetchInfo.fetchOffset
       val partitionFetchSize = fetchInfo.maxBytes
       val followerLogStartOffset = fetchInfo.logStartOffset
@@ -910,26 +941,44 @@ class ReplicaManager(val config: KafkaConfig,
           fetchOnlyFromLeader = fetchOnlyFromLeader,
           minOneMessage = minOneMessage)
 
+        val (fetchOffsetMetadata, firstEntryIncomplete) = readInfo.fetchedData match {
+          case localReadInfo: FetchDataInfo => (localReadInfo.fetchOffsetMetadata, localReadInfo.firstEntryIncomplete)
+          case _: TierFetchDataInfo => (LogOffsetMetadata.UnknownOffsetMetadata, false)
+        }
+
         val fetchDataInfo = if (shouldLeaderThrottle(quota, tp, replicaId)) {
           // If the partition is being throttled, simply return an empty set.
-          FetchDataInfo(readInfo.fetchedData.fetchOffsetMetadata, MemoryRecords.EMPTY)
-        } else if (!hardMaxBytesLimit && readInfo.fetchedData.firstEntryIncomplete) {
+          FetchDataInfo(fetchOffsetMetadata, MemoryRecords.EMPTY)
+        } else if (!hardMaxBytesLimit && firstEntryIncomplete) {
           // For FetchRequest version 3, we replace incomplete message sets with an empty one as consumers can make
           // progress in such cases and don't need to report a `RecordTooLargeException`
-          FetchDataInfo(readInfo.fetchedData.fetchOffsetMetadata, MemoryRecords.EMPTY)
+          FetchDataInfo(fetchOffsetMetadata, MemoryRecords.EMPTY)
         } else {
           readInfo.fetchedData
         }
 
-        LogReadResult(info = fetchDataInfo,
-                      highWatermark = readInfo.highWatermark,
-                      leaderLogStartOffset = readInfo.logStartOffset,
-                      leaderLogEndOffset = readInfo.logEndOffset,
-                      followerLogStartOffset = followerLogStartOffset,
-                      fetchTimeMs = fetchTimeMs,
-                      readSize = adjustedMaxBytes,
-                      lastStableOffset = Some(readInfo.lastStableOffset),
-                      exception = None)
+        fetchDataInfo match {
+          case info: FetchDataInfo =>
+            LogReadResult(info = info,
+              highWatermark = readInfo.highWatermark,
+              leaderLogStartOffset = readInfo.logStartOffset,
+              leaderLogEndOffset = readInfo.logEndOffset,
+              followerLogStartOffset = followerLogStartOffset,
+              fetchTimeMs = fetchTimeMs,
+              readSize = adjustedMaxBytes,
+              lastStableOffset = Some(readInfo.lastStableOffset),
+              exception = None)
+          case info: TierFetchDataInfo =>
+            TierLogReadResult(info = info,
+              highWatermark = readInfo.highWatermark,
+              leaderLogStartOffset = readInfo.logStartOffset,
+              leaderLogEndOffset = readInfo.logEndOffset,
+              followerLogStartOffset = followerLogStartOffset,
+              fetchTimeMs = fetchTimeMs,
+              readSize = adjustedMaxBytes,
+              lastStableOffset = Some(readInfo.lastStableOffset),
+              exception = None)
+        }
       } catch {
         // NOTE: Failed fetch requests metric is not incremented for known exceptions since it
         // is supposed to indicate un-expected failure of a broker in handling a fetch request
@@ -970,11 +1019,15 @@ class ReplicaManager(val config: KafkaConfig,
     }
 
     var limitBytes = fetchMaxBytes
-    val result = new mutable.ArrayBuffer[(TopicPartition, LogReadResult)]
+    val result = new mutable.ArrayBuffer[(TopicPartition, AbstractLogReadResult)]
     var minOneMessage = !hardMaxBytesLimit
     readPartitionInfo.foreach { case (tp, fetchInfo) =>
       val readResult = read(tp, fetchInfo, limitBytes, minOneMessage)
-      val recordBatchSize = readResult.info.records.sizeInBytes
+      val recordBatchSize =
+        readResult match {
+          case localResult: LogReadResult => localResult.info.records.sizeInBytes
+          case tierResult: TierLogReadResult => tierResult.info.fetchMetadata.maxBytes.intValue
+        }
       // Once we read from a non-empty partition, we stop ignoring request and partition level size limits
       if (recordBatchSize > 0)
         minOneMessage = false
@@ -1359,26 +1412,34 @@ class ReplicaManager(val config: KafkaConfig,
    * updated leader's state in the next fetch response.
    */
   private def updateFollowerLogReadResults(replicaId: Int,
-                                           readResults: Seq[(TopicPartition, LogReadResult)]): Seq[(TopicPartition, LogReadResult)] = {
+                                           readResults: Seq[(TopicPartition, AbstractLogReadResult)]): Seq[(TopicPartition, AbstractLogReadResult)] = {
     debug(s"Recording follower broker $replicaId log end offsets: $readResults")
     readResults.map { case (topicPartition, readResult) =>
-      var updatedReadResult = readResult
-      nonOfflinePartition(topicPartition) match {
-        case Some(partition) =>
-          partition.getReplica(replicaId) match {
-            case Some(replica) =>
-              partition.updateReplicaLogReadResult(replica, readResult)
+      readResult match {
+        case readResult: LogReadResult =>
+          var updatedReadResult = readResult
+          nonOfflinePartition(topicPartition) match {
+            case Some(partition) =>
+              partition.getReplica(replicaId) match {
+                case Some(replica) =>
+                  partition.updateReplicaLogReadResult(replica, readResult)
+                case None =>
+                  warn(s"Leader $localBrokerId failed to record follower $replicaId's position " +
+                    s"${readResult.info.fetchOffsetMetadata.messageOffset} since the replica is not recognized to be " +
+                    s"one of the assigned replicas ${partition.assignedReplicas.map(_.brokerId).mkString(",")} " +
+                    s"for partition $topicPartition. Empty records will be returned for this partition.")
+                  updatedReadResult = readResult.withEmptyFetchInfo
+              }
             case None =>
-              warn(s"Leader $localBrokerId failed to record follower $replicaId's position " +
-                s"${readResult.info.fetchOffsetMetadata.messageOffset} since the replica is not recognized to be " +
-                s"one of the assigned replicas ${partition.assignedReplicas.map(_.brokerId).mkString(",")} " +
-                s"for partition $topicPartition. Empty records will be returned for this partition.")
-              updatedReadResult = readResult.withEmptyFetchInfo
+              warn(s"While recording the replica LEO, the partition $topicPartition hasn't been created.")
           }
-        case None =>
-          warn(s"While recording the replica LEO, the partition $topicPartition hasn't been created.")
+          topicPartition -> updatedReadResult
+        case readResult: TierLogReadResult =>
+          val reason = s"Attempt to fetch tiered data by follower $replicaId from $localBrokerId at offset " +
+            s"${readResult.info.fetchMetadata.fetchStartOffset}}"
+          warn(reason)
+          topicPartition -> readResult.copy(exception = Some(new OffsetTieredException(reason)))
       }
-      topicPartition -> updatedReadResult
     }
   }
 

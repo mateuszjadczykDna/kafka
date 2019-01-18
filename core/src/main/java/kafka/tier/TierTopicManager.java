@@ -14,10 +14,8 @@ import kafka.tier.domain.TierTopicInitLeader;
 import kafka.tier.exceptions.TierMetadataDeserializationException;
 import kafka.tier.exceptions.TierMetadataFatalException;
 import kafka.tier.exceptions.TierMetadataRetryableException;
-import kafka.tier.state.FileTierPartitionStateFactory;
 import kafka.tier.state.TierPartitionState;
 import kafka.tier.state.TierPartitionState.AppendResult;
-import kafka.tier.state.TierPartitionStateFactory;
 import kafka.tier.state.TierPartitionStatus;
 import kafka.tier.topic.TierTopicAdmin;
 import kafka.tier.topic.TierTopicPartitioner;
@@ -41,13 +39,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.HashSet;
 import java.util.Set;
+import java.util.Map;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -59,20 +58,18 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
- * Materializes the TierPartitionStatus from the Tier topic.
- * Maintains a mapping of TopicPartition to the materialized TierPartitionStatus.
- * Allows brokers to perform leader requests on Tier topic.
+ * A metadata store for tiered storage. Exposes APIs to maintain and materialize metadata for tiered segments. The metadata
+ * store is implemented as a Kafka topic. The message types stored in this topic are defined in {@link kafka.tier.domain.TierRecordType}.
+ * The TierTopicManager is also responsible for making all the tiering related metadata available to all brokers in the
+ * cluster. It does this by consuming from the tier topic and materializing relevant state into the TierPartitionState
+ * files.
  */
 public class TierTopicManager implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(TierTopicManager.class);
     private static final int TOPIC_CREATION_BACKOFF_MS = 5000;
-    // TODO(lucas), add a KafkaConfig if we choose to use the sparse index scheme
-    private static final double POSITION_INDEX_SPARSITY = 0.001;
     private final String topicName;
     private final TierTopicManagerConfig config;
-    private final TierPartitionStateFactory tierPartitionStateFactory;
-    private final ConcurrentHashMap<TopicPartition, TierPartitionState> tierPartitionStates
-            = new ConcurrentHashMap<>();
+    private final TierMetadataManager tierMetadataManager;
     private final TierTopicListeners resultListeners = new TierTopicListeners();
     private final TierTopicManagerCommitter committer;
     private final ConcurrentLinkedQueue<MigrationEntry> migrations = new ConcurrentLinkedQueue<>();
@@ -90,43 +87,60 @@ public class TierTopicManager implements Runnable {
     private KafkaThread managerThread;
 
     /**
-     * Instantiate TierTopicManager. Once created, startup() must be called
-     * in order to start normal operation.
+     * Instantiate TierTopicManager. Once created, startup() must be called in order to start normal operation.
      *
-     * @param config                    TierTopicManagerConfig containing tiering configuration.
-     * @param consumerBuilder           builder to create consumer instances.
-     * @param producerBuilder           producer to create producer instances.
-     * @param tierPartitionStateFactory TierPartitionState factory
+     * @param config TierTopicManagerConfig containing tiering configuration.
+     * @param consumerBuilder builder to create consumer instances.
+     * @param producerBuilder producer to create producer instances.
+     * @param tierMetadataManager Tier Metadata Manager instance
      * @throws IOException on logdir write failures
      */
-    TierTopicManager(TierTopicManagerConfig config,
-                     TierTopicConsumerBuilder consumerBuilder,
-                     TierTopicProducerBuilder producerBuilder,
-                     TierPartitionStateFactory tierPartitionStateFactory) throws IOException {
+    public TierTopicManager(TierTopicManagerConfig config,
+                            TierTopicConsumerBuilder consumerBuilder,
+                            TierTopicProducerBuilder producerBuilder,
+                            TierMetadataManager tierMetadataManager) throws IOException {
         this.config = config;
         this.topicName = topicName(config.tierNamespace);
-        this.committer = new TierTopicManagerCommitter(config, tierPartitionStates, shutdownInitiated);
+        this.tierMetadataManager = tierMetadataManager;
+        this.committer = new TierTopicManagerCommitter(config, tierMetadataManager, shutdownInitiated);
         if (config.logDirs.size() > 1) {
             throw new UnsupportedOperationException("Multiple log.dirs detected. Tiered "
                     + "storage currently supports single logdir configuration.");
         }
-        this.tierPartitionStateFactory = tierPartitionStateFactory;
         this.consumerBuilder = consumerBuilder;
         this.producerBuilder = producerBuilder;
+        tierMetadataManager.addListener(new TierMetadataManager.ChangeListener() {
+            @Override
+            public void onBecomeLeader(TopicPartition topicPartition, int leaderEpoch) {
+                immigratePartitions(Collections.singletonList(topicPartition));
+            }
+
+            @Override
+            public void onBecomeFollower(TopicPartition topicPartition) {
+                immigratePartitions(Collections.singletonList(topicPartition));
+            }
+
+            @Override
+            public void onDelete(TopicPartition topicPartition) {
+                emigratePartitions(Collections.singletonList(topicPartition));
+            }
+        });
     }
 
     /**
      * Primary public constructor for TierTopicManager.
      *
+     * @param tierMetadataManager Tier Metadata Manager instance
+     * @param config TierTopicManagerConfig containing tiering configuration.
      * @param metrics kafka metrics to track TierTopicManager metrics
-     * @param config  TierTopicManagerConfig containing tiering configuration.
      */
-    public TierTopicManager(Metrics metrics,
-                            TierTopicManagerConfig config) throws IOException {
+    public TierTopicManager(TierMetadataManager tierMetadataManager,
+                            TierTopicManagerConfig config,
+                            Metrics metrics) throws IOException {
         this(config,
                 new ConsumerBuilder(config),
                 new ProducerBuilder(config),
-                new FileTierPartitionStateFactory(config.logDirs.get(0), POSITION_INDEX_SPARSITY));
+                tierMetadataManager);
         setupMetrics(metrics);
     }
 
@@ -181,7 +195,7 @@ public class TierTopicManager implements Runnable {
     public CompletableFuture<AppendResult> addMetadata(AbstractTierMetadata entry) throws IllegalAccessException {
         ensureReady();
 
-        final TopicPartition tp = new TopicPartition(entry.topic(), entry.partition());
+        final TopicPartition tp = entry.topicPartition();
         // track this entry's materialization
         final CompletableFuture<AppendResult> result = resultListeners.addTracked(tp, entry);
         producer.send(new ProducerRecord<>(topicName, partitioner.partitionId(tp),
@@ -207,13 +221,15 @@ public class TierTopicManager implements Runnable {
     }
 
     /**
-     * Return the TierPartitionState for a given topic partition, if one is being followed.
+     * Return the TierPartitionState for a given topic partition.
      *
      * @param topicPartition tiered topic partition
      * @return TierPartitionState for this partition.
      */
-    public TierPartitionState getPartitionState(TopicPartition topicPartition) {
-        return tierPartitionStates.get(topicPartition);
+    public TierPartitionState partitionState(TopicPartition topicPartition) {
+        TierPartitionState tierPartitionState = tierMetadataManager.tierPartitionState(topicPartition)
+                .orElseThrow(() -> new IllegalStateException("Tier partition state for " + topicPartition + " not found"));
+        return tierPartitionState;
     }
 
     /**
@@ -224,17 +240,13 @@ public class TierTopicManager implements Runnable {
      * @return a CompletableFuture which returns the result of the send and subsequent materialization.
      */
     public CompletableFuture<AppendResult> becomeArchiver(TopicPartition topicPartition,
-                                                          int tierEpoch)
-            throws IllegalAccessException {
+                                                          int tierEpoch) throws IllegalAccessException {
         ensureReady();
         // Generate a unique ID in order to track the leader request under scenarios
         // where we maintain the same leader ID.
         // This is possible when there is a single broker, and is primarily for defensive reasons.
         final UUID messageId = UUID.randomUUID();
-        final TierTopicInitLeader initRecord =
-                new TierTopicInitLeader(topicPartition.topic(), topicPartition.partition(),
-                        tierEpoch, messageId, config.brokerId);
-
+        final TierTopicInitLeader initRecord = new TierTopicInitLeader(topicPartition, tierEpoch, messageId, config.brokerId);
         return addMetadata(initRecord);
     }
 
@@ -312,25 +324,20 @@ public class TierTopicManager implements Runnable {
 
     /**
      * Adds partitions to the migration queue to be immigrated.
-     *
      * @param partitions
      */
-    public void immigratePartitions(List<TopicPartition> partitions) {
-        for (TopicPartition tp : partitions) {
-            tierPartitionStates.computeIfAbsent(tp, tierPartitionStateFactory::newTierPartition);
+    private void immigratePartitions(List<TopicPartition> partitions) {
+        for (TopicPartition tp : partitions)
             migrations.add(new MigrationEntry(tp, MigrationEntry.Type.IMMIGRATION));
-        }
     }
 
     /**
      * Adds partitions to the migration queue to be emigrated.
-     *
      * @param partitions
      */
-    public void emigratePartitions(List<TopicPartition> partitions) {
-        for (TopicPartition tp : partitions) {
+    private void emigratePartitions(List<TopicPartition> partitions) {
+        for (TopicPartition tp : partitions)
             migrations.add(new MigrationEntry(tp, MigrationEntry.Type.EMIGRATION));
-        }
     }
 
     /**
@@ -423,17 +430,10 @@ public class TierTopicManager implements Runnable {
      */
     private void completeCatchUp() {
         log.info("Completed adding partitions. Setting states online. Switching catchup consumer to primary consumer.");
-        for (TierPartitionState tierPartitionState : tierPartitionStates.values()) {
-            try {
-                if (tierPartitionState.status() == TierPartitionStatus.CATCHUP) {
-                    tierPartitionState.targetStatus(TierPartitionStatus.ONLINE);
-                }
-            } catch (IOException ioe) {
-                // TODO: handle as part of https://confluentinc.atlassian.net/browse/CPKAFKA-1764
-                // and JBOD support.
-                ioe.printStackTrace();
-            }
-        }
+        tierMetadataManager.tierEnabledPartitionStateIterator().forEachRemaining(tierPartitionState -> {
+            if (tierPartitionState.status() == TierPartitionStatus.CATCHUP)
+                tierPartitionState.onCatchUpComplete();
+        });
         catchUpConsumer.close();
         catchUpConsumer = null;
     }
@@ -450,31 +450,25 @@ public class TierTopicManager implements Runnable {
             HashSet<TopicPartition> transitioned = new HashSet<>();
             if (!migrationCandidates.isEmpty()) {
                 for (TopicPartition tp : migrationCandidates) {
-                    try {
-                        log.debug("Adding {} to catchingUp partition states.", tp);
-                        TierPartitionState tps = tierPartitionStates.get(tp);
-                        switch (tps.status()) {
-                            case INIT:
-                                tps.targetStatus(TierPartitionStatus.CATCHUP);
-                                transitioned.add(tp);
-                                break;
-                            case ONLINE:
-                                log.warn("Tiered partition {} was already being tracked in status {}. "
-                                        + "This may be indicative of a bug or churning in leader "
-                                        + "election.", tp, tps.status());
-                                break;
-                            case DISK_OFFLINE:
-                                log.warn("Tiered partition {} disk is OFFLINE. Ignoring "
-                                        + "materialization request", tp);
-                                break;
-                            case CATCHUP:
-                                throw new IllegalStateException(
-                                        "Tiered partition in state CATCHUP, when no catchUpConsumer is running.");
-                        }
-                    } catch (IOException ioe) {
-                        // TODO: handle as part of https://confluentinc.atlassian.net/browse/CPKAFKA-1764
-                        // and JBOD support.
-                        ioe.printStackTrace();
+                    log.debug("Adding {} to catchingUp partition states.", tp);
+                    Optional<TierMetadataManager.PartitionMetadata> partitionMetadataOpt = tierMetadataManager.tierPartitionMetadata(tp);
+                    if (!partitionMetadataOpt.isPresent())
+                        continue;
+                    TierMetadataManager.PartitionMetadata partitionMetadata = partitionMetadataOpt.get();
+                    TierPartitionState tierPartitionState = partitionMetadata.tierPartitionState();
+
+                    switch (tierPartitionState.status()) {
+                        case READ_ONLY:
+                            if (partitionMetadata.tieringEnabled())
+                                tierPartitionState.beginCatchup();
+                            transitioned.add(tp);
+                            break;
+
+                        case CLOSED:
+                            throw new IllegalStateException("Partition " + tp + " in invalid state during migration");
+
+                        default:
+                            log.debug("Ignoring migration of {} in state {}", tp, tierPartitionState.status());
                     }
                 }
 
@@ -507,7 +501,6 @@ public class TierTopicManager implements Runnable {
                     added.add(entry.topicPartition);
                     break;
                 case EMIGRATION:
-                    tierPartitionStates.remove(entry.topicPartition);
                     // there is no need to catch up to a partition
                     // that has been emigrated prior to being processed
                     added.remove(entry.topicPartition);
@@ -572,12 +565,12 @@ public class TierTopicManager implements Runnable {
      *                      Otherwise the entry will be ignored.
      */
     private void processEntry(AbstractTierMetadata entry, TierPartitionStatus requiredState) throws IOException {
-        final TopicPartition tp = new TopicPartition(entry.topic(), entry.partition());
-        final TierPartitionState tierPartitionState = getPartitionState(tp);
-        if (tierPartitionState == null) {
+        final TopicPartition tp = entry.topicPartition();
+        final Optional<TierPartitionState> tierPartitionStateOpt = tierMetadataManager.tierPartitionState(tp);
+        if (!tierPartitionStateOpt.isPresent())
             return;
-        }
 
+        TierPartitionState tierPartitionState = tierPartitionStateOpt.get();
         if (tierPartitionState.status() == requiredState) {
             final AppendResult result = tierPartitionState.append(entry);
             log.debug("Read entry {}, append result {}", entry, result);
@@ -700,7 +693,7 @@ public class TierTopicManager implements Runnable {
         TierMetadataListener listenerKey(AbstractTierMetadata message) {
             if (message instanceof TierObjectMetadata) {
                 TierObjectMetadata metadata = (TierObjectMetadata) message;
-                return new TierObjectMetadataListener(metadata.topic(), metadata.partition(),
+                return new TierObjectMetadataListener(metadata.topicPartition(),
                         metadata.tierEpoch(), metadata.startOffset(),
                         metadata.endOffsetDelta());
             } else if (message instanceof TierTopicInitLeader) {
@@ -717,24 +710,20 @@ public class TierTopicManager implements Runnable {
         }
 
         class TierObjectMetadataListener implements TierMetadataListener {
-            final private String topic;
-            final private int partition;
-            final private int tierEpoch;
-            final private long startOffset;
-            final private int endOffsetDelta;
+            private final TopicPartition topicPartition;
+            private final int tierEpoch;
+            private final long startOffset;
+            private final int endOffsetDelta;
 
-            TierObjectMetadataListener(String topic, int partition, int tierEpoch,
-                                       long startOffset, int endOffsetDelta) {
-                this.topic = topic;
-                this.partition = partition;
+            TierObjectMetadataListener(TopicPartition topicPartition, int tierEpoch, long startOffset, int endOffsetDelta) {
+                this.topicPartition = topicPartition;
                 this.tierEpoch = tierEpoch;
                 this.startOffset = startOffset;
                 this.endOffsetDelta = endOffsetDelta;
             }
 
             public int hashCode() {
-                return Objects.hash(topic, partition, tierEpoch,
-                        startOffset, endOffsetDelta);
+                return Objects.hash(topicPartition, tierEpoch, startOffset, endOffsetDelta);
             }
 
             public boolean equals(Object o) {
@@ -747,8 +736,7 @@ public class TierTopicManager implements Runnable {
                 }
 
                 TierObjectMetadataListener that = (TierObjectMetadataListener) o;
-                return Objects.equals(topic, that.topic)
-                        && Objects.equals(partition, that.partition)
+                return Objects.equals(topicPartition, that.topicPartition)
                         && Objects.equals(tierEpoch, that.tierEpoch)
                         && Objects.equals(startOffset, that.startOffset)
                         && Objects.equals(endOffsetDelta, that.endOffsetDelta);

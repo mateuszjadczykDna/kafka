@@ -36,8 +36,7 @@ import kafka.network.RequestChannel
 import kafka.security.SecurityUtils
 import kafka.security.auth.{Resource, _}
 import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
-import kafka.tier.TierTopicManager
-import kafka.tier.archiver.TierArchiver
+import kafka.tier.TierMetadataManager
 import kafka.tier.client.ProducerBuilder
 import kafka.utils.{CoreUtils, Logging}
 import kafka.zk.{AdminZkClient, KafkaZkClient}
@@ -89,8 +88,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val clusterId: String,
                 time: Time,
                 val tokenManager: DelegationTokenManager,
-                val tierTopicManager: TierTopicManager,
-                val tierArchiver: TierArchiver) extends Logging {
+                val tierMetadataManager: TierMetadataManager) extends Logging {
 
   type FetchResponseStats = Map[TopicPartition, RecordConversionStats]
   this.logIdent = "[KafkaApi-%d] ".format(brokerId)
@@ -178,32 +176,22 @@ class KafkaApis(val requestChannel: RequestChannel,
       // for each new leader or follower, call coordinator to handle consumer group migration.
       // this callback is invoked under the replica state change lock to ensure proper order of
       // leadership changes
-
-      if (tierTopicManager != null) {
-        tierTopicManager.immigratePartitions(
-          updatedLeaders
-          .map(p => p.topicPartition)
-          .toList.asJava)
-      }
-
       updatedLeaders.foreach { partition =>
-        if (tierArchiver != null) {
-          tierArchiver.handleImmigration(partition.topicPartition, partition.getLeaderEpoch)
-        }
         if (partition.topic == GROUP_METADATA_TOPIC_NAME)
           groupCoordinator.handleGroupImmigration(partition.partitionId)
         else if (partition.topic == TRANSACTION_STATE_TOPIC_NAME)
           txnCoordinator.handleTxnImmigration(partition.partitionId, partition.getLeaderEpoch)
+
+        tierMetadataManager.becomeLeader(partition.topicPartition, partition.getLeaderEpoch)
       }
 
       updatedFollowers.foreach { partition =>
-        if (tierArchiver != null) {
-          tierArchiver.handleEmigration(partition.topicPartition)
-        }
         if (partition.topic == GROUP_METADATA_TOPIC_NAME)
           groupCoordinator.handleGroupEmigration(partition.partitionId)
         else if (partition.topic == TRANSACTION_STATE_TOPIC_NAME)
           txnCoordinator.handleTxnEmigration(partition.partitionId, partition.getLeaderEpoch)
+
+        tierMetadataManager.becomeFollower(partition.topicPartition)
       }
     }
 
@@ -241,8 +229,10 @@ class KafkaApis(val requestChannel: RequestChannel,
       // request to become a follower due to which cache for groups that belong to an offsets topic partition for which broker 1 was the leader,
       // is not cleared.
       result.foreach { case (topicPartition, error) =>
-        if (error == Errors.NONE && stopReplicaRequest.deletePartitions && topicPartition.topic == GROUP_METADATA_TOPIC_NAME) {
-          groupCoordinator.handleGroupEmigration(topicPartition.partition)
+        if (error == Errors.NONE && stopReplicaRequest.deletePartitions) {
+          if (topicPartition.topic == GROUP_METADATA_TOPIC_NAME)
+            groupCoordinator.handleGroupEmigration(topicPartition.partition)
+          tierMetadataManager.delete(topicPartition)
         }
       }
       sendResponseExemptThrottle(request, new StopReplicaResponse(error, result.asJava))

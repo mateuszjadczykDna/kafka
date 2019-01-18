@@ -19,13 +19,15 @@ package kafka.tools
 
 import java.io.ByteArrayOutputStream
 
-import kafka.log.{ Log, LogConfig, LogManager }
-import kafka.server.{ BrokerTopicStats, LogDirFailureChannel }
-import kafka.utils.{ MockTime, TestUtils }
-import org.apache.kafka.common.record.{ CompressionType, MemoryRecords, SimpleRecord }
+import kafka.log.{LogConfig, LogManager, MergedLog}
+import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
+import kafka.utils.{MockTime, TestUtils}
+import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.utils.Utils
 import org.junit.Assert._
-import org.junit.{ After, Before, Test }
+import org.junit.{After, Before, Test}
+
+import scala.collection.Seq
 
 class DumpLogSegmentsTest {
 
@@ -36,10 +38,11 @@ class DumpLogSegmentsTest {
 
   @Before
   def setUp(): Unit = {
-    val log = Log(logDir, LogConfig(), logStartOffset = 0L, recoveryPoint = 0L, scheduler = time.scheduler,
-      time = time, brokerTopicStats = new BrokerTopicStats, maxProducerIdExpirationMs = 60 * 60 * 1000,
+    val log = MergedLog(logDir, LogConfig(), logStartOffset = 0L, recoveryPoint = 0L, scheduler = time.scheduler,
+      brokerTopicStats = new BrokerTopicStats, time = time, maxProducerIdExpirationMs = 60 * 60 * 1000,
       producerIdExpirationCheckIntervalMs = LogManager.ProducerIdExpirationCheckIntervalMs,
-      logDirFailureChannel = new LogDirFailureChannel(10))
+      logDirFailureChannel = new LogDirFailureChannel(10),
+      tierMetadataManagerOpt = Some(TestUtils.createTierMetadataManager(Seq(logDir))))
 
     /* append four messages */
     log.appendAsLeader(MemoryRecords.withRecords(CompressionType.NONE, 0,

@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Optional, Properties, Random}
 
-import kafka.log.{Log, LogSegment}
+import kafka.log.{AbstractLog, LogSegment}
 import kafka.network.SocketServer
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
@@ -215,7 +215,7 @@ class LogOffsetTest extends BaseRequestTest {
    * a race condition) */
   @Test
   def testFetchOffsetsBeforeWithChangingSegmentSize() {
-    val log: Log = EasyMock.niceMock(classOf[Log])
+    val log: AbstractLog = EasyMock.niceMock(classOf[AbstractLog])
     val logSegment: LogSegment = EasyMock.niceMock(classOf[LogSegment])
     EasyMock.expect(logSegment.size).andStubAnswer(new IAnswer[Int] {
       private val value = new AtomicInteger(0)
@@ -223,7 +223,7 @@ class LogOffsetTest extends BaseRequestTest {
     })
     EasyMock.replay(logSegment)
     val logSegments = Seq(logSegment)
-    EasyMock.expect(log.logSegments).andStubReturn(logSegments)
+    EasyMock.expect(log.localLogSegments).andStubReturn(logSegments)
     EasyMock.replay(log)
     log.legacyFetchOffsetsBefore(System.currentTimeMillis, 100)
   }
@@ -232,9 +232,9 @@ class LogOffsetTest extends BaseRequestTest {
    * different (simulating a race condition) */
   @Test
   def testFetchOffsetsBeforeWithChangingSegments() {
-    val log: Log = EasyMock.niceMock(classOf[Log])
+    val log: AbstractLog = EasyMock.niceMock(classOf[AbstractLog])
     val logSegment: LogSegment = EasyMock.niceMock(classOf[LogSegment])
-    EasyMock.expect(log.logSegments).andStubAnswer {
+    EasyMock.expect(log.localLogSegments).andStubAnswer {
       new IAnswer[Iterable[LogSegment]] {
         def answer = new Iterable[LogSegment] {
           override def size = 2

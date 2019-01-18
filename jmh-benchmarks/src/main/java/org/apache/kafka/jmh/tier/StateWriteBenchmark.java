@@ -21,7 +21,6 @@ import kafka.tier.domain.TierObjectMetadata;
 import kafka.tier.domain.TierTopicInitLeader;
 import kafka.tier.state.FileTierPartitionStateFactory;
 import kafka.tier.state.TierPartitionState;
-import kafka.tier.state.TierPartitionStatus;
 import org.apache.kafka.common.TopicPartition;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -45,30 +44,26 @@ import java.util.concurrent.TimeUnit;
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 public class StateWriteBenchmark {
     private static final int COUNT = 10000;
-    private static final String BASE_DIR = System.getProperty("java.io.tmpdir") + "/" + UUID.randomUUID();
+    private static final String BASE_DIR = System.getProperty("java.io.tmpdir");
     private static final int EPOCH = 0;
-    private static final double SPARSITY = 0.001;
-    private static final String TOPIC = "mytopic";
-    private static final int PARTITION = 0;
+    private static final TopicPartition TOPIC_PARTITION = new TopicPartition("mytopic", 0);
 
     private void writeState(TierPartitionState state) throws IOException {
-        state.append(new TierTopicInitLeader(TOPIC, PARTITION, EPOCH,
-                java.util.UUID.randomUUID(), 0));
+        state.beginCatchup();
+        state.append(new TierTopicInitLeader(TOPIC_PARTITION, EPOCH,
+                UUID.randomUUID(), 0));
         for (int i = 0; i < COUNT; i++) {
-            state.append(new TierObjectMetadata(TOPIC, PARTITION, EPOCH,
+            state.append(new TierObjectMetadata(TOPIC_PARTITION, EPOCH,
                     i * 2, 1, i, i, i, i, false,  (byte) 0));
         }
+        state.flush();
     }
 
     @Benchmark
-    @OutputTimeUnit(TimeUnit.SECONDS)
+    @OutputTimeUnit(TimeUnit.MILLISECONDS)
     public void appendReadByteBufferBench() throws Exception {
-        if (!new File(BASE_DIR).mkdir()) {
-            throw new Exception("could not create status directory.");
-        }
-        FileTierPartitionStateFactory factory = new FileTierPartitionStateFactory(BASE_DIR, SPARSITY);
-        TierPartitionState state = factory.newTierPartition(new TopicPartition(TOPIC, PARTITION));
-        state.targetStatus(TierPartitionStatus.CATCHUP);
+        FileTierPartitionStateFactory factory = new FileTierPartitionStateFactory();
+        TierPartitionState state = factory.initState(new File(BASE_DIR), TOPIC_PARTITION, true);
         try {
             writeState(state);
         } finally {

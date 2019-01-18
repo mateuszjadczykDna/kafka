@@ -65,7 +65,7 @@ class BrokerCompressionTest(messageCompression: String, brokerCompression: Strin
           new SimpleRecord("hello".getBytes), new SimpleRecord("there".getBytes)), leaderEpoch = 0)
 
     def readBatch(offset: Int): RecordBatch = {
-      val fetchInfo = log.read(offset, 4096, maxOffset = None,
+      val fetchInfo = log.readLocal(offset, 4096, maxOffset = None,
         includeAbortedTxns = false, minOneMessage = true)
       fetchInfo.records.batches.iterator.next()
     }

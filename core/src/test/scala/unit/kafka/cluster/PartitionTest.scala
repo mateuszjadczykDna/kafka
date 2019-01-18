@@ -550,7 +550,7 @@ class PartitionTest {
 
   private def setupPartitionWithMocks(leaderEpoch: Int,
                                       isLeader: Boolean,
-                                      log: Log = logManager.getOrCreateLog(topicPartition, logConfig)): Partition = {
+                                      log: AbstractLog = logManager.getOrCreateLog(topicPartition, logConfig)): Partition = {
     val replica = new Replica(brokerId, topicPartition, time, log = Some(log))
     val replicaManager: ReplicaManager = EasyMock.mock(classOf[ReplicaManager])
     val zkClient: KafkaZkClient = EasyMock.mock(classOf[KafkaZkClient])

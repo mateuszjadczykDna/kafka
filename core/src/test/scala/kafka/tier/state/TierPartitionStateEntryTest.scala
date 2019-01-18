@@ -4,6 +4,7 @@
 
 package kafka.tier.state
 
+import java.io.File
 import java.nio.channels.FileChannel
 import java.nio.file.{Paths, StandardOpenOption}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -19,52 +20,49 @@ class TierPartitionStateEntryTest {
   @Test
   def serializeDeserializeTest(): Unit = {
     val dir = TestUtils.tempDir()
-    val baseDir = dir.getAbsolutePath
     val topic = "topic_A"
     val partition = 0
     val tp = new TopicPartition(topic, partition)
     val n = 200
     val epoch = 0
     val sparsity = 0.01
-    val factory = new FileTierPartitionStateFactory(baseDir, sparsity)
-    val state = factory.newTierPartition(tp)
+    val factory = new FileTierPartitionStateFactory()
+    val state = factory.initState(dir, tp, true)
 
-    state.targetStatus(TierPartitionStatus.CATCHUP)
-    state.targetStatus(TierPartitionStatus.ONLINE)
+    state.beginCatchup()
+    state.onCatchUpComplete()
     val path = state.path
     try {
       state.append(
         new TierTopicInitLeader(
-          topic,
-          partition,
+          tp,
           epoch,
           java.util.UUID.randomUUID(),
           0))
       var size = 0
       for (i <- 0 until n) {
-        state.append(new TierObjectMetadata(topic, partition, epoch, i * 2, 1, 1, i, i, i, false, 0))
+        state.append(new TierObjectMetadata(tp, epoch, i * 2, 1, 1, i, i, i, false, 0))
         size += i
       }
 
+      val segmentOffsets = state.segmentOffsets.iterator
+
       for (i <- 0 until n) {
-        val startOffset = i * 2
-        assertEquals(startOffset, state.getObjectMetadataForOffset(startOffset).get().startOffset())
+        val startOffset = i * 2L
+        assertEquals(startOffset, segmentOffsets.next)
+        assertEquals(startOffset, state.metadata(startOffset).get().startOffset())
       }
+      assertFalse(segmentOffsets.hasNext)
 
       assertEquals(n, state.numSegments())
       assertEquals(size, state.totalSize)
-      assertEquals(0, state.beginningOffset().getAsLong)
+      assertEquals(0, state.startOffset().getAsLong)
       assertEquals(n * 2 - 1, state.endOffset().getAsLong)
 
       state.close()
 
-      checkInsufficientPayloadTruncated(baseDir, tp, sparsity, path)
-      checkInsufficientSizeHeaderTruncated(baseDir, tp, sparsity, path)
-
-      val scanned = factory.scan()
-      val reloaded = scanned.get(tp)
-      assertEquals(tp, new TopicPartition(reloaded.topic(), reloaded.partition()))
-      assertEquals(1, scanned.size())
+      checkInsufficientPayloadTruncated(dir, tp, sparsity, path)
+      checkInsufficientSizeHeaderTruncated(dir, tp, sparsity, path)
     }
     finally {
       dir.delete()
@@ -74,28 +72,24 @@ class TierPartitionStateEntryTest {
   @Test
   def checkPartiallyWrittenFilePartiallyReadable() = {
     val dir = TestUtils.tempDir()
-    val baseDir = dir.getAbsolutePath
     val topic = "topic_A"
     val partition = 0
     val tp = new TopicPartition(topic, partition)
-    val n = 200
+    val n = 10
     val epoch = 0
-    val sparsity = 0.01
-    val factory = new FileTierPartitionStateFactory(baseDir, sparsity)
-    val state = factory.newTierPartition(tp)
+    val factory = new FileTierPartitionStateFactory()
+    val state = factory.initState(dir, tp, true)
 
-    state.targetStatus(TierPartitionStatus.CATCHUP)
-    state.targetStatus(TierPartitionStatus.ONLINE)
+    state.beginCatchup()
+    state.onCatchUpComplete()
     val channel = state.asInstanceOf[FileTierPartitionState].channel()
-    val path = state.path
 
     val positions = new util.TreeMap[Long,Long]()
 
     try {
       state.append(
         new TierTopicInitLeader(
-          topic,
-          partition,
+          tp,
           epoch,
           java.util.UUID.randomUUID(),
           0))
@@ -103,13 +97,13 @@ class TierPartitionStateEntryTest {
 
       positions.put(0, 0)
       for (i <- 0 until n) {
-        state.append(new TierObjectMetadata(topic, partition, epoch, i * 2, 1, 1, i, i, i, false, 0))
+        state.append(new TierObjectMetadata(tp, epoch, i * 2, 1, 1, i, i, i, false, 0))
         size += i
         positions.put(channel.size, size)
       }
 
       // simulate reading a partially written file
-      while (state.asInstanceOf[FileTierPartitionState].fileSize() > 0) {
+      while (state.asInstanceOf[FileTierPartitionState].channel().size() > 0) {
         channel.truncate(channel.size() - 1)
         assertEquals(positions.floorEntry(channel.size()).getValue, state.totalSize())
       }
@@ -119,8 +113,7 @@ class TierPartitionStateEntryTest {
     }
   }
 
-
-  private def checkInsufficientSizeHeaderTruncated(baseDir: String, tp: TopicPartition, sparsity: Double, path: String) = {
+  private def checkInsufficientSizeHeaderTruncated(baseDir: File, tp: TopicPartition, sparsity: Double, path: String) = {
     // write some garbage to the end to test truncation
     val channel = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
     val origSize = channel.size()
@@ -132,9 +125,9 @@ class TierPartitionStateEntryTest {
     channel.close()
 
     // re-open to force truncate
-    val state2 = new FileTierPartitionState(baseDir, tp, sparsity)
-    state2.targetStatus(TierPartitionStatus.CATCHUP)
-    state2.targetStatus(TierPartitionStatus.ONLINE)
+    val state2 = new FileTierPartitionState(baseDir, tp, true)
+    state2.beginCatchup()
+    state2.onCatchUpComplete()
     state2.close()
     val channel2 = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
     val newSize = channel2.size()
@@ -143,7 +136,7 @@ class TierPartitionStateEntryTest {
     assertEquals("insufficient size header, not truncated", origSize, newSize)
   }
 
-  private def checkInsufficientPayloadTruncated(baseDir: String, tp: TopicPartition, sparsity: Double, path: String) = {
+  private def checkInsufficientPayloadTruncated(baseDir: File, tp: TopicPartition, sparsity: Double, path: String) = {
     // write some garbage to the end to test truncation
     val channel = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
     val origSize = channel.size()
@@ -156,9 +149,9 @@ class TierPartitionStateEntryTest {
     channel.close()
 
     // re-open to force truncate
-    val state2 = new FileTierPartitionState(baseDir, tp, sparsity)
-    state2.targetStatus(TierPartitionStatus.CATCHUP)
-    state2.targetStatus(TierPartitionStatus.ONLINE)
+    val state2 = new FileTierPartitionState(baseDir, tp, true)
+    state2.beginCatchup()
+    state2.onCatchUpComplete()
     state2.close()
     val channel2 = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
     val newSize = channel2.size()

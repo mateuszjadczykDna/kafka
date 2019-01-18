@@ -17,6 +17,8 @@
 
 package kafka.server
 
+import kafka.tier.TierFetchMetadata
+import kafka.tier.store.TierObjectStore
 import org.apache.kafka.common.record.Records
 import org.apache.kafka.common.requests.FetchResponse.AbortedTransaction
 
@@ -25,7 +27,23 @@ case object FetchLogEnd extends FetchIsolation
 case object FetchHighWatermark extends FetchIsolation
 case object FetchTxnCommitted extends FetchIsolation
 
+sealed trait AbstractFetchDataInfo {
+  def addAbortedTransactions(abortedTransactions: List[AbortedTransaction]): AbstractFetchDataInfo
+}
+
 case class FetchDataInfo(fetchOffsetMetadata: LogOffsetMetadata,
                          records: Records,
                          firstEntryIncomplete: Boolean = false,
-                         abortedTransactions: Option[List[AbortedTransaction]] = None)
+                         abortedTransactions: Option[List[AbortedTransaction]] = None) extends AbstractFetchDataInfo {
+  override def addAbortedTransactions(abortedTransactions: List[AbortedTransaction]): FetchDataInfo = {
+    copy(abortedTransactions = Some(abortedTransactions))
+  }
+}
+
+case class TierFetchDataInfo(fetchMetadata: TierFetchMetadata,
+                             tierObjectStore: TierObjectStore,
+                             localAbortedTransactions: Option[List[AbortedTransaction]] = None) extends AbstractFetchDataInfo {
+  override def addAbortedTransactions(localAbortedTransactions: List[AbortedTransaction]): TierFetchDataInfo = {
+    copy(localAbortedTransactions = Some(localAbortedTransactions))
+  }
+}

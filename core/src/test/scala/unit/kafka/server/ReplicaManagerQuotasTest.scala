@@ -21,7 +21,7 @@ import java.util.{Optional, Properties}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.cluster.{Partition, Replica}
-import kafka.log.{Log, LogManager, LogOffsetSnapshot}
+import kafka.log.{AbstractLog, LogManager, LogOffsetSnapshot}
 import kafka.utils._
 import kafka.zk.KafkaZkClient
 import org.apache.kafka.common.TopicPartition
@@ -34,6 +34,7 @@ import org.junit.Assert._
 import org.junit.{After, Test}
 
 import scala.collection.JavaConverters._
+import scala.collection.Seq
 
 class ReplicaManagerQuotasTest {
   val configs = TestUtils.createBrokerConfigs(2, TestUtils.MockZkConnect).map(KafkaConfig.fromProps(_, new Properties()))
@@ -57,7 +58,7 @@ class ReplicaManagerQuotasTest {
     expect(quota.isQuotaExceeded).andReturn(true).once()
     replay(quota)
 
-    val fetch = replicaManager.readFromLocalLog(
+    val fetch = readFromLocalLog(
       replicaId = followerReplicaId,
       fetchOnlyFromLeader = true,
       fetchIsolation = FetchHighWatermark,
@@ -82,7 +83,7 @@ class ReplicaManagerQuotasTest {
     expect(quota.isQuotaExceeded).andReturn(true).once()
     replay(quota)
 
-    val fetch = replicaManager.readFromLocalLog(
+    val fetch = readFromLocalLog(
       replicaId = followerReplicaId,
       fetchOnlyFromLeader = true,
       fetchIsolation = FetchHighWatermark,
@@ -106,7 +107,7 @@ class ReplicaManagerQuotasTest {
     expect(quota.isQuotaExceeded).andReturn(false).once()
     replay(quota)
 
-    val fetch = replicaManager.readFromLocalLog(
+    val fetch = readFromLocalLog(
       replicaId = followerReplicaId,
       fetchOnlyFromLeader = true,
       fetchIsolation = FetchHighWatermark,
@@ -130,7 +131,7 @@ class ReplicaManagerQuotasTest {
     expect(quota.isQuotaExceeded).andReturn(true).once()
     replay(quota)
 
-    val fetch = replicaManager.readFromLocalLog(
+    val fetch = readFromLocalLog(
       replicaId = followerReplicaId,
       fetchOnlyFromLeader = true,
       fetchIsolation = FetchHighWatermark,
@@ -195,7 +196,7 @@ class ReplicaManagerQuotasTest {
     val scheduler: KafkaScheduler = createNiceMock(classOf[KafkaScheduler])
 
     //Create log which handles both a regular read and a 0 bytes read
-    val log: Log = createNiceMock(classOf[Log])
+    val log: AbstractLog = createNiceMock(classOf[AbstractLog])
     expect(log.logStartOffset).andReturn(0L).anyTimes()
     expect(log.logEndOffset).andReturn(20L).anyTimes()
     expect(log.logEndOffsetMetadata).andReturn(new LogOffsetMetadata(20L)).anyTimes()
@@ -265,5 +266,24 @@ class ReplicaManagerQuotasTest {
     val quota: ReplicaQuota = createMock(classOf[ReplicaQuota])
     expect(quota.isThrottled(anyObject())).andReturn(true).anyTimes()
     quota
+  }
+
+  private def readFromLocalLog(replicaId: Int,
+                               fetchOnlyFromLeader: Boolean,
+                               fetchIsolation: FetchIsolation,
+                               fetchMaxBytes: Int,
+                               hardMaxBytesLimit: Boolean,
+                               readPartitionInfo: Seq[(TopicPartition, PartitionData)],
+                               quota: ReplicaQuota): Seq[(TopicPartition, LogReadResult)] = {
+    val result = replicaManager.readFromLocalLog(replicaId,
+      fetchOnlyFromLeader,
+      fetchIsolation,
+      fetchMaxBytes,
+      hardMaxBytesLimit,
+      readPartitionInfo,
+      quota)
+    result.collect { case (topicPartition, result: LogReadResult) =>
+      (topicPartition, result)
+    }
   }
 }
