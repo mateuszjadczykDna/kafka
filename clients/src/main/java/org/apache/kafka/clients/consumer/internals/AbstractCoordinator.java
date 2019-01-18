@@ -570,8 +570,8 @@ public abstract class AbstractCoordinator implements Closeable {
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
             } else if (error == Errors.MEMBER_ID_MISMATCH) {
-               // Immediately fail this consumer because this indicates another client has a collided group.instance.id
-               throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
+                // Immediately fail this consumer because this indicates another client has a collided group.instance.id
+                throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
             } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {
                 resetGeneration();
                 log.debug("The group instance id info was not matching records storing on broker, resetting generation to rejoin.");

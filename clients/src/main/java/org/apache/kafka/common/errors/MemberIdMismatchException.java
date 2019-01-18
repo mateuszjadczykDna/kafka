@@ -17,14 +17,13 @@
 package org.apache.kafka.common.errors;
 
 public class MemberIdMismatchException extends ApiException {
+    private static final long serialVersionUID = 1L;
 
-  private static final long serialVersionUID = 1L;
+    public MemberIdMismatchException(String message) {
+        super(message);
+    }
 
-  public MemberIdMismatchException(String message) {
-    super(message);
-  }
-
-  public MemberIdMismatchException(String message, Throwable cause) {
-    super(message, cause);
-  }
+    public MemberIdMismatchException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

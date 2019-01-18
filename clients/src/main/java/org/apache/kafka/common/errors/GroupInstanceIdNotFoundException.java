@@ -18,13 +18,13 @@ package org.apache.kafka.common.errors;
 
 public class GroupInstanceIdNotFoundException extends ApiException {
 
-  private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-  public GroupInstanceIdNotFoundException(String message) {
-    super(message);
-  }
+    public GroupInstanceIdNotFoundException(String message) {
+        super(message);
+    }
 
-  public GroupInstanceIdNotFoundException(String message, Throwable cause) {
-    super(message, cause);
-  }
+    public GroupInstanceIdNotFoundException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
