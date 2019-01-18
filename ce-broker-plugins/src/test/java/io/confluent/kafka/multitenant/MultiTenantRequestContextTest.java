@@ -656,7 +656,7 @@ public class MultiTenantRequestContextTest {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
       Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
 
-      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, getTestConfigs()));
+      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, testConfigs()));
 
       Map<Integer, List<Integer>> unbalancedAssignment = new HashMap<>();
       unbalancedAssignment.put(0, Arrays.asList(0, 1));
@@ -673,7 +673,7 @@ public class MultiTenantRequestContextTest {
       assertEquals(4, intercepted.topics().get("tenant_foo").replicasAssignments.size());
 
       // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
-      assertEquals(getTransformedTestConfig(), intercepted.topics().get("tenant_foo").configs);
+      assertEquals(transformedTestConfigs(), intercepted.topics().get("tenant_foo").configs);
 
       assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
       assertNotEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
@@ -693,7 +693,7 @@ public class MultiTenantRequestContextTest {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
       Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
 
-      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, getTestConfigs()));
+      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, testConfigs()));
 
       Map<Integer, List<Integer>> unbalancedAssignment = new HashMap<>();
       unbalancedAssignment.put(0, Arrays.asList(0, 1));
@@ -712,7 +712,7 @@ public class MultiTenantRequestContextTest {
       assertEquals(1, intercepted.topics().get("tenant_foo").replicationFactor);
 
       // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
-      assertEquals(getTransformedTestConfig(),  intercepted.topics().get("tenant_foo").configs);
+      assertEquals(transformedTestConfigs(),  intercepted.topics().get("tenant_foo").configs);
 
       assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
       assertEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
@@ -1613,7 +1613,7 @@ public class MultiTenantRequestContextTest {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.ALTER_CONFIGS, ver);
       Map<ConfigResource, AlterConfigsRequest.Config> resourceConfigs = new HashMap<>();
       resourceConfigs.put(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
-          new AlterConfigsRequest.Config(getTestConfigs().entrySet()
+          new AlterConfigsRequest.Config(testConfigs().entrySet()
               .stream()
               .map(entry -> new AlterConfigsRequest.ConfigEntry(entry.getKey(), entry.getValue()))
               .collect(Collectors.toSet())));
@@ -1635,7 +1635,7 @@ public class MultiTenantRequestContextTest {
       }
 
       // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
-      assertEquals(getTransformedTestConfig(), resultsMap);
+      assertEquals(transformedTestConfigs(), resultsMap);
       verifyRequestMetrics(ApiKeys.ALTER_CONFIGS);
     }
   }
@@ -1800,9 +1800,16 @@ public class MultiTenantRequestContextTest {
     return sensors;
   }
 
+  // Returns the test config map with compression.type stripped out
+  private Map<String, String> transformedTestConfigs() {
+    Map<String, String> transformedConfig = testConfigs();
+    transformedConfig.remove(TopicConfig.COMPRESSION_TYPE_CONFIG);
+    return transformedConfig;
+  }
+
   // Gets a map of configs containing all modifiable configs, plus min.insync.replicas, plus
   // an unmodifiable config (compression.type)
-  private Map<String, String> getTestConfigs() {
+  private Map<String, String> testConfigs() {
     return mkMap(
             mkEntry(TopicConfig.CLEANUP_POLICY_CONFIG, "compact"),
             mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
@@ -1816,21 +1823,5 @@ public class MultiTenantRequestContextTest {
             mkEntry(TopicConfig.SEGMENT_MS_CONFIG, "100"),
             mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"),
             mkEntry(TopicConfig.COMPRESSION_TYPE_CONFIG, "lz4"));
-  }
-
-  // Returns the test config map with compression.type stripped out
-  private Map<String, String> getTransformedTestConfig() {
-    return mkMap(
-            mkEntry(TopicConfig.CLEANUP_POLICY_CONFIG, "compact"),
-            mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
-            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG, "31536000000"),
-            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG, "LogAppendTime"),
-            mkEntry(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "0"),
-            mkEntry(TopicConfig.RETENTION_BYTES_CONFIG, "107374182400"),
-            mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
-            mkEntry(TopicConfig.DELETE_RETENTION_MS_CONFIG, "31536000000"),
-            mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
-            mkEntry(TopicConfig.SEGMENT_MS_CONFIG, "100"),
-            mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"));
   }
 }

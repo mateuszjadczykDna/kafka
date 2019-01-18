@@ -244,9 +244,10 @@ public class MultiTenantRequestContext extends RequestContext {
     Map<String, CreateTopicsRequest.TopicDetails> topics = topicsRequest.topics();
 
     Map<String, CreateTopicsRequest.TopicDetails> transformedTopics = new HashMap<>();
-    Map<String, List<List<Integer>>> assignments = new HashMap<>();
 
+    Map<String, List<List<Integer>>> assignments;
     if (partitionAssignor != null) {
+      // override assignments
       Map<String, TenantPartitionAssignor.TopicInfo> topicInfos = new HashMap<>();
       for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
         CreateTopicsRequest.TopicDetails topicDetails = entry.getValue();
@@ -269,12 +270,17 @@ public class MultiTenantRequestContext extends RequestContext {
 
       String tenant = tenantContext.principal.tenantMetadata().tenantName;
       assignments = partitionAssignor.assignPartitionsForNewTopics(tenant, topicInfos);
+    } else {
+      assignments = new HashMap<>();
     }
 
     for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
       String topic = entry.getKey();
+      CreateTopicsRequest.TopicDetails originalTopicDetails = entry.getValue();
+
+      // validate configs
       Map<String, String> configs = new HashMap<>();
-      for (Map.Entry<String, String> configEntry : topics.get(topic).configs.entrySet()) {
+      for (Map.Entry<String, String> configEntry : originalTopicDetails.configs.entrySet()) {
         if (allowConfigInRequest(configEntry.getKey())) {
           configs.put(configEntry.getKey(), configEntry.getValue());
         } else {
@@ -282,24 +288,20 @@ public class MultiTenantRequestContext extends RequestContext {
         }
       }
 
-      // If the TenantPartitionAssignor ran, use its assignments
-      List<List<Integer>> assignment = assignments.getOrDefault(topic, Collections.emptyList());
-      Map<Integer, List<Integer>> topicAssignment = new HashMap<>(assignment.size());
-      for (int i = 0; i < assignment.size(); i++) {
-        topicAssignment.put(i, assignment.get(i));
-      }
-
       CreateTopicsRequest.TopicDetails topicDetails;
-      if (!topicAssignment.isEmpty()) {
-        topicDetails = new CreateTopicsRequest.TopicDetails(topicAssignment, configs);
-      } else {
-        CreateTopicsRequest.TopicDetails originalTopicDetails = entry.getValue();
-        if (!originalTopicDetails.replicasAssignments.isEmpty()) {
-          topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.replicasAssignments, configs);
-        } else {
-          topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.numPartitions,
-                  originalTopicDetails.replicationFactor, configs);
+      List<List<Integer>> assignment = assignments.getOrDefault(topic, Collections.emptyList());
+      // If the TenantPartitionAssignor ran, use its assignments
+      if (!assignment.isEmpty()) {
+        Map<Integer, List<Integer>> tenantTopicAssignment = new HashMap<>(assignment.size());
+        for (int i = 0; i < assignment.size(); i++) {
+          tenantTopicAssignment.put(i, assignment.get(i));
         }
+        topicDetails = new CreateTopicsRequest.TopicDetails(tenantTopicAssignment, configs);
+      } else if (originalTopicDetails.replicasAssignments.isEmpty()) {
+        topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.numPartitions,
+                originalTopicDetails.replicationFactor, configs);
+      } else {
+        topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.replicasAssignments, configs);
       }
 
       transformedTopics.put(topic, topicDetails);
