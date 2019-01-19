@@ -570,6 +570,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
             } else if (error == Errors.MEMBER_ID_MISMATCH) {
+                future.raise(Errors.MEMBER_ID_MISMATCH);
                 // Immediately fail this consumer because this indicates another client has a collided group.instance.id
                 throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
             } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {

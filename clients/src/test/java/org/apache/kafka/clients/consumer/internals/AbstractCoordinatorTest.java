@@ -20,6 +20,7 @@ import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.MockClient;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.errors.AuthenticationException;
+import org.apache.kafka.common.errors.MemberIdMismatchException;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.Errors;
@@ -208,6 +209,41 @@ public class AbstractCoordinatorTest {
         assertTrue(coordinator.hasMatchingGenerationId(generation));
         future = coordinator.sendJoinGroupRequest();
         assertTrue(consumerClient.poll(future, mockTime.timer(REBALANCE_TIMEOUT_MS)));
+    }
+
+    @Test
+    public void testJoinGroupRequestWithMemberIdMisMatch() {
+        setupCoordinator();
+        mockClient.prepareResponse(groupCoordinatorResponse(node, Errors.NONE));
+        coordinator.ensureCoordinatorReady(mockTime.timer(0));
+
+        final String memberId = "memberId";
+        final int generation = -1;
+
+        mockClient.prepareResponse(joinGroupFollowerResponse(generation, memberId, JoinGroupResponse.UNKNOWN_MEMBER_ID, Errors.MEMBER_ID_MISMATCH));
+
+        RequestFuture<ByteBuffer> future = coordinator.sendJoinGroupRequest();
+        assertTrue(consumerClient.poll(future, mockTime.timer(REQUEST_TIMEOUT_MS)));
+        assertEquals(Errors.MEMBER_ID_MISMATCH.message(), future.exception().getMessage());
+    }
+
+    @Test
+    public void testJoinGroupRequestWithGroupInstanceIdNotFound() {
+        setupCoordinator();
+        mockClient.prepareResponse(groupCoordinatorResponse(node, Errors.NONE));
+        coordinator.ensureCoordinatorReady(mockTime.timer(0));
+
+        final String memberId = "memberId";
+        final int generation = -1;
+
+        mockClient.prepareResponse(joinGroupFollowerResponse(generation, memberId, JoinGroupResponse.UNKNOWN_MEMBER_ID, Errors.GROUP_INSTANCE_ID_NOT_FOUND));
+
+        RequestFuture<ByteBuffer> future = coordinator.sendJoinGroupRequest();
+
+        assertTrue(consumerClient.poll(future, mockTime.timer(REQUEST_TIMEOUT_MS)));
+        assertEquals(Errors.GROUP_INSTANCE_ID_NOT_FOUND.message(), future.exception().getMessage());
+        assertTrue(coordinator.rejoinNeededOrPending());
+        assertTrue(coordinator.hasMatchingGenerationId(generation));
     }
 
     @Test
