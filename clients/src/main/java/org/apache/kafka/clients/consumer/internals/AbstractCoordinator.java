@@ -421,6 +421,7 @@ public abstract class AbstractCoordinator implements Closeable {
             } else {
                 resetJoinGroupFuture();
                 final RuntimeException exception = future.exception();
+                log.info("encountered exception {}", exception.getMessage());
                 if (exception instanceof UnknownMemberIdException ||
                         exception instanceof RebalanceInProgressException ||
                         exception instanceof IllegalGenerationException ||
@@ -798,7 +799,7 @@ public abstract class AbstractCoordinator implements Closeable {
             synchronized (this) {
                 // Starting from 2.2, only dynamic members will send LeaveGroupRequest to the broker,
                 // consumer with valid group.instance.id is viewed as static member.
-                if (!this.groupInstanceId.equals(JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)) {
+                if (this.groupInstanceId.equals(JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)) {
                     maybeLeaveGroup();
                 }
 

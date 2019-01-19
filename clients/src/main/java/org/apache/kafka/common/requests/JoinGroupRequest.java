@@ -163,7 +163,7 @@ public class JoinGroupRequest extends AbstractRequest {
                 rebalanceTimeout = sessionTimeout;
             }
             return new JoinGroupRequest(version, groupId, sessionTimeout, rebalanceTimeout,
-                groupInstanceId, memberId, protocolType, groupProtocols);
+                memberId, groupInstanceId, protocolType, groupProtocols);
         }
 
         @Override

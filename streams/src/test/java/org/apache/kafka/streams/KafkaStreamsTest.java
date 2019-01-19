@@ -105,6 +105,7 @@ public class KafkaStreamsTest {
         props.put(StreamsConfig.METRIC_REPORTER_CLASSES_CONFIG, MockMetricsReporter.class.getName());
         props.put(StreamsConfig.STATE_DIR_CONFIG, TestUtils.tempDirectory().getPath());
         props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, NUM_THREADS);
+//        props.put(StreamsConfig.CLIENT_ID_CONFIG, "clientId");
         globalStreams = new KafkaStreams(builder.build(), props);
     }
 

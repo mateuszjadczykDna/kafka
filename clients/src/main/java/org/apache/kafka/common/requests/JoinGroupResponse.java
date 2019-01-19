@@ -80,15 +80,7 @@ public class JoinGroupResponse extends AbstractResponse {
      */
     private static final Schema JOIN_GROUP_RESPONSE_V4 = JOIN_GROUP_RESPONSE_V3;
 
-    private static final Schema JOIN_GROUP_RESPONSE_V5 = new Schema(
-        THROTTLE_TIME_MS,
-        ERROR_CODE,
-        GENERATION_ID,
-        new Field(GROUP_PROTOCOL_KEY_NAME, STRING, "The group protocol selected by the coordinator"),
-        new Field(LEADER_ID_KEY_NAME, STRING, "The leader of the group"),
-        MEMBER_ID,
-        GROUP_INSTANCE_ID,
-        new Field(MEMBERS_KEY_NAME, new ArrayOf(JOIN_GROUP_RESPONSE_MEMBER_V0)));
+    private static final Schema JOIN_GROUP_RESPONSE_V5 = JOIN_GROUP_RESPONSE_V4;
 
     public static Schema[] schemaVersions() {
         return new Schema[] {JOIN_GROUP_RESPONSE_V0, JOIN_GROUP_RESPONSE_V1, JOIN_GROUP_RESPONSE_V2,
