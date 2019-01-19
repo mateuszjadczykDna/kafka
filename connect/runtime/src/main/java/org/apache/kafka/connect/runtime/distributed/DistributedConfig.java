@@ -39,6 +39,12 @@ public class DistributedConfig extends WorkerConfig {
     private static final String GROUP_ID_DOC = "A unique string that identifies the Connect cluster group this worker belongs to.";
 
     /**
+     * <code>group.instance.id</code>
+     */
+    public static final String GROUP_INSTANCE_ID_CONFIG = "group.instance.id";
+    private static final String GROUP_INSTANCE_ID_DOC = "A unique identifier of the consumer instance provided by end user.";
+
+    /**
      * <code>session.timeout.ms</code>
      */
     public static final String SESSION_TIMEOUT_MS_CONFIG = "session.timeout.ms";
@@ -138,6 +144,10 @@ public class DistributedConfig extends WorkerConfig {
                         ConfigDef.Type.STRING,
                         ConfigDef.Importance.HIGH,
                         GROUP_ID_DOC)
+                .define(GROUP_INSTANCE_ID_CONFIG,
+                        ConfigDef.Type.STRING,
+                        ConfigDef.Importance.MEDIUM,
+                        GROUP_INSTANCE_ID_DOC)
                 .define(SESSION_TIMEOUT_MS_CONFIG,
                         ConfigDef.Type.INT,
                         10000,

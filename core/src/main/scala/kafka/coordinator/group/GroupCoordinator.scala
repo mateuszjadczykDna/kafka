@@ -166,7 +166,7 @@ class GroupCoordinator(val brokerId: Int,
         // Known static member rejoin will not trigger rebalance, while immediately return current generation assignment if
         // group is currently stable.
         val memberId = group.getStaticMemberId(groupInstanceId)
-        if (!maybeRebalanceOnMemberRejoin(group, memberId, protocols, responseCallback)) {
+        if (!maybeRebalanceOnKnownMemberRejoin(group, memberId, protocols, responseCallback)) {
           responseCallback(JoinGroupResult(
             members = Map.empty,
             memberId = memberId,
@@ -256,7 +256,7 @@ class GroupCoordinator(val brokerId: Int,
             }
 
           case Stable =>
-            if (!maybeRebalanceOnMemberRejoin(group, memberId, protocols, responseCallback)) {
+            if (!maybeRebalanceOnKnownMemberRejoin(group, memberId, protocols, responseCallback)) {
               // for followers with no actual change to their metadata, just return group information
               // for the current generation which will allow them to issue SyncGroup
               responseCallback(JoinGroupResult(
@@ -281,10 +281,13 @@ class GroupCoordinator(val brokerId: Int,
     }
   }
 
-  private def maybeRebalanceOnMemberRejoin(group: GroupMetadata,
-                             memberId: String,
-                             protocols: List[(String, Array[Byte])],
-                             responseCallback: JoinCallback) : Boolean = {
+  /**
+    * Decide whether the group will be transiting (or continue) to be at PrepareRebalance.
+    */
+  private def maybeRebalanceOnKnownMemberRejoin(group: GroupMetadata,
+                                                memberId: String,
+                                                protocols: List[(String, Array[Byte])],
+                                                responseCallback: JoinCallback) : Boolean = {
     val member = group.get(memberId)
     val shouldRebalance = group.isLeader(memberId) || !member.matches(protocols) || !group.is(Stable)
     if (shouldRebalance) {
@@ -878,6 +881,7 @@ class GroupCoordinator(val brokerId: Int,
       group.notYetRejoinedMembers.foreach { failedMember =>
         removeHeartbeatForLeavingMember(group, failedMember)
         group.remove(failedMember.memberId)
+        group.removeStaticMember(failedMember.groupInstanceId)
         // TODO: cut the socket connection to the client
       }
 

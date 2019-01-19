@@ -2021,24 +2021,24 @@ public class ConsumerCoordinatorTest {
                                                  final boolean autoCommitEnabled,
                                                  final boolean leaveGroup) {
         return new ConsumerCoordinator(
-            new LogContext(),
-            consumerClient,
-            groupId,
-            groupInstanceId,
-            rebalanceTimeoutMs,
-            sessionTimeoutMs,
-            heartbeat,
-            assignors,
-            metadata,
-            subscriptions,
-            metrics,
-            "consumer" + groupId,
-            time,
-            retryBackoffMs,
-            autoCommitEnabled,
-            autoCommitIntervalMs,
-            null,
-            excludeInternalTopics);
+                new LogContext(),
+                consumerClient,
+                groupId,
+                groupInstanceId,
+                rebalanceTimeoutMs,
+                sessionTimeoutMs,
+                heartbeat,
+                assignors,
+                metadata,
+                subscriptions,
+                metrics,
+                "consumer" + groupId,
+                time,
+                retryBackoffMs,
+                autoCommitEnabled,
+                autoCommitIntervalMs,
+                null,
+                excludeInternalTopics);
     }
 
     private FindCoordinatorResponse groupCoordinatorResponse(Node node, Errors error) {

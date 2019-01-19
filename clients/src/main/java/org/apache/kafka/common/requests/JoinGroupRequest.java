@@ -209,7 +209,7 @@ public class JoinGroupRequest extends AbstractRequest {
             rebalanceTimeout = sessionTimeout;
 
         memberId = struct.get(MEMBER_ID);
-        // Only v5 and above has group.instance.id field.
+        // Only v5 and above APIs have group.instance.id field.
         if (struct.hasField(GROUP_INSTANCE_ID)) {
             groupInstanceId = struct.get(GROUP_INSTANCE_ID);
         } else {

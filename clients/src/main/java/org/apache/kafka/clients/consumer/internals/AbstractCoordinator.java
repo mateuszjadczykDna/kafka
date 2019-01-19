@@ -25,7 +25,6 @@ import org.apache.kafka.common.errors.GroupAuthorizationException;
 import org.apache.kafka.common.errors.GroupInstanceIdNotFoundException;
 import org.apache.kafka.common.errors.IllegalGenerationException;
 import org.apache.kafka.common.errors.InterruptException;
-import org.apache.kafka.common.errors.MemberIdMismatchException;
 import org.apache.kafka.common.errors.MemberIdRequiredException;
 import org.apache.kafka.common.errors.RebalanceInProgressException;
 import org.apache.kafka.common.errors.RetriableException;
@@ -163,14 +162,9 @@ public abstract class AbstractCoordinator implements Closeable {
                                String metricGrpPrefix,
                                Time time,
                                long retryBackoffMs) {
-        this(logContext,
-            client,
-            groupId,
-            groupInstanceId,
-            rebalanceTimeoutMs,
-            sessionTimeoutMs,
-            new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
-            metrics, metricGrpPrefix, time, retryBackoffMs);
+        this(logContext, client, groupId, groupInstanceId, rebalanceTimeoutMs, sessionTimeoutMs,
+                new Heartbeat(time, sessionTimeoutMs, heartbeatIntervalMs, rebalanceTimeoutMs, retryBackoffMs),
+                metrics, metricGrpPrefix, time, retryBackoffMs);
     }
 
     /**
@@ -421,7 +415,6 @@ public abstract class AbstractCoordinator implements Closeable {
             } else {
                 resetJoinGroupFuture();
                 final RuntimeException exception = future.exception();
-                log.info("encountered exception {}", exception.getMessage());
                 if (exception instanceof UnknownMemberIdException ||
                         exception instanceof RebalanceInProgressException ||
                         exception instanceof IllegalGenerationException ||
@@ -554,7 +547,8 @@ public abstract class AbstractCoordinator implements Closeable {
                 future.raise(error);
             } else if (error == Errors.INCONSISTENT_GROUP_PROTOCOL
                     || error == Errors.INVALID_SESSION_TIMEOUT
-                    || error == Errors.INVALID_GROUP_ID) {
+                    || error == Errors.INVALID_GROUP_ID
+                    || error == Errors.MEMBER_ID_MISMATCH) {
                 // log the error and re-throw the exception
                 log.error("Attempt to join group failed due to fatal error: {}", error.message());
                 future.raise(error);
@@ -564,16 +558,13 @@ public abstract class AbstractCoordinator implements Closeable {
                 // Broker requires a concrete member id to be allowed to join the group. Update member id
                 // and send another join group request in next cycle.
                 synchronized (AbstractCoordinator.this) {
-                    AbstractCoordinator.this.generation = new Generation(OffsetCommitRequest.DEFAULT_GENERATION_ID,
-                        joinResponse.memberId(), null);
+                    AbstractCoordinator.this.generation =
+                        new Generation(OffsetCommitRequest.DEFAULT_GENERATION_ID,
+                            joinResponse.memberId(), null);
                     AbstractCoordinator.this.rejoinNeeded = true;
                     AbstractCoordinator.this.state = MemberState.UNJOINED;
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
-            } else if (error == Errors.MEMBER_ID_MISMATCH) {
-                future.raise(Errors.MEMBER_ID_MISMATCH);
-                // Immediately fail this consumer because this indicates another client has a collided group.instance.id
-                throw new MemberIdMismatchException("group.instance.id is duplicate for " + groupInstanceId);
             } else if (error == Errors.GROUP_INSTANCE_ID_NOT_FOUND) {
                 resetGeneration();
                 log.debug("The group instance id info was not matching records storing on broker, resetting generation to rejoin.");
