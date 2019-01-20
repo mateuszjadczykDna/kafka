@@ -18,6 +18,7 @@ package org.apache.kafka.connect.runtime.distributed;
 
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.requests.JoinGroupRequest;
 import org.apache.kafka.connect.runtime.WorkerConfig;
 
 import java.util.Map;
@@ -146,6 +147,7 @@ public class DistributedConfig extends WorkerConfig {
                         GROUP_ID_DOC)
                 .define(GROUP_INSTANCE_ID_CONFIG,
                         ConfigDef.Type.STRING,
+                        JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID,
                         ConfigDef.Importance.MEDIUM,
                         GROUP_INSTANCE_ID_DOC)
                 .define(SESSION_TIMEOUT_MS_CONFIG,

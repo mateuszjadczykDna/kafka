@@ -667,8 +667,7 @@ class GroupCoordinatorTest extends JUnitSuite {
                                    expectedMemberId: String,
                                    expectedMemberSize: Int,
                                    groupId: String,
-                                   expectedGroupState: GroupState,
-                                  ) {
+                                   expectedGroupState: GroupState) {
     assertEquals(Errors.NONE, joinGroupResult.error)
     assertEquals(expectedGeneration, joinGroupResult.generationId)
     assertEquals(expectedLeaderId, joinGroupResult.leaderId)
@@ -2191,5 +2190,4 @@ class GroupCoordinatorTest extends JUnitSuite {
   private def offsetAndMetadata(offset: Long): OffsetAndMetadata = {
     OffsetAndMetadata(offset, "", timer.time.milliseconds())
   }
-
 }

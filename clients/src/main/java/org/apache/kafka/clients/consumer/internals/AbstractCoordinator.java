@@ -788,8 +788,8 @@ public abstract class AbstractCoordinator implements Closeable {
             // needs this lock to complete and terminate after close flag is set.
             synchronized (this) {
                 // Starting from 2.2, only dynamic members will send LeaveGroupRequest to the broker,
-                // consumer with valid group.instance.id is viewed as static member, and is only controlled
-                // through session timeout.
+                // consumer with valid group.instance.id is viewed as static member that never sends LeaveGroup,
+                // and the membership expiration is only controlled by session timeout.
                 if (this.groupInstanceId.equals(JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID)) {
                     maybeLeaveGroup();
                 }

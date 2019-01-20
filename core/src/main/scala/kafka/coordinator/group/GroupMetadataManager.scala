@@ -1355,7 +1355,7 @@ object GroupMetadataManager {
         val members = memberMetadataArray.map { memberMetadataObj =>
           val memberMetadata = memberMetadataObj.asInstanceOf[Struct]
           val memberId = memberMetadata.get(MEMBER_ID_KEY).asInstanceOf[String]
-          val groupInstanceId = if (version >= 3) JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID else memberMetadata.get(GROUP_INSTANCE_ID_KEY).asInstanceOf[String]
+          val groupInstanceId = if (version >= 3) memberMetadata.get(GROUP_INSTANCE_ID_KEY).asInstanceOf[String] else JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
           val clientId = memberMetadata.get(CLIENT_ID_KEY).asInstanceOf[String]
           val clientHost = memberMetadata.get(CLIENT_HOST_KEY).asInstanceOf[String]
           val sessionTimeout = memberMetadata.get(SESSION_TIMEOUT_KEY).asInstanceOf[Int]
