@@ -126,7 +126,6 @@ class GroupCoordinator(val brokerId: Int,
           // exist we should reject the request.
           if (memberId == JoinGroupRequest.UNKNOWN_MEMBER_ID) {
             val group = groupManager.addGroup(new GroupMetadata(groupId, Empty, time))
-            error(s"creating new group $group")
             doUnknownJoinGroup(group, groupInstanceId, requireKnownMemberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
           } else {
             responseCallback(joinError(memberId, Errors.UNKNOWN_MEMBER_ID))

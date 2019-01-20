@@ -558,9 +558,8 @@ public abstract class AbstractCoordinator implements Closeable {
                 // Broker requires a concrete member id to be allowed to join the group. Update member id
                 // and send another join group request in next cycle.
                 synchronized (AbstractCoordinator.this) {
-                    AbstractCoordinator.this.generation =
-                        new Generation(OffsetCommitRequest.DEFAULT_GENERATION_ID,
-                            joinResponse.memberId(), null);
+                    AbstractCoordinator.this.generation = new Generation(OffsetCommitRequest.DEFAULT_GENERATION_ID,
+                        joinResponse.memberId(), null);
                     AbstractCoordinator.this.rejoinNeeded = true;
                     AbstractCoordinator.this.state = MemberState.UNJOINED;
                 }
