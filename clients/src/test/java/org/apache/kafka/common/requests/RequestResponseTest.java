@@ -724,13 +724,13 @@ public class RequestResponseTest {
         protocols.add(new JoinGroupRequest.ProtocolMetadata("consumer-range", metadata));
         if (version == 0) {
             return new JoinGroupRequest.Builder("group1", 30000, "consumer1", JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID, "consumer", protocols).
-                build((short) version);
+                    build((short) version);
         } else if (version < 5) {
             return new JoinGroupRequest.Builder("group1", 10000, "consumer1", JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID, "consumer", protocols).
-                setRebalanceTimeout(60000).build();
+                    setRebalanceTimeout(60000).build();
         } else {
             return new JoinGroupRequest.Builder("group1", 10000, "consumer1", "groupInstance1", "consumer", protocols).
-                setRebalanceTimeout(60000).build();
+                    setRebalanceTimeout(60000).build();
         }
     }
 

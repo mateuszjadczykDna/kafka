@@ -218,10 +218,12 @@ class GroupCoordinator(val brokerId: Int,
         addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, memberId, JoinGroupRequest.UNKNOWN_GROUP_INSTANCE_ID
           ,clientId, clientHost, protocolType, protocols, group, responseCallback)
       } else if (isStaticMember && !group.hasStaticMember(groupInstanceId)) {
-        // The given static member is not found within the storage.
+        // The given static member is not found within the static membership,
+        // informing member to rejoin with unknown member id.
         responseCallback(joinError(memberId, Errors.GROUP_INSTANCE_ID_NOT_FOUND))
       } else if (isStaticMember && group.getStaticMemberId(groupInstanceId) != memberId) {
-        // the given member id doesn't match with the groupInstanceId. Should be shut down immediately.
+        // the given member id doesn't match with the groupInstanceId. Should inform
+        // duplicate instance to shut down immediately.
         responseCallback(joinError(memberId, Errors.MEMBER_ID_MISMATCH))
       } else if (!group.has(memberId)) {
         // if the dynamic member trying to register with a un-recognized id, send the response to let
@@ -282,7 +284,7 @@ class GroupCoordinator(val brokerId: Int,
   }
 
   /**
-    * Decide whether the group will be transiting (or continue) to be at PrepareRebalance.
+    * Decide whether the group should be transiting (or continue) to be at PrepareRebalance.
     */
   private def maybeRebalanceOnKnownMemberRejoin(group: GroupMetadata,
                                                 memberId: String,
@@ -803,10 +805,10 @@ class GroupCoordinator(val brokerId: Int,
     completeAndScheduleNextExpiration(group, member, NewMemberJoinTimeoutMs)
 
     maybePrepareRebalance(group, s"Adding new member $memberId")
-    // Register new static member.
     if (member.isStaticMember)
       group.addStaticMember(groupInstanceId, memberId)
-    group.removePendingMember(memberId)
+    else
+      group.removePendingMember(memberId)
   }
 
   private def updateMemberAndRebalance(group: GroupMetadata,
@@ -853,6 +855,7 @@ class GroupCoordinator(val brokerId: Int,
     // to invoke the callback before removing the member. We return UNKNOWN_MEMBER_ID so that the consumer
     // will retry the JoinGroup request if is still active.
     group.maybeInvokeJoinCallback(member, joinError(NoMemberId, Errors.UNKNOWN_MEMBER_ID))
+
     group.remove(member.memberId)
     group.removeStaticMember(member.groupInstanceId)
 

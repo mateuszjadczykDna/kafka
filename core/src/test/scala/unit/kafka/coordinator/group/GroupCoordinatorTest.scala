@@ -76,7 +76,7 @@ class GroupCoordinatorTest extends JUnitSuite {
   private val followerInstanceId = "follower"
   private val metadata = Array[Byte]()
   private val protocols = List(("range", metadata))
-  private val protocolSuperset =  List(("range", metadata), ("roundrobin", metadata))
+  private val protocolSuperset = List(("range", metadata), ("roundrobin", metadata))
   private var groupPartitionId: Int = -1
 
   // we use this string value since its hashcode % #.partitions is different
