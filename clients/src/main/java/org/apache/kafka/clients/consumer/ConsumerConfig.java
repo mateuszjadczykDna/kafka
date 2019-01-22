@@ -58,7 +58,8 @@ public class ConsumerConfig extends AbstractConfig {
      * <code>group.instance.id</code>
      */
     public static final String GROUP_INSTANCE_ID_CONFIG = "group.instance.id";
-    private static final String GROUP_INSTANCE_ID_DOC = "A unique identifier of the consumer instance provided by end user.";
+    private static final String GROUP_INSTANCE_ID_DOC = "A unique identifier of the consumer instance provided by end user. If set to non-empty string, "
+        + "the consumer is treated as a static member, otherwise an empty id indicates a dynamic member.";
 
     /** <code>max.poll.records</code> */
     public static final String MAX_POLL_RECORDS_CONFIG = "max.poll.records";

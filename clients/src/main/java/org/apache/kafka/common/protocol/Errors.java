@@ -301,7 +301,7 @@ public enum Errors {
     MEMBER_ID_REQUIRED(79, "The group member needs to have a valid member id before actually entering a consumer group",
             MemberIdRequiredException::new),
     MEMBER_ID_MISMATCH(80, "The group.instance.id is already in the consumer group, " +
-            "however the corresponding member.id was not matching the record on coordinator",
+            "however the corresponding member.id is not matching the record on coordinator",
             MemberIdMismatchException::new),
     GROUP_INSTANCE_ID_NOT_FOUND(81, "Some group.instance.id specified in the request are not found",
             GroupInstanceIdNotFoundException::new);
