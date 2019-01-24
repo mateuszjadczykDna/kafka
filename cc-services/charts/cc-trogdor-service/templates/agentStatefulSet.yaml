@@ -71,12 +71,15 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /agent/status
+              path: /agent/uptime
               port: {{ .Values.trogdorAgentPort }}
+            timeoutSeconds: 15
+            failureThreshold: 4
           readinessProbe:
             httpGet:
-              path: /agent/status
+              path: /agent/uptime
               port: {{ .Values.trogdorAgentPort }}
+            timeoutSeconds: 15
           resources:
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}

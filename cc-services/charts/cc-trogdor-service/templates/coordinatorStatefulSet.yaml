@@ -62,19 +62,22 @@ spec:
               value: "1"
           ports:
             - name: coordinator
-              containerPort: 9002
+              containerPort: {{ .Values.trogdorCoordinatorPort }}
               protocol: TCP
             - name: jmx
               containerPort: {{ .Values.trogdorJmxPort}}
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /coordinator/status
-              port: 9002
+              path: /coordinator/uptime
+              port: {{ .Values.trogdorCoordinatorPort }}
+            timeoutSeconds: 15
+            failureThreshold: 4
           readinessProbe:
             httpGet:
-              path: /coordinator/status
-              port: 9002
+              path: /coordinator/uptime
+              port: {{ .Values.trogdorCoordinatorPort }}
+            timeoutSeconds: 15
           resources:
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}
