@@ -59,6 +59,7 @@ import org.apache.kafka.common.errors.InvalidTxnTimeoutException;
 import org.apache.kafka.common.errors.KafkaStorageException;
 import org.apache.kafka.common.errors.LeaderNotAvailableException;
 import org.apache.kafka.common.errors.LogDirNotFoundException;
+import org.apache.kafka.common.errors.MemberIdRequiredException;
 import org.apache.kafka.common.errors.NetworkException;
 import org.apache.kafka.common.errors.NotControllerException;
 import org.apache.kafka.common.errors.NotCoordinatorException;
@@ -296,6 +297,8 @@ public enum Errors {
     OFFSET_NOT_AVAILABLE(78, "The leader high watermark has not caught up from a recent leader " +
             "election so the offsets cannot be guaranteed to be monotonically increasing",
             OffsetNotAvailableException::new),
+    MEMBER_ID_REQUIRED(79, "The group member needs to have a valid member id before actually entering a consumer group",
+            MemberIdRequiredException::new),
 
     /* ----- Begin internal errors: error codes must be incremented sequentially starting at 0 ----- */
 

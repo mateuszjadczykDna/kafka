@@ -148,7 +148,7 @@ public class EmbeddedKafkaCluster {
       String topic = tp.topic();
       int partition = tp.partition();
       TestUtils.waitForCondition(() ->
-          servers.stream().map(server -> server.apis().metadataCache())
+          servers.stream().map(server -> server.dataPlaneRequestHandlerPool().apis().metadataCache())
               .allMatch(metadataCache -> {
                 Option<PartitionState> partInfo = metadataCache.getPartitionInfo(topic, partition);
                 if (partInfo.isEmpty()) {

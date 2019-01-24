@@ -14,22 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.streams.kstream.internals;
+package org.apache.kafka.common.errors;
 
-import org.apache.kafka.streams.state.internals.ThreadCache;
+public class MemberIdRequiredException extends ApiException {
 
-/**
- * Listen to cache flush events
- * @param <K> key type
- * @param <V> value type
- */
-public interface CacheFlushListener<K, V> {
+    private static final long serialVersionUID = 1L;
 
-    /**
-     * Called when records are flushed from the {@link ThreadCache}
-     * @param key         key of the entry
-     * @param newValue    current value
-     * @param oldValue    previous value
-     */
-    void apply(final K key, final V newValue, final V oldValue);
+    public MemberIdRequiredException(String message) {
+        super(message);
+    }
+
+    public MemberIdRequiredException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

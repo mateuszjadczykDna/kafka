@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.management.ManagementFactory;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -240,7 +241,7 @@ public class ConfluentMetricsReporter
     executor.shutdownNow();
     if (producer != null) {
       synchronized (producer) {
-        producer.close(0, TimeUnit.MILLISECONDS);
+        producer.close(Duration.ofMillis(0));
       }
     }
   }

@@ -404,14 +404,16 @@ class KafkaApis(val requestChannel: RequestChannel,
     val produceRequest = request.body[ProduceRequest]
     val numBytesAppended = request.header.toStruct.sizeOf + request.sizeOfBodyInBytes
 
-    if (produceRequest.isTransactional) {
-      if (!authorize(request.session, Write, Resource(TransactionalId, produceRequest.transactionalId, LITERAL))) {
+    if (produceRequest.hasTransactionalRecords) {
+      val isAuthorizedTransactional = produceRequest.transactionalId != null &&
+        authorize(request.session, Write, Resource(TransactionalId, produceRequest.transactionalId, LITERAL))
+      if (!isAuthorizedTransactional) {
         sendErrorResponseMaybeThrottle(request, Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED.exception)
         return
       }
       // Note that authorization to a transactionalId implies ProducerId authorization
 
-    } else if (produceRequest.isIdempotent && !authorize(request.session, IdempotentWrite, Resource.ClusterResource)) {
+    } else if (produceRequest.hasIdempotentRecords && !authorize(request.session, IdempotentWrite, Resource.ClusterResource)) {
       sendErrorResponseMaybeThrottle(request, Errors.CLUSTER_AUTHORIZATION_FAILED.exception)
       return
     }
@@ -1260,12 +1262,16 @@ class KafkaApis(val requestChannel: RequestChannel,
           Collections.emptyMap())
       )
     } else {
+      // Only return MEMBER_ID_REQUIRED error if joinGroupRequest version is >= 4
+      val requireKnownMemberId = joinGroupRequest.version >= 4
+
       // let the coordinator handle join-group
       val protocols = joinGroupRequest.groupProtocols().asScala.map(protocol =>
         (protocol.name, Utils.toArray(protocol.metadata))).toList
       groupCoordinator.handleJoinGroup(
         joinGroupRequest.groupId,
         joinGroupRequest.memberId,
+        requireKnownMemberId,
         request.header.clientId,
         request.session.clientAddress.toString,
         joinGroupRequest.rebalanceTimeout,
