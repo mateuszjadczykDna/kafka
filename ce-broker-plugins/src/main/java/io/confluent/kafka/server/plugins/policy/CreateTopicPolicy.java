@@ -26,7 +26,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
 
   private static final String ADVERTISED_LISTENERS_CONFIG = "advertised.listeners";
   private static final String LISTENER_SECURITY_PROTOCOL = "listener.security.protocol.map";
-  private static final int TIMEOUT_MS = 500;
+  private static final int TIMEOUT_MS = 60 * 1000;
 
   private short requiredRepFactor;
   private int maxPartitionsPerTenant;
