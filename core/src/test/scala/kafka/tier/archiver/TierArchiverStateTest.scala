@@ -1,40 +1,37 @@
 /*
- Copyright 2018 Confluent Inc.
+ * Copyright 2019 Confluent Inc.
  */
 
-package kafka.tier
+package kafka.tier.archiver
 
-import java.io.File
+import java.io.{File, FileInputStream}
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util
-import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
-import java.util.{Collections, OptionalLong, Properties}
+import java.util.concurrent.{ConcurrentSkipListSet, Executors, ScheduledExecutorService, TimeUnit}
+import java.util.{Collections, Optional, OptionalLong, Properties}
 
-import kafka.log._
+import kafka.log.{AbstractLog, LogManager, LogSegment, LogTest, MergedLog}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
-import kafka.tier.state.TierPartitionState.AppendResult
-import kafka.tier.archiver.JavaFunctionConversions._
 import kafka.tier.archiver.TierArchiverState.{AfterUpload, BeforeLeader, BeforeUpload, Priority}
-import kafka.tier.archiver._
-import kafka.tier.client.{MockConsumerBuilder, MockProducerBuilder}
 import kafka.tier.domain.TierObjectMetadata
 import kafka.tier.exceptions.TierArchiverFencedException
+import kafka.tier.state.TierPartitionState.AppendResult
 import kafka.tier.state.{MemoryTierPartitionStateFactory, TierPartitionState}
-import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.store.{MockInMemoryTierObjectStore, TierObjectStore}
+import kafka.tier.store.TierObjectStore.TierObjectStoreFileType
+import kafka.tier.{TierMetadataManager, TierTopicManager, TierUtils}
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.record.MemoryRecords.RecordFilter
-import org.apache.kafka.common.record._
-import org.junit.Assert._
+import org.apache.kafka.common.utils.Utils
+import org.junit.Assert.{assertEquals, assertTrue}
 import org.junit.Test
 import org.mockito.Mockito.{mock, when}
+import kafka.tier.archiver.JavaFunctionConversions._
 
 import scala.collection.JavaConverters._
 
-
 class TierArchiverStateTest {
-
   val mockTime = new MockTime()
   val tierTopicName = "__tier_topic"
   val tierTopicNumPartitions: Short = 1
@@ -48,36 +45,12 @@ class TierArchiverStateTest {
   @Test
   def testAwaitingLeaderResult(): Unit = {
     val topicPartition = new TopicPartition("foo", 0)
-
-    val tierTopicManagerConfig = new TierTopicManagerConfig(
-      "bootstrap",
-      null,
-      1,
-      1,
-      33,
-      "cluster99",
-      200L,
-      500,
-      logDirs)
-
-
-    val producerBuilder = new MockProducerBuilder()
-    val consumerBuilder = new MockConsumerBuilder(tierTopicManagerConfig, producerBuilder.producer())
-    val tierTopicManager = new TierTopicManager(
-      tierTopicManagerConfig,
-      consumerBuilder,
-      producerBuilder,
-      tierMetadataManager)
+    val tierTopicManager = mock(classOf[TierTopicManager])
+    when(tierTopicManager.becomeArchiver(topicPartition, 0))
+      .thenReturn(CompletableFutureUtil.completed(AppendResult.ACCEPTED))
 
     val properties = new Properties()
     properties.put("tier.enable", "true")
-
-    tierTopicManager.becomeReady()
-
-    tierMetadataManager.initState(topicPartition, new File(logDirs.get(0)), new LogConfig(properties))
-    tierMetadataManager.becomeLeader(topicPartition, 1)
-
-    while(tierTopicManager.doWork()) {}
 
     val tierObjectStore = new MockInMemoryTierObjectStore("bar")
 
@@ -92,9 +65,6 @@ class TierArchiverStateTest {
         assertTrue("Should advance to BeforeUpload", state.isInstanceOf[BeforeUpload])
         state
       }
-
-    consumerBuilder.moveRecordsFromProducer()
-    tierTopicManager.doWork()
 
     nextStage.get(100, TimeUnit.MILLISECONDS)
   }
@@ -209,31 +179,69 @@ class TierArchiverStateTest {
   @Test
   def testBeforeUploadAdvancesToNextState(): Unit = {
     val topicPartition = new TopicPartition("foo", 0)
-    val tierTopicManager = mock(classOf[TierTopicManager])
-    val tierObjectStore = new MockInMemoryTierObjectStore("bucket")
-
-    val logConfig = LogTest.createLogConfig(segmentBytes =  150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
     val logDir = Paths.get(TestUtils.tempDir().getPath, topicPartition.toString).toFile
-    val log = LogTest.createLog(logDir, logConfig, new BrokerTopicStats, mockTime.scheduler, mockTime,
-      0L, 0L, 60 * 60 * 1000, LogManager.ProducerIdExpirationCheckIntervalMs)
+    val logConfig = LogTest.createLogConfig(segmentBytes =  150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
 
+    // setup mocks
+    val tierObjectStore = new MockInMemoryTierObjectStore("bucket")
+    val tierMetadataManager = mock(classOf[TierMetadataManager])
     val tierPartitionState = mock(classOf[TierPartitionState])
-    when(tierPartitionState.endOffset()).thenReturn(OptionalLong.empty())
+    val tierTopicManager = mock(classOf[TierTopicManager])
+
+    // mock tierPartitionState state to emulate we are the leader at epoch 0
     when(tierPartitionState.tierEpoch).thenReturn(0)
+    when(tierPartitionState.endOffset).thenReturn(OptionalLong.empty)
 
-    log.appendAsFollower(createRecords(5, topicPartition, log.logEndOffset, 0))
-    log.appendAsFollower(createRecords(5, topicPartition, log.logEndOffset, 0))
-    log.onHighWatermarkIncremented(log.logEndOffset)
+    // mock tierPartitionState so it returns the segments we have tiered so far
+    val tieredSegments = new ConcurrentSkipListSet[java.lang.Long]()
+    when(tierPartitionState.segmentOffsets).thenReturn(tieredSegments)
 
-    val nextStage = BeforeUpload(
-      log, tierTopicManager, tierObjectStore,
-      topicPartition, tierPartitionState, 0, blockingTaskExecutor, TierArchiverConfig()
-    ).nextState().handle { (result: TierArchiverState, ex: Throwable) =>
-      assertTrue("Should advance to AfterUpload", result.isInstanceOf[AfterUpload])
-      result
+    // mock tierMetadataManager to return the corresponding partition state
+    when(tierMetadataManager.initState(topicPartition, logDir, logConfig)).thenReturn(tierPartitionState)
+    when(tierMetadataManager.tierPartitionState(topicPartition)).thenReturn(Optional.of(tierPartitionState))
+
+    val logDirFailureChannel = mock(classOf[LogDirFailureChannel])
+    val log = MergedLog(logDir, logConfig, 0L, 0L, mockTime.scheduler, new BrokerTopicStats, mockTime,
+      60 * 60 * 1000, LogManager.ProducerIdExpirationCheckIntervalMs, logDirFailureChannel, Some(tierMetadataManager))
+
+    log.appendAsFollower(TierUtils.createRecords(5, topicPartition, log.logEndOffset, 0))
+    log.appendAsFollower(TierUtils.createRecords(5, topicPartition, log.logEndOffset, 0))
+
+    val expectedTierableSegments = log.localLogSegments(0, log.logEndOffset)
+    assertTrue(expectedTierableSegments.size > 0)
+
+    // make all segments upto logEndOffset tierable
+    TierUtils.ensureTierable(log, log.logEndOffset, topicPartition)
+    assertEquals(expectedTierableSegments.toList, log.tierableLogSegments)
+
+    // transition from BeforeUpload so tierable segments are archived
+    expectedTierableSegments.foreach { currentSegment =>
+      val nextStage = BeforeUpload(log, tierTopicManager, tierObjectStore, topicPartition,
+        tierMetadataManager.tierPartitionState(topicPartition).get, 0, blockingTaskExecutor, TierArchiverConfig())
+        .nextState()
+        .handle { (result: TierArchiverState, _: Throwable) =>
+          assertTrue("Should advance to AfterUpload", result.isInstanceOf[AfterUpload])
+          result
+        }
+      nextStage.get(2000, TimeUnit.MILLISECONDS)
+
+      tieredSegments.add(currentSegment.baseOffset)
+      when(tierPartitionState.endOffset).thenReturn(OptionalLong.of(currentSegment.readNextOffset - 1))
     }
 
-    nextStage.get(2000, TimeUnit.MILLISECONDS)
+    // verify size and contents of the segments we tiered
+    expectedTierableSegments.foreach { segment =>
+      val segmentMetadata = TierArchiverState.createObjectMetadata(log.topicPartition, 0, segment)
+
+      // verify contents of segment, indices and state in tiered store
+      assertTrue(isEqual(segment.log.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.SEGMENT))
+      assertTrue(isEqual(segment.offsetIndex.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.OFFSET_INDEX))
+      assertTrue(isEqual(segment.timeIndex.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.TIMESTAMP_INDEX))
+      assertTrue(isEqual(log.leaderEpochCache.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.EPOCH_STATE))
+    }
+
+    log.close()
+    Utils.delete(logDir)
   }
 
   @Test
@@ -325,20 +333,26 @@ class TierArchiverStateTest {
     tierPartitionState
   }
 
-  private def createRecords(n: Int, partition: TopicPartition, baseOffset: Long, leaderEpoch: Int): MemoryRecords = {
-    val recList = Range(0, n).map(_ =>
-      new SimpleRecord(System.currentTimeMillis(), "key".getBytes, "value".getBytes))
-    val records = TestUtils.records(records = recList, baseOffset = baseOffset)
-    val filtered = ByteBuffer.allocate(100 * n)
-    records.batches().asScala.foreach(_.setPartitionLeaderEpoch(leaderEpoch))
-    records.filterTo(partition, new RecordFilter {
-      override protected def checkBatchRetention(batch: RecordBatch): RecordFilter.BatchRetention =
-        RecordFilter.BatchRetention.DELETE_EMPTY
-      override protected def shouldRetainRecord(recordBatch: RecordBatch, record: Record): Boolean =
-        true
-    }, filtered, Int.MaxValue, BufferSupplier.NO_CACHING)
-    filtered.flip()
-    MemoryRecords.readableRecords(filtered)
-  }
+  private def isEqual(localFile: File,
+                      tierObjectStore: TierObjectStore,
+                      metadata: TierObjectMetadata,
+                      fileType: TierObjectStoreFileType): Boolean = {
+    val localStream = new FileInputStream(localFile.getPath)
+    val tieredObject = tierObjectStore.getObject(metadata, fileType, 0, Integer.MAX_VALUE)
 
+    val localData = ByteBuffer.allocate(localFile.length.toInt)
+    val tieredData = ByteBuffer.allocate(tieredObject.getObjectSize.toInt)
+
+    try {
+      Utils.readFully(localStream, localData)
+      Utils.readFully(tieredObject.getInputStream, tieredData)
+    } finally {
+      localStream.close()
+      tieredObject.close()
+    }
+    localData.flip()
+    tieredData.flip()
+
+    localData.equals(tieredData)
+  }
 }

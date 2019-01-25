@@ -16,6 +16,7 @@
   */
 package kafka.server.epoch
 
+import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import kafka.server.checkpoints.LeaderEpochCheckpoint
@@ -43,6 +44,8 @@ class LeaderEpochFileCache(topicPartition: TopicPartition,
 
   private val lock = new ReentrantReadWriteLock()
   private var epochs: ListBuffer[EpochEntry] = inWriteLock(lock) { ListBuffer(checkpoint.read(): _*) }
+
+  def file: File = checkpoint.file
 
   /**
     * Assigns the supplied Leader Epoch to the supplied Offset
@@ -213,6 +216,16 @@ class LeaderEpochFileCache(topicPartition: TopicPartition,
     inWriteLock(lock) {
       epochs.clear()
     }
+  }
+
+  /**
+    * Clone the epoch state into the given checkpoint instance.
+    * @param newCheckpoint Epoch checkpoint instance to clone into
+    * @return Cloned leader epoch file cache object
+    */
+  def clone(newCheckpoint: LeaderEpochCheckpoint): LeaderEpochFileCache = {
+    newCheckpoint.write(epochs)
+    new LeaderEpochFileCache(topicPartition, logEndOffset, newCheckpoint)
   }
 
   // Visible for testing

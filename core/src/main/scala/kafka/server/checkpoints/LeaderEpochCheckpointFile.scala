@@ -27,6 +27,7 @@ import scala.collection._
 trait LeaderEpochCheckpoint {
   def write(epochs: Seq[EpochEntry])
   def read(): Seq[EpochEntry]
+  def file: File
 }
 
 object LeaderEpochFile {

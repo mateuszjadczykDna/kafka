@@ -23,8 +23,9 @@ import kafka.server.checkpoints.{LeaderEpochCheckpoint, LeaderEpochCheckpointFil
 import org.apache.kafka.common.requests.EpochEndOffset.{UNDEFINED_EPOCH, UNDEFINED_EPOCH_OFFSET}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.utils.Utils
 import org.junit.Assert._
-import org.junit.Test
+import org.junit.{After, Test}
 
 import scala.collection.mutable.ListBuffer
 
@@ -36,10 +37,16 @@ class LeaderEpochFileCacheTest {
   private var logEndOffset = 0L
   private val checkpoint: LeaderEpochCheckpoint = new LeaderEpochCheckpoint {
     private var epochs: Seq[EpochEntry] = Seq()
+    override val file = TestUtils.tempFile()
     override def write(epochs: Seq[EpochEntry]): Unit = this.epochs = epochs
     override def read(): Seq[EpochEntry] = this.epochs
   }
   private val cache = new LeaderEpochFileCache(tp, logEndOffset _, checkpoint)
+
+  @After
+  def tearDown(): Unit = {
+    Utils.delete(checkpoint.file)
+  }
 
   @Test
   def shouldAddEpochAndMessageOffsetToCache() = {

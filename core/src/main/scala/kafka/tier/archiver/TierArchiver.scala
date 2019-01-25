@@ -114,7 +114,7 @@ class TierArchiver(config: TierArchiverConfig,
   def pauseDoneStates(): Boolean = {
     var didWork = false
     for ((topicPartition, future) <- stateTransitionsInProgress) {
-      if (future.isDone){
+      if (future.isDone) {
         Try(future.get()) match {
           case Success(nextState: TierArchiverState) =>
             pausedStates.put(nextState)
