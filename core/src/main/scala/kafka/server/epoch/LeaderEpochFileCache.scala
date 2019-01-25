@@ -224,8 +224,10 @@ class LeaderEpochFileCache(topicPartition: TopicPartition,
     * @return Cloned leader epoch file cache object
     */
   def clone(newCheckpoint: LeaderEpochCheckpoint): LeaderEpochFileCache = {
-    newCheckpoint.write(epochs)
-    new LeaderEpochFileCache(topicPartition, logEndOffset, newCheckpoint)
+    inReadLock(lock) {
+      newCheckpoint.write(epochs)
+      new LeaderEpochFileCache(topicPartition, logEndOffset, newCheckpoint)
+    }
   }
 
   // Visible for testing
