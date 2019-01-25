@@ -7,7 +7,7 @@ package kafka.tier.archiver
 import java.io.File
 import java.nio.channels.FileChannel
 import java.nio.file.Files
-import java.util.concurrent._
+import java.util.concurrent.{Callable, CompletableFuture, ScheduledExecutorService, TimeUnit}
 import java.util.function
 import java.util.function.Supplier
 
