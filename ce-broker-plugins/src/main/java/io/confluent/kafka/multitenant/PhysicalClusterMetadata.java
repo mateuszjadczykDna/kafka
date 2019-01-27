@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -304,12 +305,11 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
    *         extension); otherwise false which means need to retry
    */
   private boolean loadAllFiles() {
-    try {
-      long numFilesNeedRetry = Files
-          .list(Paths.get(logicalClustersDir))
-          .map(this::loadLogicalClusterMetadata)
-          .filter(retry -> retry)
-          .count();
+    try (Stream<Path> fileStream = Files.list(Paths.get(logicalClustersDir))) {
+      long numFilesNeedRetry = fileStream
+              .map(this::loadLogicalClusterMetadata)
+              .filter(retry -> retry)
+              .count();
       return numFilesNeedRetry == 0;
     } catch (IOException ioe) {
       LOG.warn("Failed to read metadata files from dir={}", logicalClustersDir);
