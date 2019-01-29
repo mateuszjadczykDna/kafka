@@ -159,7 +159,7 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         }
 
     def __init__(self, context, num_nodes, kafka, topic, group_id,
-                 max_messages=-1, session_timeout_sec=30, enable_autocommit=False,
+                 static_membership=False, bump_leader=False, max_messages=-1, session_timeout_sec=30, enable_autocommit=False,
                  assignment_strategy="org.apache.kafka.clients.consumer.RangeAssignor",
                  version=DEV_BRANCH, stop_timeout_sec=30, log_level="INFO", jaas_override_variables=None,
                  on_record_consumed=None):
@@ -172,6 +172,8 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         self.kafka = kafka
         self.topic = topic
         self.group_id = group_id
+        self.static_membership = static_membership
+        self.bump_leader = bump_leader
         self.max_messages = max_messages
         self.session_timeout_sec = session_timeout_sec
         self.enable_autocommit = enable_autocommit
@@ -212,6 +214,13 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         self.logger.info(self.prop_file)
         node.account.create_file(VerifiableConsumer.CONFIG_FILE, self.prop_file)
         self.security_config.setup_node(node)
+        # apply group.instance.id to the node for static membership validation
+        node.group_instance_id = "empty_group_instance_id"
+        if self.static_membership:
+            instance_id = idx
+            if self.bump_leader:
+                instance_id = idx + 1
+            node.group_instance_id = self.group_id + "-instance-" + str(instance_id)
         cmd = self.start_cmd(node)
         self.logger.debug("VerifiableConsumer %d command: %s" % (idx, cmd))
 
@@ -274,8 +283,10 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         cmd += self.impl.exec_cmd(node)
         if self.on_record_consumed:
             cmd += " --verbose"
-        cmd += " --group-id %s --topic %s --broker-list %s --session-timeout %s --assignment-strategy %s %s" % \
-               (self.group_id, self.topic, self.kafka.bootstrap_servers(self.security_config.security_protocol),
+        #  --group-instance-id %s node.group_instance_id
+
+        cmd += " --group-id %s --topic %s --group-instance-id %s --broker-list %s --session-timeout %s --assignment-strategy %s %s" % \
+               (self.group_id, self.topic, node.group_instance_id, self.kafka.bootstrap_servers(self.security_config.security_protocol),
                self.session_timeout_sec*1000, self.assignment_strategy, "--enable-autocommit" if self.enable_autocommit else "")
                
         if self.max_messages > 0:

@@ -268,6 +268,8 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
 
   def removeStaticMember(groupInstanceId: String) = staticMembers.remove(groupInstanceId)
 
+  def allStaticMembers = staticMembers
+
   def currentState = state
 
   def notYetRejoinedMembers = members.values.filter(_.awaitingJoinCallback == null).toList

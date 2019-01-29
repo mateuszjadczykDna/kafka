@@ -115,6 +115,7 @@ class GroupCoordinator(val brokerId: Int,
       return
     }
 
+    info(s"member instance $groupInstanceId joins group with member id $memberId, and rebalance timeout $rebalanceTimeoutMs")
     if (sessionTimeoutMs < groupConfig.groupMinSessionTimeoutMs ||
       sessionTimeoutMs > groupConfig.groupMaxSessionTimeoutMs) {
       responseCallback(joinError(memberId, Errors.INVALID_SESSION_TIMEOUT))
@@ -132,6 +133,7 @@ class GroupCoordinator(val brokerId: Int,
           }
 
         case Some(group) =>
+          info(s"current group contains static members ${group.allStaticMembers}")
           if (memberId == JoinGroupRequest.UNKNOWN_MEMBER_ID) {
             doUnknownJoinGroup(group, groupInstanceId, requireKnownMemberId, clientId, clientHost, rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols, responseCallback)
           } else {
@@ -295,6 +297,7 @@ class GroupCoordinator(val brokerId: Int,
                                                 responseCallback: JoinCallback) : Boolean = {
     val shouldRebalance = group.isLeader(member.memberId) || !member.matches(protocols) || !group.is(Stable)
     if (shouldRebalance) {
+      info(s"group needs to rebalance because rejoining at group ${group.is(Stable)}, is leader ${group.isLeader(member.memberId)}, doesn't match protocol ${!member.matches(protocols)} ")
       // force a rebalance if a member has changed metadata or if the leader sends JoinGroup.
       // The latter allows the leader to trigger rebalances for changes affecting assignment
       // which do not affect the member metadata (such as topic metadata changes for the consumer)

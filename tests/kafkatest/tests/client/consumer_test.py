@@ -33,7 +33,7 @@ class OffsetValidationTest(VerifiableConsumerTest):
             self.TOPIC : { 'partitions': self.NUM_PARTITIONS, 'replication-factor': 2 }
         })
 
-    def rolling_bounce_consumers(self, consumer, num_bounces=5, clean_shutdown=True):
+    def rolling_bounce_consumers(self, consumer, wait_message_consumption=True, num_bounces=5, clean_shutdown=True):
         for _ in range(num_bounces):
             for node in consumer.nodes:
                 consumer.stop_node(node, clean_shutdown)
@@ -45,9 +45,10 @@ class OffsetValidationTest(VerifiableConsumerTest):
                 consumer.start_node(node)
 
                 self.await_all_members(consumer)
-                self.await_consumed_messages(consumer)
+                if wait_message_consumption:
+                    self.await_consumed_messages(consumer)
 
-    def bounce_all_consumers(self, consumer, num_bounces=5, clean_shutdown=True):
+    def bounce_all_consumers(self, consumer, wait_message_consumption=True, num_bounces=5, clean_shutdown=True):
         for _ in range(num_bounces):
             for node in consumer.nodes:
                 consumer.stop_node(node, clean_shutdown)
@@ -59,7 +60,8 @@ class OffsetValidationTest(VerifiableConsumerTest):
                 consumer.start_node(node)
 
             self.await_all_members(consumer)
-            self.await_consumed_messages(consumer)
+            if wait_message_consumption:
+                self.await_consumed_messages(consumer)
 
     def rolling_bounce_brokers(self, consumer, num_bounces=5, clean_shutdown=True):
         for _ in range(num_bounces):
@@ -72,6 +74,12 @@ class OffsetValidationTest(VerifiableConsumerTest):
         # collect verifiable consumer events since this makes debugging much easier
         consumer = super(OffsetValidationTest, self).setup_consumer(topic, **kwargs)
         self.mark_for_collect(consumer, 'verifiable_consumer_stdout')
+        return consumer
+
+    def setup_static_consumer(self, topic, bump_leader, **kwargs):
+        # collect verifiable consumer events since this makes debugging much easier
+        consumer = super(OffsetValidationTest, self).setup_static_consumer(topic, bump_leader, **kwargs)
+        self.mark_for_collect(consumer, 'static_verifiable_consumer_stdout')
         return consumer
 
     @cluster(num_nodes=7)
@@ -142,10 +150,10 @@ class OffsetValidationTest(VerifiableConsumerTest):
         self.await_all_members(consumer)
 
         if bounce_mode == "all":
-            self.bounce_all_consumers(consumer, clean_shutdown=clean_shutdown)
+            self.bounce_all_consumers(consumer, self.num_consumers, clean_shutdown=clean_shutdown)
         else:
-            self.rolling_bounce_consumers(consumer, clean_shutdown=clean_shutdown)
-                
+            self.rolling_bounce_consumers(consumer, self.num_consumers, clean_shutdown=clean_shutdown)
+
         consumer.stop_all()
         if clean_shutdown:
             # if the total records consumed matches the current position, we haven't seen any duplicates
@@ -158,6 +166,61 @@ class OffsetValidationTest(VerifiableConsumerTest):
             assert consumer.current_position(partition) <= consumer.total_consumed(), \
                 "Current position %d greater than the total number of consumed records %d" % \
                 (consumer.current_position(partition), consumer.total_consumed())
+
+    @cluster(num_nodes=8)
+    @matrix(num_bounces=[5], bounce_mode=["all", "rolling"])
+    def test_static_consumer_bounce(self, num_bounces, bounce_mode):
+        """
+        Verify correct static consumer behavior when the consumers in the group are restarted. To avoid
+        blind rebalance due to leader consumer, we shall only restart follower consumers.
+
+        Setup: single Kafka cluster with one producer and a set of consumers in one group.
+
+        - Start a producer which continues producing new messages throughout the test.
+        - Start up a leader consumer as static member and make sure it becomes leader.
+        - Start up the follower consumers as static members and wait until they've joined the group.
+        - In a loop, restart each consumer except leader, and expect no rebalance triggered
+          during this process.
+        """
+        partition = TopicPartition(self.TOPIC, 0)
+
+        producer = self.setup_producer(self.TOPIC)
+
+        producer.start()
+        self.await_produced_messages(producer)
+
+        # set up leader consumer first, which should be just one.
+        self.session_timeout_sec = 60
+        self.num_consumers = 1
+        leaderConsumer = self.setup_static_consumer(self.TOPIC, bump_leader=False)
+
+        leaderConsumer.start()
+        self.await_members(leaderConsumer, 1)
+
+        num_followers = 3
+        self.num_consumers = num_followers
+        followerConsumers = self.setup_static_consumer(self.TOPIC, bump_leader=True)
+
+        followerConsumers.start()
+        self.await_members(followerConsumers, num_followers)
+
+        leader_num_rebalances_before_bounce = leaderConsumer.num_rebalances()
+
+        num_rebalances_before_bounce = followerConsumers.num_rebalances()
+
+        if bounce_mode == "all":
+            self.bounce_all_consumers(followerConsumers, wait_message_consumption=False, num_bounces=num_bounces)
+        else:
+            self.rolling_bounce_consumers(followerConsumers, wait_message_consumption=False, num_bounces=num_bounces)
+
+        assert (followerConsumers.num_rebalances() - num_rebalances_before_bounce) == num_bounces
+        assert leaderConsumer.num_rebalances() == leader_num_rebalances_before_bounce
+
+        followerConsumers.stop_all()
+        leaderConsumer.stop_all()
+        assert leaderConsumer.current_position(partition) == leaderConsumer.total_consumed(), \
+            "Total consumed records %d did not match consumed position %d" % \
+            (leaderConsumer.total_consumed(), leaderConsumer.current_position(partition))
 
     @cluster(num_nodes=7)
     @matrix(clean_shutdown=[True], enable_autocommit=[True, False])

@@ -1241,6 +1241,8 @@ class KafkaApis(val requestChannel: RequestChannel,
       sendResponseMaybeThrottle(request, createResponse)
     }
 
+    info(s"group instance ${joinGroupRequest.groupInstanceId} tries to join group")
+
     if (!authorize(request.session, Read, Resource(Group, joinGroupRequest.groupId(), LITERAL))) {
       sendResponseMaybeThrottle(request, requestThrottleMs =>
         new JoinGroupResponse(

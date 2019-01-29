@@ -61,6 +61,12 @@ class VerifiableConsumerTest(KafkaTest):
                                   assignment_strategy=assignment_strategy, enable_autocommit=enable_autocommit,
                                   log_level="TRACE")
 
+    def setup_static_consumer(self, topic, bump_leader, enable_autocommit=False, assignment_strategy="org.apache.kafka.clients.consumer.RangeAssignor"):
+        return VerifiableConsumer(self.test_context, self.num_consumers, self.kafka,
+                                  topic, self.group_id, static_membership=True, bump_leader=bump_leader, session_timeout_sec=self.session_timeout_sec,
+                                  assignment_strategy=assignment_strategy, enable_autocommit=enable_autocommit,
+                                  log_level="TRACE")
+
     def setup_producer(self, topic, max_messages=-1):
         return VerifiableProducer(self.test_context, self.num_producers, self.kafka, topic,
                                   max_messages=max_messages, throughput=500,
