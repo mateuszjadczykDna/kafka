@@ -72,6 +72,7 @@ import org.apache.kafka.common.errors.OffsetOutOfRangeException;
 import org.apache.kafka.common.errors.OperationNotAttemptedException;
 import org.apache.kafka.common.errors.OutOfOrderSequenceException;
 import org.apache.kafka.common.errors.PolicyViolationException;
+import org.apache.kafka.common.errors.PreferredLeaderNotAvailableException;
 import org.apache.kafka.common.errors.ProducerFencedException;
 import org.apache.kafka.common.errors.ReassignmentInProgressException;
 import org.apache.kafka.common.errors.RebalanceInProgressException;
@@ -118,6 +119,13 @@ import java.util.function.Function;
  * Do not add exceptions that occur only on the client or only on the server here.
  */
 public enum Errors {
+    /* ----- Begin internal errors: error codes must be incremented sequentially starting at 0 ----- */
+
+    OFFSET_TIERED(0, "The requested offset has been tiered and cannot be fetched",
+            OffsetTieredException::new, true),
+
+    /* ----- End internal errors ----- */
+
     UNKNOWN_SERVER_ERROR(-1, "The server experienced an unexpected error when processing the request.",
             UnknownServerException::new),
     NONE(0, null, message -> null),
@@ -299,13 +307,8 @@ public enum Errors {
             OffsetNotAvailableException::new),
     MEMBER_ID_REQUIRED(79, "The group member needs to have a valid member id before actually entering a consumer group",
             MemberIdRequiredException::new),
-
-    /* ----- Begin internal errors: error codes must be incremented sequentially starting at 0 ----- */
-
-    OFFSET_TIERED(0, "The requested offset has been tiered and cannot be fetched",
-            OffsetTieredException::new, true);
-
-    /* ----- End internal errors ----- */
+    PREFERRED_LEADER_NOT_AVAILABLE(80, "The preferred leader was not available",
+            PreferredLeaderNotAvailableException::new);
 
     private static final Logger log = LoggerFactory.getLogger(Errors.class);
 

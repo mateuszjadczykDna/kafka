@@ -109,6 +109,7 @@ public class MultiTenantApis {
       case DESCRIBE_DELEGATION_TOKEN:
       case RENEW_DELEGATION_TOKEN:
       case EXPIRE_DELEGATION_TOKEN:
+      case ELECT_PREFERRED_LEADERS:
         return false;
 
       default:
