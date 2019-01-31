@@ -75,12 +75,13 @@ import scala.collection.JavaConversions;
 public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
 
   private static final Logger log = LoggerFactory.getLogger("kafka.authorizer.logger");
-  public static final String MAX_ACLS_PER_TENANT_PROP = "max.acls.per.tenant";
-  private static final int DEFAULT_MAX_ACLS_PER_TENANT = 10000;
+  public static final String MAX_ACLS_PER_TENANT_PROP = "confluent.max.acls.per.tenant";
+  private static final int ACLS_DISABLED = 0;
 
   private int maxAclsPerTenant;
   private boolean allowEveryoneIfNoAcl;
   private Set<KafkaPrincipal> superUsers;
+  private boolean authorizationDisabled;
 
   @Override
   public void configure(Map<String, ?> configs) {
@@ -88,7 +89,8 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
         configs.get(SimpleAclAuthorizer$.MODULE$.AllowEveryoneIfNoAclIsFoundProp());
     allowEveryoneIfNoAcl = allowIfNoAcl != null && Boolean.parseBoolean(allowIfNoAcl);
     String maxAcls = (String) configs.get(MAX_ACLS_PER_TENANT_PROP);
-    maxAclsPerTenant = maxAcls != null ? Integer.parseInt(maxAcls) : DEFAULT_MAX_ACLS_PER_TENANT;
+    maxAclsPerTenant = maxAcls != null ? Integer.parseInt(maxAcls) : ACLS_DISABLED;
+    authorizationDisabled = maxAclsPerTenant == ACLS_DISABLED;
 
     String su = (String) configs.get(SimpleAclAuthorizer$.MODULE$.SuperUsersProp());
     if (su != null && !su.trim().isEmpty()) {
@@ -118,7 +120,11 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
     // instantiated as KafkaPrincipal
     KafkaPrincipal sessionPrincipal = session.principal();
     String host = session.clientAddress().getHostAddress();
-    boolean authorized = isSuperUser(sessionPrincipal);
+
+    // Super-users (including non-service-accounts and super.users configured in server.properties)
+    // are authorized without checking ACLs. For CCPro, `authorizationDisabled=true` and all requests
+    // are authorized.
+    boolean authorized = isSuperUser(sessionPrincipal) || authorizationDisabled;
 
     if (!authorized) {
       String tenantPrefix = sessionPrincipal instanceof MultiTenantPrincipal
@@ -228,6 +234,7 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
 
   @Override
   public void addAcls(scala.collection.immutable.Set<Acl> acls, Resource resource) {
+    checkAclsEnabled();
     if (acls.isEmpty()) {
       return;
     }
@@ -263,6 +270,37 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
     }
 
     super.addAcls(acls, resource);
+  }
+
+
+  @Override
+  public boolean removeAcls(scala.collection.immutable.Set<Acl> aclsTobeRemoved, Resource resource) {
+    checkAclsEnabled();
+    return super.removeAcls(aclsTobeRemoved, resource);
+  }
+
+  @Override
+  public boolean removeAcls(Resource resource) {
+    checkAclsEnabled();
+    return super.removeAcls(resource);
+  }
+
+  @Override
+  public scala.collection.immutable.Set<Acl> getAcls(Resource resource) {
+    checkAclsEnabled();
+    return super.getAcls(resource);
+  }
+
+  @Override
+  public scala.collection.immutable.Map<Resource, scala.collection.immutable.Set<Acl>> getAcls(KafkaPrincipal principal) {
+    checkAclsEnabled();
+    return super.getAcls(principal);
+  }
+
+  @Override
+  public scala.collection.immutable.Map<Resource, scala.collection.immutable.Set<Acl>> getAcls() {
+    checkAclsEnabled();
+    return super.getAcls();
   }
 
   /**
@@ -314,5 +352,11 @@ public class MultiTenantAuthorizer extends SimpleAclAuthorizer {
         .flatMap(acls -> JavaConversions.asJavaCollection(acls).stream())
         .filter(acl -> inScope(acl.principal(), tenantPrefix))
         .collect(Collectors.counting());
+  }
+
+  private void checkAclsEnabled() {
+    if (authorizationDisabled) {
+      throw new InvalidRequestException("Confluent Cloud Professional does not support ACLs");
+    }
   }
 }

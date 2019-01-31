@@ -58,16 +58,20 @@ public class MultiTenantAuthorizerTest {
 
   @Before
   public void setUp() throws Exception {
-    testHarness = new IntegrationTestHarness();
-    physicalCluster = testHarness.start(brokerProps());
-    logicalCluster = physicalCluster.createLogicalCluster("tenantA", 100, 1, 2);
-    user1 = logicalCluster.user(1);
-    user2 = logicalCluster.user(2);
+    startTestHarness(brokerProps());
   }
 
   @After
   public void tearDown() throws Exception {
     testHarness.shutdown();
+  }
+
+  private void startTestHarness(Properties brokerOverrideProps) throws Exception {
+    testHarness = new IntegrationTestHarness();
+    physicalCluster = testHarness.start(brokerOverrideProps);
+    logicalCluster = physicalCluster.createLogicalCluster("tenantA", 100, 1, 2);
+    user1 = logicalCluster.user(1);
+    user2 = logicalCluster.user(2);
   }
 
   /**
@@ -337,6 +341,51 @@ public class MultiTenantAuthorizerTest {
 
     // ACLs created before limit was reached should work
     testHarness.produceConsume(user1, user2, topic, consumerGroup, 0);
+  }
+
+  /**
+   * Tests that per-tenant ACL limit of zero disables authorization
+   */
+  @Test
+  public void testAuthorizerDisabledUsingAclLimit() throws Throwable {
+    testHarness.shutdown();
+    Properties brokerProps = brokerProps();
+    brokerProps.put(MultiTenantAuthorizer.MAX_ACLS_PER_TENANT_PROP, "0");
+    startTestHarness(brokerProps);
+
+    AclBinding topicAcl = new AclBinding(
+        new ResourcePattern(ResourceType.TOPIC, topic, PatternType.LITERAL),
+        new AccessControlEntry(user1.unprefixedKafkaPrincipal().toString(),
+            "*", AclOperation.WRITE, AclPermissionType.ALLOW));
+    AclBindingFilter topicFilter = new AclBindingFilter(
+        new ResourcePatternFilter(ResourceType.ANY, null, PatternType.ANY),
+        new AccessControlEntryFilter(null, null, AclOperation.ANY, AclPermissionType.ANY));
+
+    try (AdminClient adminClient = testHarness.createAdminClient(logicalCluster.adminUser())) {
+      try {
+        adminClient.createAcls(Collections.singleton(topicAcl)).all().get();
+      } catch (ExecutionException e) {
+        verifyAclsDisabledException(e);
+      }
+      try {
+        adminClient.describeAcls(topicFilter).values().get();
+      } catch (ExecutionException e) {
+        verifyAclsDisabledException(e);
+      }
+      try {
+        adminClient.deleteAcls(Collections.singleton(topicFilter)).all().get();
+      } catch (ExecutionException e) {
+        verifyAclsDisabledException(e);
+      }
+    }
+
+    testHarness.produceConsume(user1, user2, topic, consumerGroup, 0);
+  }
+
+  private void verifyAclsDisabledException(ExecutionException e) {
+    Throwable cause = e.getCause();
+    assertTrue("Unexpected exception: " + cause, cause instanceof InvalidRequestException);
+    assertTrue("Unexpected exception: " + cause, cause.getMessage().contains("does not support ACLs"));
   }
 
   @Test
