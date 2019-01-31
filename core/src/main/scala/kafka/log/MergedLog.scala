@@ -20,7 +20,7 @@ import org.apache.kafka.common.errors.{KafkaStorageException, OffsetOutOfRangeEx
 import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.record.{MemoryRecords, FileRecords}
 import org.apache.kafka.common.requests.FetchResponse.AbortedTransaction
-import org.apache.kafka.common.utils.Time
+import org.apache.kafka.common.utils.{Time, Utils}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConverters._
@@ -268,8 +268,9 @@ class MergedLog(private[log] val localLog: Log,
       // 1. contains the first unstable offset: we expect the first unstable offset to always be available locally
       // 2. contains the highwatermark: we only tier messages that have been ack'd by all replicas
       // 3. is the current active segment: we only tier immutable segments (that have been rolled already)
-      val upperBoundOffset = math.min(firstUnstableOffset.map(_.messageOffset).getOrElse(logEndOffset), highWatermark)
+      // 4. the segment end offset is less than the recovery point. This ensures we only upload segments that have been fsync'd.
 
+      val upperBoundOffset = Utils.min(firstUnstableOffset.map(_.messageOffset).getOrElse(logEndOffset), highWatermark, recoveryPoint)
       // The last segment we picked could still contain messages we are not allowed to tier. Dropping it seems to be the
       // easiest to do.
       localLogSegments(firstUntieredOffset, upperBoundOffset).dropRight(1)
