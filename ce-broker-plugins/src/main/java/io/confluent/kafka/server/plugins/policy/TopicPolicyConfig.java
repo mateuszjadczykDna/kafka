@@ -29,9 +29,10 @@ public class TopicPolicyConfig extends AbstractConfig {
   protected static final String SEGMENT_BYTES_MAX_CONFIG_DOC =
       "The maximum allowed value for the segment.bytes topic config property.";
 
+  // Min segment.ms is currently 600 seconds to unblock Kafka Streams (see CPKAFKA-2417)
   public static final String SEGMENT_MS_MIN_CONFIG =
           TopicPolicyConfig.TOPIC_PREFIX + "segment.ms.min";
-  public static final int DEFAULT_SEGMENT_MS_MIN = 4 * 60 * 60 * 1000;
+  public static final int DEFAULT_SEGMENT_MS_MIN = 600 * 1000;
   protected static final String SEGMENT_MS_MIN_CONFIG_DOC =
       "The minimum allowed value for the segment.ms topic config property.";
 
@@ -50,6 +51,8 @@ public class TopicPolicyConfig extends AbstractConfig {
   protected static final String DELETE_RETENTION_MS_MAX_CONFIG_DOC =
       "The maximum allowed value for the delete.retention.ms topic config property.";
 
+  // CCloud public documentation says max message bytes is 6 MB, we are leaving this at 8
+  // because some customers have already been told to use 8
   public static final String MAX_MESSAGE_BYTES_MAX_CONFIG =
       TopicPolicyConfig.TOPIC_PREFIX + "max.message.bytes.max";
   public static final int DEFAULT_MAX_MESSAGE_BYTES_MAX = 8 * 1024 * 1024;

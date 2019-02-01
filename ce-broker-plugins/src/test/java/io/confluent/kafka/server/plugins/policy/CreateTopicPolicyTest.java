@@ -151,6 +151,7 @@ public class CreateTopicPolicyTest {
         .put(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "100")
         .put(TopicConfig.RETENTION_BYTES_CONFIG, "100")
         .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")
+        .put(TopicConfig.SEGMENT_MS_CONFIG, "600")
         .build();
     when(requestMetadata.replicationFactor()).thenReturn(null);
     when(requestMetadata.numPartitions()).thenReturn(10);
@@ -232,7 +233,7 @@ public class CreateTopicPolicyTest {
   @Test(expected = PolicyViolationException.class)
   public void rejectSegmentMsTooLow() {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
-            .put(TopicConfig.SEGMENT_BYTES_CONFIG, "" + (3 * 60 * 60 * 1000))
+            .put(TopicConfig.SEGMENT_MS_CONFIG, "" + (500 * 1000))
             .build();
     when(requestMetadata.configs()).thenReturn(topicConfigs);
     policy.validate(requestMetadata);
