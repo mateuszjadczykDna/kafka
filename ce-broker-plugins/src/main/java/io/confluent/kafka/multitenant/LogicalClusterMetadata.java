@@ -5,6 +5,7 @@ package io.confluent.kafka.multitenant;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.Objects;
 
 import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
@@ -16,11 +17,14 @@ import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
 public class LogicalClusterMetadata {
 
   public static final String KAFKA_LOGICAL_CLUSTER_TYPE = "kafka";
+  public static final String HEALTHCHECK_LOGICAL_CLUSTER_TYPE = "healthcheck";
   public static final Double DEFAULT_REQUEST_PERCENTAGE =
       50.0 * TenantQuotaCallback.DEFAULT_MIN_PARTITIONS;
 
   // 100% overhead means that bandwidth quota will be set to byte_rate + 100% of byte_rate
   public static final Integer DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE = 100;
+  public static final Long DEFAULT_HEALTHCHECK_MAX_PRODUCER_RATE = 10L * 1024L * 1024L;
+  public static final Long DEFAULT_HEALTHCHECK_MAX_CONSUMER_RATE = 10L * 1024L * 1024L;
 
   private final String logicalClusterId;
   private final String physicalClusterId;
@@ -55,30 +59,16 @@ public class LogicalClusterMetadata {
     this.k8sClusterId = k8sClusterId;
     this.logicalClusterType = logicalClusterType;
     this.storageBytes = storageBytes;
-    this.producerByteRate = producerByteRate;
-    this.consumerByteRate = consumerByteRate;
+    this.producerByteRate = producerByteRate == null &&
+                            HEALTHCHECK_LOGICAL_CLUSTER_TYPE.equals(logicalClusterType) ?
+                            DEFAULT_HEALTHCHECK_MAX_PRODUCER_RATE : producerByteRate;
+    this.consumerByteRate = consumerByteRate == null &&
+                            HEALTHCHECK_LOGICAL_CLUSTER_TYPE.equals(logicalClusterType) ?
+                            DEFAULT_HEALTHCHECK_MAX_CONSUMER_RATE : consumerByteRate;
     this.requestPercentage = requestPercentage == null ?
                              DEFAULT_REQUEST_PERCENTAGE : requestPercentage;
     this.networkQuotaOverhead = networkQuotaOverhead == null ?
                                 DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE : networkQuotaOverhead;
-  }
-
-  // used by unit tests
-  LogicalClusterMetadata(String logicalClusterId, String physicalClusterId,
-                         String logicalClusterName, String accountId, String k8sClusterId,
-                         Long storageBytes, Long ingressByteRate, Long egressByteRate,
-                         Double requestPercentage, Integer networkQuotaOverhead) {
-    this.logicalClusterId = logicalClusterId;
-    this.physicalClusterId = physicalClusterId;
-    this.logicalClusterName = logicalClusterName;
-    this.accountId = accountId;
-    this.k8sClusterId = k8sClusterId;
-    this.logicalClusterType = KAFKA_LOGICAL_CLUSTER_TYPE;
-    this.storageBytes = storageBytes;
-    this.producerByteRate = ingressByteRate;
-    this.consumerByteRate = egressByteRate;
-    this.requestPercentage = requestPercentage;
-    this.networkQuotaOverhead = networkQuotaOverhead;
   }
 
   @JsonProperty
@@ -140,8 +130,9 @@ public class LogicalClusterMetadata {
    * Returns true if metadata values are valid
    */
   boolean isValid() {
-    return KAFKA_LOGICAL_CLUSTER_TYPE.equals(logicalClusterType) &&
-           producerByteRate != null && consumerByteRate != null;
+    return (KAFKA_LOGICAL_CLUSTER_TYPE.equals(logicalClusterType) ||
+            HEALTHCHECK_LOGICAL_CLUSTER_TYPE.equals(logicalClusterType)) &&
+            producerByteRate != null && consumerByteRate != null;
   }
 
   @Override

@@ -17,6 +17,7 @@ import org.junit.rules.TemporaryFolder;
 import static io.confluent.kafka.multitenant.quota.TenantQuotaCallback.DEFAULT_MIN_PARTITIONS;
 import static io.confluent.kafka.multitenant.Utils.LC_META_ABC;
 import static io.confluent.kafka.multitenant.Utils.LC_META_XYZ;
+import static io.confluent.kafka.multitenant.Utils.LC_META_HEALTHCHECK;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
@@ -164,9 +165,10 @@ public class PhysicalClusterMetadataTest {
     // update logical cluster
     LogicalClusterMetadata updatedLcMeta = new LogicalClusterMetadata(
         LC_META_XYZ.logicalClusterId(), LC_META_XYZ.physicalClusterId(),
-        "new-name", "new-account", LC_META_XYZ.k8sClusterId(), LC_META_XYZ.storageBytes(),
+        "new-name", "new-account", LC_META_XYZ.k8sClusterId(),
+        LC_META_XYZ.logicalClusterType(), LC_META_XYZ.storageBytes(),
         LC_META_XYZ.producerByteRate(), LC_META_XYZ.consumerByteRate(),
-        LC_META_XYZ.requestPercentage(), LC_META_XYZ.networkQuotaOverhead()
+        LC_META_XYZ.requestPercentage().longValue(), LC_META_XYZ.networkQuotaOverhead()
     );
     Files.write(lcFile, Utils.logicalClusterJsonString(updatedLcMeta, true).getBytes());
     TestUtils.waitForCondition(
@@ -191,13 +193,15 @@ public class PhysicalClusterMetadataTest {
     assertEquals(ImmutableSet.of(LC_META_XYZ.logicalClusterId()), lcCache.logicalClusterIds());
 
     // update file with invalid content with another invalid content
-    Files.write(fileWithInvalidContent, Utils.logicalClusterJsonString(LC_META_XYZ, false).getBytes());
+    Files.write(fileWithInvalidContent,
+                Utils.logicalClusterJsonString(LC_META_XYZ, false).getBytes());
 
     // we cannot verify that an update event was handled for already invalid file, so create
     // another valid file which should be an event after a file update event
     final LogicalClusterMetadata anotherMeta = new LogicalClusterMetadata(
         "lkc-123", "pkc-123", "123", "my-account", "k8s-123",
-        10485760L, 102400L, 204800L, LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
+        LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
+        10485760L, 102400L, 204800L, LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
         LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
     Utils.createLogicalClusterFile(anotherMeta, tempFolder);
     TestUtils.waitForCondition(
@@ -351,8 +355,9 @@ public class PhysicalClusterMetadataTest {
       throws IOException, InterruptedException {
     final LogicalClusterMetadata lcMeta =
         new LogicalClusterMetadata("lkc-qwr", "pkc-qwr", "xyz", "my-account", "k8s-abc",
+                                   LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
                                    104857600L, 1024L, null,
-                                   LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
+                                   LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
                                    LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
 
     lcCache.start();
@@ -364,8 +369,9 @@ public class PhysicalClusterMetadataTest {
 
     // "fix" cluster meta, which should cause cache update
     final LogicalClusterMetadata lcValidMeta = new LogicalClusterMetadata(
-        "lkc-qwr", "pkc-qwr", "xyz", "my-account", "k8s-abc", 104857600L, 1024L, 2048L,
-        LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
+        "lkc-qwr", "pkc-qwr", "xyz", "my-account", "k8s-abc",
+        LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE, 104857600L, 1024L, 2048L,
+        LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
         LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
     Files.write(metaFile, Utils.logicalClusterJsonString(lcValidMeta, true).getBytes());
     TestUtils.waitForCondition(
@@ -405,15 +411,49 @@ public class PhysicalClusterMetadataTest {
   }
 
   @Test
+  public void testHealthCheckAndKafkaTenant() throws IOException, InterruptedException {
+    TenantQuotaCallback quotaCallback = new TenantQuotaCallback();
+    quotaCallback.configure(Collections.singletonMap("broker.id", "1"));
+
+    lcCache.start();
+    assertTrue(lcCache.isUpToDate());
+    assertEquals(ImmutableSet.of(), lcCache.logicalClusterIds());
+
+    // create new file and ensure cache gets updated
+    Path lcFile = Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
+    Path healthcheckFile = Utils.createLogicalClusterFile(LC_META_HEALTHCHECK, tempFolder);
+
+    TestUtils.waitForCondition(
+        () -> lcCache.metadata(LC_META_XYZ.logicalClusterId()) != null,
+        "Expected metadata of new logical cluster to be present in metadata cache");
+    TestUtils.waitForCondition(
+        () -> lcCache.metadata(LC_META_HEALTHCHECK.logicalClusterId()) != null,
+        "Expected healthcheck tenant metadata to be present in metadata cache");
+    assertTrue(lcCache.isUpToDate());
+
+    // healthcheck throughput quotas should be unlimited
+    Map<String, String> tags =
+        Collections.singletonMap("tenant", LC_META_HEALTHCHECK.logicalClusterId());
+    assertEquals(
+        2.0 * LogicalClusterMetadata.DEFAULT_HEALTHCHECK_MAX_CONSUMER_RATE / DEFAULT_MIN_PARTITIONS,
+        quotaCallback.quotaLimit(ClientQuotaType.PRODUCE, tags), 0.001);
+    assertEquals(
+        2.0 * LogicalClusterMetadata.DEFAULT_HEALTHCHECK_MAX_CONSUMER_RATE / DEFAULT_MIN_PARTITIONS,
+        quotaCallback.quotaLimit(ClientQuotaType.FETCH, tags), 0.001);
+    assertEquals(LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE / DEFAULT_MIN_PARTITIONS,
+                 quotaCallback.quotaLimit(ClientQuotaType.REQUEST, tags), 0.001);
+  }
+
+  @Test
   public void testShouldSilentlySkipApiKeysAndHealthcheckFiles()
       throws IOException, InterruptedException {
     final String apikeysJson = "{\"keys\": {\"key1\": {" +
-                            "\"user_id\": \"user1\"," +
-                            "\"logical_cluster_id\": \"myCluster\"," +
-                            "\"sasl_mechanism\": \"PLAIN\"," +
-                            "\"hashed_secret\": \"no hash\"," +
-                            "\"hash_function\": \"none\"" +
-                            "}}}";
+                               "\"user_id\": \"user1\"," +
+                               "\"logical_cluster_id\": \"myCluster\"," +
+                               "\"sasl_mechanism\": \"PLAIN\"," +
+                               "\"hashed_secret\": \"no hash\"," +
+                               "\"hash_function\": \"none\"" +
+                               "}}}";
     final Path apikeysFile = tempFolder.newFile("apikeys.json").toPath();
     Files.write(apikeysFile, apikeysJson.getBytes());
 

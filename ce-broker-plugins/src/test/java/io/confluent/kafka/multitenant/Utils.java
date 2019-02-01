@@ -1,3 +1,5 @@
+// (Copyright) [2018 - 2019] Confluent, Inc.
+
 package io.confluent.kafka.multitenant;
 
 import org.junit.rules.TemporaryFolder;
@@ -10,16 +12,20 @@ import java.util.Map;
 public class Utils {
   static final LogicalClusterMetadata LC_META_XYZ =
       new LogicalClusterMetadata("lkc-xyz", "pkc-xyz", "xyz",
-          "my-account", "k8s-abc",
+          "my-account", "k8s-abc", LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
           104857600L, 1024L, 2048L,
-          LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
+          LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
           LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
   public static final LogicalClusterMetadata LC_META_ABC =
       new LogicalClusterMetadata("lkc-abc", "pkc-abc", "abc",
-          "my-account", "k8s-abc",
+          "my-account", "k8s-abc", LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
           10485760L, 102400L, 204800L,
-          LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE,
+          LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
           LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
+  public static final LogicalClusterMetadata LC_META_HEALTHCHECK =
+      new LogicalClusterMetadata("lkc-htc", "pkc-xyz", "external-healthcheck-pkc-xyz", "my-account",
+                                 "k8s-abc", LogicalClusterMetadata.HEALTHCHECK_LOGICAL_CLUSTER_TYPE,
+                                 null, null, null, null, null);
 
   public static PhysicalClusterMetadata initiatePhysicalClusterMetadata(Map<String, Object> configs) throws IOException {
     PhysicalClusterMetadata metadata = new PhysicalClusterMetadata();

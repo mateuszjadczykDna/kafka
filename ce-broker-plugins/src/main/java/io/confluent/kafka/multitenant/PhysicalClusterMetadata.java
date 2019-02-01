@@ -437,7 +437,7 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       }
       logicalClusterMap.put(lcMeta.logicalClusterId(), lcMeta);
       markUpToDate(logicalClusterId);
-      LOG.info("Added/Updated logical cluster {}", lcMeta.logicalClusterId());
+      LOG.info("Added/Updated logical cluster {}", lcMeta);
 
       // for now updating all the quotas
       updateQuotas();
