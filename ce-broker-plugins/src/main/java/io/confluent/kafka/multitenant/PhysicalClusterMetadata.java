@@ -1,4 +1,4 @@
-// (Copyright) [2018 - 2018] Confluent, Inc.
+// (Copyright) [2018 - 2019] Confluent, Inc.
 
 package io.confluent.kafka.multitenant;
 
@@ -40,7 +40,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.confluent.kafka.multitenant.quota.QuotaConfig;
 import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
-import io.confluent.kafka.utils.RetryBackoff;
+import io.confluent.kafka.common.utils.RetryBackoff;
 import kafka.server.KafkaConfig$;
 
 /**

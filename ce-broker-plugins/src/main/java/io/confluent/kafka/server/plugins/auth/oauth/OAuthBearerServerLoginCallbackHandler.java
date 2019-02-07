@@ -1,9 +1,9 @@
-// (Copyright) [2017 - 2018] Confluent, Inc.
+// (Copyright) [2017 - 2019] Confluent, Inc.
 
 package io.confluent.kafka.server.plugins.auth.oauth;
 
 import io.confluent.common.security.util.PemUtils;
-import io.confluent.kafka.multitenant.oauth.OAuthBearerJwsToken;
+import io.confluent.kafka.common.multitenant.oauth.OAuthBearerJwsToken;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 import org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule;

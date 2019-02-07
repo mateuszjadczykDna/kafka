@@ -1,7 +1,8 @@
-// (Copyright) [2017 - 2017] Confluent, Inc.
+// (Copyright) [2017 - 2019] Confluent, Inc.
 
 package io.confluent.kafka.multitenant;
 
+import io.confluent.kafka.multitenant.schema.TenantContext;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 public class MultiTenantPrincipal extends KafkaPrincipal {
@@ -9,6 +10,7 @@ public class MultiTenantPrincipal extends KafkaPrincipal {
   public static final String TENANT_USER_TYPE = "TenantUser";
   public static final String TENANT_WILDCARD_USER_TYPE = MultiTenantPrincipal.TENANT_USER_TYPE
       + "*";
+  public static final String DELIMITER = TenantContext.DELIMITER;
 
   private final String user;
   private final TenantMetadata tenantMetadata;

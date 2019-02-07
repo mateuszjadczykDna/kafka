@@ -246,7 +246,7 @@
     <suppress checks="NPathComplexity" files="MultiTenantApis|LdapGroupManager|SecretsLoader|TenantPartitionAssignor"/>
     <suppress checks="JavaNCSS" files="TenantPartitionAssignor"/>
     <suppress checks="ClassDataAbstractionCoupling" files="(MultiTenantRequestContext|LdapGroupManager|OAuthBearerSecureTokenValidatorCallbackHandler|SecretsLoader).java"/>
-    <suppress checks="BooleanExpressionComplexity" files="LdapAuthorizer|MultiTenantAuthorizer|MultiTenantRequestContext"/>
+    <suppress checks="BooleanExpressionComplexity" files="MultiTenantRequestContext"/>
     <suppress checks="ClassFanOutComplexity" files="MultiTenantRequestContext.java"/>
 
     <!-- ce-broker-plugins test suppressions -->

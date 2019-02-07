@@ -1,4 +1,4 @@
-// (Copyright) [2018 - 2018] Confluent, Inc.
+// (Copyright) [2018 - 2019] Confluent, Inc.
 
 package io.confluent.kafka.test.utils;
 
@@ -44,7 +44,7 @@ public class KafkaTestUtils {
     return serverConfig;
   }
 
-  public static KafkaProducer<String, String> createProducer(
+  public static Properties producerProps(
       String bootstrapServers,
       SecurityProtocol securityProtocol,
       String saslMechanism,
@@ -58,8 +58,15 @@ public class KafkaTestUtils {
     props.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
     props.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
         StringSerializer.class.getName());
+    return props;
+  }
 
-    return new KafkaProducer<>(props);
+  public static KafkaProducer<String, String> createProducer(
+      String bootstrapServers,
+      SecurityProtocol securityProtocol,
+      String saslMechanism,
+      String jaasConfig) {
+    return new KafkaProducer<>(producerProps(bootstrapServers, securityProtocol, saslMechanism, jaasConfig));
   }
 
   public static void sendRecords(KafkaProducer<String, String> producer, String topic,

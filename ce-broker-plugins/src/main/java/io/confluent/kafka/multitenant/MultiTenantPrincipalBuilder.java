@@ -1,8 +1,8 @@
-// (Copyright) [2017 - 2018] Confluent, Inc.
+// (Copyright) [2017 - 2019] Confluent, Inc.
 
 package io.confluent.kafka.multitenant;
 
-import io.confluent.kafka.multitenant.oauth.OAuthBearerJwsToken;
+import io.confluent.kafka.common.multitenant.oauth.OAuthBearerJwsToken;
 import org.apache.kafka.common.security.auth.AuthenticationContext;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.KafkaPrincipalBuilder;
@@ -30,7 +30,6 @@ public class MultiTenantPrincipalBuilder implements KafkaPrincipalBuilder {
 
   private static final String OAUTH_NEGOTIATED_TOKEN_PROPERTY_KEY =
           OAuthBearerLoginModule.OAUTHBEARER_MECHANISM + ".token";
-  public static final String OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY = "logicalCluster";
 
   @Override
   public KafkaPrincipal build(AuthenticationContext context) {
@@ -45,7 +44,7 @@ public class MultiTenantPrincipalBuilder implements KafkaPrincipalBuilder {
         OAuthBearerJwsToken token = (OAuthBearerJwsToken) server.getNegotiatedProperty(
                 OAUTH_NEGOTIATED_TOKEN_PROPERTY_KEY);
         String logicalCluster = (String) server.getNegotiatedProperty(
-                OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY);
+                OAuthBearerJwsToken.OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY);
 
         // OAuth tokens are used only from UI, so this is a super-user.
         return new MultiTenantPrincipal(

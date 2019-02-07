@@ -40,6 +40,7 @@
     <allow pkg="io.confluent.command" />
     <allow pkg="io.confluent.license" />
     <allow pkg="io.confluent.serializers" />
+    <allow pkg="io.confluent.kafka.common.license" />
     <allow pkg="kafka" />
     <allow pkg="org.apache.kafka.clients" />
     <allow pkg="org.apache.kafka.common" />
@@ -82,34 +83,44 @@
     <allow pkg="org.apache.kafka.server" />
     <allow pkg="scala" />
 
-   <subpackage name="security.test">
-     <allow pkg="org.apache.kafka.test" />
-   </subpackage>
+    <subpackage name="server.plugins.auth.oauth">
+      <allow pkg="org.apache.kafka.test" />
+    </subpackage>
 
-   <subpackage name="security.ldap.authorizer">
-     <allow pkg="org.apache.kafka.test" />
-   </subpackage>
+    <subpackage name="test.cluster">
+      <allow pkg="org.apache.kafka.test" />
+    </subpackage>
 
-   <subpackage name="server.plugins.auth.oauth">
-     <allow pkg="org.apache.kafka.test" />
-   </subpackage>
-
-   <subpackage name="multitenant.integration.test">
-     <allow pkg="org.apache.kafka.test" />
-   </subpackage>
-
-   <subpackage name="test.cluster">
-     <allow pkg="org.apache.kafka.test" />
-   </subpackage>
-
-   <subpackage name="multitenant">
-     <allow pkg="org.apache.kafka.test" />
-   </subpackage>
-  
-   <subpackage name="security.minikdc">
-     <allow pkg="org.apache.commons.lang.text" />
-     <allow pkg="org.apache.directory" />
-   </subpackage>
+    <subpackage name="multitenant">
+      <allow pkg="org.apache.kafka.test" />
+    </subpackage>
   </subpackage>
 
-</import-control>
+  <subpackage name="security">
+    <allow pkg="io.confluent.kafka.common" />
+    <allow pkg="io.confluent.kafka.security" />
+    <allow pkg="io.confluent.license" />
+    <allow pkg="io.confluent.security" />
+    <allow pkg="kafka" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+    <allow pkg="scala" />
+
+    <subpackage name="auth.provider.ldap">
+      <allow pkg="org.apache.kafka.test" />
+      <allow pkg="io.confluent.kafka.test" />
+    </subpackage>
+
+    <subpackage name="test">
+      <allow pkg="org.apache.kafka.test" />
+      <allow pkg="io.confluent.kafka.security.ldap.authorizer" />
+      <allow pkg="io.confluent.kafka.test" />
+    </subpackage>
+
+    <subpackage name="minikdc">
+      <allow pkg="org.apache.commons.lang.text" />
+      <allow pkg="org.apache.directory" />
+    </subpackage>
+  </subpackage>
+
+  </import-control>

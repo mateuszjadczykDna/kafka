@@ -1,9 +1,9 @@
-// (Copyright) [2017 - 2018] Confluent, Inc.
+// (Copyright) [2017 - 2019] Confluent, Inc.
 
 package io.confluent.kafka.server.plugins.auth.oauth;
 
+import io.confluent.kafka.common.multitenant.oauth.OAuthBearerJwsToken;
 import io.confluent.kafka.multitenant.PhysicalClusterMetadata;
-import io.confluent.kafka.multitenant.oauth.OAuthBearerJwsToken;
 import io.confluent.kafka.multitenant.Utils;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.ConfluentConfigs;
@@ -30,7 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-import static io.confluent.kafka.multitenant.MultiTenantPrincipalBuilder.OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY;
+import static io.confluent.kafka.common.multitenant.oauth.OAuthBearerJwsToken.OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY;
 import static io.confluent.kafka.multitenant.Utils.LC_META_ABC;
 import static io.confluent.kafka.multitenant.Utils.initiatePhysicalClusterMetadata;
 import static junit.framework.TestCase.assertTrue;
