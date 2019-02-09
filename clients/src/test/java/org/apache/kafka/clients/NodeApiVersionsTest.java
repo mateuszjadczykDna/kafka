@@ -50,7 +50,7 @@ public class NodeApiVersionsTest {
     public void testUnknownApiVersionsToString() {
         ApiVersion unknownApiVersion = new ApiVersion((short) 337, (short) 0, (short) 1);
         NodeApiVersions versions = new NodeApiVersions(Collections.singleton(unknownApiVersion));
-        assertTrue(versions.toString().endsWith("UNKNOWN(337): 0 to 1)"));
+        assertTrue(versions.toString().contains("UNKNOWN(337): 0 to 1"));
     }
 
     @Test

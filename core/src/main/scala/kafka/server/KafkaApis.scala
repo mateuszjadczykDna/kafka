@@ -46,6 +46,8 @@ import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, TRANSACTION_STATE_TOPIC_NAME, isInternal}
 import org.apache.kafka.common.message.ElectPreferredLeadersResponseData
+import org.apache.kafka.common.message.TierListOffsetResponseData
+import org.apache.kafka.common.message.TierListOffsetResponseData.{TierListOffsetPartitionResponse, TierListOffsetTopicResponse}
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.network.{ListenerName, Send}
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
@@ -55,6 +57,7 @@ import org.apache.kafka.common.requests.CreateTopicsRequest.TopicDetails
 import org.apache.kafka.common.requests.DeleteAclsResponse.{AclDeletionResult, AclFilterResponse}
 import org.apache.kafka.common.requests.DescribeLogDirsResponse.LogDirInfo
 import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
+import org.apache.kafka.common.requests.TierListOffsetRequest.OffsetType
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.resource.PatternType.LITERAL
 import org.apache.kafka.common.resource.{PatternType, ResourcePattern}
@@ -158,6 +161,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.DESCRIBE_DELEGATION_TOKEN => handleDescribeTokensRequest(request)
         case ApiKeys.DELETE_GROUPS => handleDeleteGroupsRequest(request)
         case ApiKeys.ELECT_PREFERRED_LEADERS => handleElectPreferredReplicaLeader(request)
+        case _ if request.header.apiKey.isInternal => handleInternalRequest(request)
       }
     } catch {
       case e: FatalExitError => throw e
@@ -165,6 +169,57 @@ class KafkaApis(val requestChannel: RequestChannel,
     } finally {
       request.apiLocalCompleteTimeNanos = time.nanoseconds
     }
+  }
+
+  private def handleInternalRequest(request: RequestChannel.Request) {
+    request.header.apiKey match {
+      case ApiKeys.TIER_LIST_OFFSET => handleTierListOffsetRequest(request)
+      case _ => throw new IllegalArgumentException(s"Unsupported API key ${request.header.apiKey.id}")
+    }
+  }
+
+  // Handle TierListOffsetRequest which is a tiering aware offset lookup request. See TierListOffsetRequest for more details.
+  def handleTierListOffsetRequest(request: RequestChannel.Request) {
+    val offsetRequest = request.body[TierListOffsetRequest]
+    val responseData = new TierListOffsetResponseData()
+
+    authorizeClusterAction(request)
+
+    offsetRequest.data.topics.asScala.foreach { topicRequest =>
+      val topicResponse = new TierListOffsetTopicResponse()
+        .setName(topicRequest.name)
+      responseData.topics.add(topicResponse)
+
+      topicRequest.partitions.asScala.foreach { partitionRequest =>
+        val partitionResponse = new TierListOffsetPartitionResponse()
+          .setPartitionIndex(partitionRequest.partitionIndex)
+        topicResponse.partitions.add(partitionResponse)
+
+        val topicPartition = new TopicPartition(topicRequest.name, partitionRequest.partitionIndex)
+        val leaderEpoch = int2Integer(partitionRequest.currentLeaderEpoch)
+        val leaderEpochOpt =
+          if (leaderEpoch == RecordBatch.NO_PARTITION_LEADER_EPOCH)
+            None
+          else
+            Some(leaderEpoch)
+
+        val offsetOpt = replicaManager.fetchTierOffset(topicPartition, OffsetType.forId(partitionRequest.offsetType),
+          leaderEpochOpt, fetchOnlyFromLeader = true)
+        offsetOpt match {
+          case Some(offset) =>
+            partitionResponse
+              .setOffset(offset)
+              .setErrorCode(Errors.NONE.code)
+
+          case None =>
+            partitionResponse
+              .setOffset(TierListOffsetResponse.UNKNOWN_OFFSET)
+              .setErrorCode(Errors.NONE.code)
+        }
+      }
+    }
+
+    sendResponseExemptThrottle(request, response = new TierListOffsetResponse(responseData))
   }
 
   def handleLeaderAndIsrRequest(request: RequestChannel.Request) {

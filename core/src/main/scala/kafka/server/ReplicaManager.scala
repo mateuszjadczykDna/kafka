@@ -46,6 +46,7 @@ import org.apache.kafka.common.requests._
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
+import org.apache.kafka.common.requests.TierListOffsetRequest.OffsetType
 
 import scala.collection.JavaConverters._
 import scala.collection._
@@ -807,6 +808,14 @@ class ReplicaManager(val config: KafkaConfig,
         }
       }
     }
+  }
+
+  def fetchTierOffset(topicPartition: TopicPartition,
+                      offset: OffsetType,
+                      currentLeaderEpoch: Option[Integer],
+                      fetchOnlyFromLeader: Boolean): Option[Long] = {
+    val partition = getPartitionOrException(topicPartition, expectLeader = fetchOnlyFromLeader)
+    partition.fetchTierOffsetForType(offset, currentLeaderEpoch, fetchOnlyFromLeader)
   }
 
   def fetchOffsetForTimestamp(topicPartition: TopicPartition,

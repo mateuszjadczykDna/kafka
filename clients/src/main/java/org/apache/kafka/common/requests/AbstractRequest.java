@@ -230,6 +230,15 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
             case ELECT_PREFERRED_LEADERS:
                 return new ElectPreferredLeadersRequest(struct, apiVersion);
             default:
+                return maybeParseInternalRequest(apiKey, apiVersion, struct);
+        }
+    }
+
+    private static AbstractRequest maybeParseInternalRequest(ApiKeys apiKey, short apiVersion, Struct struct) {
+        switch (apiKey) {
+            case TIER_LIST_OFFSET:
+                return new TierListOffsetRequest(struct, apiVersion);
+            default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `parseRequest`, the " +
                         "code should be updated to do so.", apiKey));
         }

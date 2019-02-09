@@ -36,11 +36,13 @@ import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.record.{MemoryRecords, RecordBatch}
 import org.apache.kafka.common.requests.EpochEndOffset._
+import org.apache.kafka.common.requests.TierListOffsetRequest.OffsetType
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.utils.Time
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.compat.java8.OptionConverters._
 
 object Partition {
   def apply(topicPartition: TopicPartition,
@@ -811,6 +813,19 @@ class Partition(val topicPartition: TopicPartition,
       logStartOffset = initialLogStartOffset,
       logEndOffset = initialLogEndOffset,
       lastStableOffset = initialLastStableOffset)
+  }
+
+  def fetchTierOffsetForType(offsetType: OffsetType,
+                             currentLeaderEpoch: Option[Integer],
+                             fetchOnlyFromLeader: Boolean): Option[Long] = inReadLock(leaderIsrUpdateLock) {
+    // decide whether to only fetch from leader
+    localReplicaWithEpochOrException(currentLeaderEpoch.asJava, fetchOnlyFromLeader)
+    logManager.getLog(topicPartition).flatMap { log =>
+      offsetType match {
+        case OffsetType.LOCAL_START_OFFSET => log.localLogSegments.headOption.map(_.baseOffset)
+        case _ => throw new UnsupportedOperationException(s"Lookup for ${offsetType} not supported")
+      }
+    }
   }
 
   def fetchOffsetForTimestamp(timestamp: Long,

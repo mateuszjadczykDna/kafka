@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.common.protocol;
 
+import org.apache.kafka.common.message.TierListOffsetRequestData;
+import org.apache.kafka.common.message.TierListOffsetResponseData;
 import org.apache.kafka.common.message.ElectPreferredLeadersRequestData;
 import org.apache.kafka.common.message.ElectPreferredLeadersResponseData;
 import org.apache.kafka.common.protocol.types.Schema;
@@ -111,6 +113,8 @@ import org.apache.kafka.common.requests.WriteTxnMarkersRequest;
 import org.apache.kafka.common.requests.WriteTxnMarkersResponse;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.kafka.common.protocol.types.Type.BYTES;
@@ -190,25 +194,30 @@ public enum ApiKeys {
     DESCRIBE_DELEGATION_TOKEN(41, "DescribeDelegationToken", DescribeDelegationTokenRequest.schemaVersions(), DescribeDelegationTokenResponse.schemaVersions()),
     DELETE_GROUPS(42, "DeleteGroups", DeleteGroupsRequest.schemaVersions(), DeleteGroupsResponse.schemaVersions()),
     ELECT_PREFERRED_LEADERS(43, "ElectPreferredLeaders", ElectPreferredLeadersRequestData.SCHEMAS,
-            ElectPreferredLeadersResponseData.SCHEMAS);
+            ElectPreferredLeadersResponseData.SCHEMAS),
 
-    private static final ApiKeys[] ID_TO_TYPE;
-    private static final int MIN_API_KEY = 0;
-    public static final int MAX_API_KEY;
+    /* ----- Begin internal APIs: API ids decrement sequentially starting from Short.MAX_VALUE with `isInternal` set to true ----- */
+
+    TIER_LIST_OFFSET(32767, "TierListOffsets", true, TierListOffsetRequestData.SCHEMAS, TierListOffsetResponseData.SCHEMAS, true);
+
+    /* ----- End internal APIs ----- */
+
+    private static final Map<Short, ApiKeys> ID_TO_TYPE = new HashMap<>(values().length);
 
     static {
-        int maxKey = -1;
-        for (ApiKeys key : ApiKeys.values())
-            maxKey = Math.max(maxKey, key.id);
-        ApiKeys[] idToType = new ApiKeys[maxKey + 1];
-        for (ApiKeys key : ApiKeys.values())
-            idToType[key.id] = key;
-        ID_TO_TYPE = idToType;
-        MAX_API_KEY = maxKey;
+        for (ApiKeys key : ApiKeys.values()) {
+            ApiKeys oldValue = ID_TO_TYPE.put(key.id, key);
+            if (oldValue != null)
+                throw new ExceptionInInitializerError("id " + key.id + " for API key " + key.name +
+                        " has already been used by " + oldValue.name);
+        }
     }
 
     /** the permanent and immutable id of an API--this can't change ever */
     public final short id;
+
+    /** indicates if this is a Confluent-internal API */
+    public final boolean isInternal;
 
     /** an english description of the api--this is for debugging and can change */
     public final String name;
@@ -231,11 +240,21 @@ public enum ApiKeys {
         this(id, name, clusterAction, RecordBatch.MAGIC_VALUE_V0, requestSchemas, responseSchemas);
     }
 
+    ApiKeys(int id, String name, boolean clusterAction, Schema[] requestSchemas, Schema[] responseSchemas, boolean isInternal) {
+        this(id, name, clusterAction, RecordBatch.MAGIC_VALUE_V0, requestSchemas, responseSchemas, isInternal);
+    }
+
     ApiKeys(int id, String name, boolean clusterAction, byte minRequiredInterBrokerMagic,
             Schema[] requestSchemas, Schema[] responseSchemas) {
+        this(id, name, clusterAction, minRequiredInterBrokerMagic, requestSchemas, responseSchemas, false);
+    }
+
+    ApiKeys(int id, String name, boolean clusterAction, byte minRequiredInterBrokerMagic,
+            Schema[] requestSchemas, Schema[] responseSchemas, boolean isInternal) {
         if (id < 0)
             throw new IllegalArgumentException("id must not be negative, id: " + id);
         this.id = (short) id;
+        this.isInternal = isInternal;
         this.name = name;
         this.clusterAction = clusterAction;
         this.minRequiredInterBrokerMagic = minRequiredInterBrokerMagic;
@@ -264,14 +283,14 @@ public enum ApiKeys {
     }
 
     public static ApiKeys forId(int id) {
-        if (!hasId(id))
-            throw new IllegalArgumentException(String.format("Unexpected ApiKeys id `%s`, it should be between `%s` " +
-                    "and `%s` (inclusive)", id, MIN_API_KEY, MAX_API_KEY));
-        return ID_TO_TYPE[id];
+        ApiKeys apiKeys = ID_TO_TYPE.get((short) id);
+        if (apiKeys == null)
+            throw new IllegalArgumentException(String.format("Unexpected ApiKeys id `%s`", id));
+        return apiKeys;
     }
 
     public static boolean hasId(int id) {
-        return id >= MIN_API_KEY && id <= MAX_API_KEY;
+        return ID_TO_TYPE.containsKey((short) id);
     }
 
     public short latestVersion() {
@@ -329,6 +348,8 @@ public enum ApiKeys {
         b.append("<th>Key</th>\n");
         b.append("</tr>");
         for (ApiKeys key : ApiKeys.values()) {
+            if (key.isInternal)
+                continue;
             b.append("<tr>\n");
             b.append("<td>");
             b.append("<a href=\"#The_Messages_" + key.name + "\">" + key.name + "</a>");
