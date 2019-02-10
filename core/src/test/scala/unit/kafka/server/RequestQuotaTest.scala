@@ -24,7 +24,7 @@ import kafka.security.auth._
 import kafka.utils.TestUtils
 import org.apache.kafka.common.acl.{AccessControlEntry, AccessControlEntryFilter, AclBinding, AclBindingFilter, AclOperation, AclPermissionType}
 import org.apache.kafka.common.config.ConfigResource
-import org.apache.kafka.common.message.ElectPreferredLeadersRequestData
+import org.apache.kafka.common.message.{ElectPreferredLeadersRequestData, TierListOffsetRequestData}
 import org.apache.kafka.common.resource.{PatternType, ResourcePattern, ResourcePatternFilter, ResourceType => AdminResourceType}
 import org.apache.kafka.common.{Node, TopicPartition}
 import org.apache.kafka.common.metrics.{KafkaMetric, Quota, Sensor}
@@ -33,6 +33,7 @@ import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.protocol.types.Struct
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.requests.CreateAclsRequest.AclCreation
+import org.apache.kafka.common.requests.TierListOffsetRequest.OffsetType
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.security.auth.{AuthenticationContext, KafkaPrincipal, KafkaPrincipalBuilder, SecurityProtocol}
 import org.apache.kafka.common.utils.Sanitizer
@@ -370,7 +371,28 @@ class RequestQuotaTest extends BaseRequestTest {
                 .setTopicPartitions(Collections.singletonList(partition)))
 
         case _ =>
-          throw new IllegalArgumentException("Unsupported API key " + apiKey)
+          maybeBuildInternalRequest(apiKey)
+    }
+  }
+
+  private def maybeBuildInternalRequest(apiKey: ApiKeys): AbstractRequest.Builder[_ <: AbstractRequest] = {
+    apiKey match {
+      case ApiKeys.TIER_LIST_OFFSET =>
+        val partition = new TierListOffsetRequestData.TierListOffsetPartition()
+          .setPartitionIndex(0)
+          .setOffsetType(OffsetType.toId(OffsetType.LOCAL_START_OFFSET))
+          .setCurrentLeaderEpoch(0)
+        val topic = new TierListOffsetRequestData.TierListOffsetTopic()
+          .setName("my_topic")
+          .setPartitions(Collections.singletonList(partition))
+
+        new TierListOffsetRequest.Builder(
+          new TierListOffsetRequestData()
+            .setReplicaId(0)
+            .setTopics(Collections.singletonList(topic)))
+
+      case _ =>
+        throw new IllegalArgumentException("Unsupported API key " + apiKey)
     }
   }
 
