@@ -21,9 +21,10 @@ public interface AccessRuleProvider extends Configurable {
    *
    * @param sessionPrincipal User principal from the Session
    * @param groupPrincipals List of group principals of the user, which may be empty
+   * @param scope Scope of resource being access
    * @return true if super-user or super-group
    */
-  boolean isSuperUser(KafkaPrincipal sessionPrincipal, Set<KafkaPrincipal> groupPrincipals);
+  boolean isSuperUser(KafkaPrincipal sessionPrincipal, Set<KafkaPrincipal> groupPrincipals, String scope);
 
   /**
    * Returns the set of access rules for the user and group principals that match the provided
@@ -31,11 +32,13 @@ public interface AccessRuleProvider extends Configurable {
    *
    * @param sessionPrincipal User principal from the Session
    * @param groupPrincipals List of group principals of the user, which may be empty
+   * @param scope Scope of resource
    * @param resource Resource being accessed
    * @return Set of matching rules
    */
   Set<AccessRule> accessRules(KafkaPrincipal sessionPrincipal,
                               Set<KafkaPrincipal> groupPrincipals,
+                              String scope,
                               Resource resource);
 
   /**

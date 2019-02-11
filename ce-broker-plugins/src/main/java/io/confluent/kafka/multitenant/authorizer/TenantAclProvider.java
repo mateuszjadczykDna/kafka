@@ -71,14 +71,17 @@ public class TenantAclProvider extends AclProvider {
   }
 
   @Override
-  public boolean isSuperUser(KafkaPrincipal sessionPrincipal, Set<KafkaPrincipal> groupPrincipals) {
-    return authorizationDisabled || super.isSuperUser(sessionPrincipal, groupPrincipals)
+  public boolean isSuperUser(KafkaPrincipal sessionPrincipal,
+                             Set<KafkaPrincipal> groupPrincipals,
+                             String scope) {
+    return authorizationDisabled || super.isSuperUser(sessionPrincipal, groupPrincipals, scope)
       || isSuperUser(sessionPrincipal) || groupPrincipals.stream().anyMatch(this::isSuperUser);
   }
 
   @Override
   public Set<AccessRule> accessRules(KafkaPrincipal sessionPrincipal,
                                      Set<KafkaPrincipal> groupPrincipals,
+                                     String scope,
                                      Resource resource) {
     if (!groupPrincipals.isEmpty())
       throw new UnsupportedOperationException("Groups are not supported for TenantAclProvider");
@@ -113,8 +116,10 @@ public class TenantAclProvider extends AclProvider {
         && ((MultiTenantPrincipal) userPrincipal).tenantMetadata().isSuperUser;
   }
 
-  private boolean userAcl(AccessRule permission, KafkaPrincipal userPrincipal, KafkaPrincipal wildcardPrincipal) {
-    KafkaPrincipal aclPrincipal = permission.principal();
+  private boolean userAcl(AccessRule rule,
+                          KafkaPrincipal userPrincipal,
+                          KafkaPrincipal wildcardPrincipal) {
+    KafkaPrincipal aclPrincipal = rule.principal();
     return aclPrincipal.equals(userPrincipal) || aclPrincipal.equals(wildcardPrincipal);
   }
 }

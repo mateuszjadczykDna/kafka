@@ -44,6 +44,7 @@ import kafka.server.KafkaConfig$;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -143,6 +144,25 @@ public class LdapAuthorizerTest {
     verifyAuthorization("anotherUser", topicResource, Write$.MODULE$, true);
     deleteTopicAcl(adminGroupPrincipal, topicResource, All$.MODULE$);
     verifyAuthorization("anotherUser", topicResource, Write$.MODULE$, false);
+  }
+
+  @Test
+  public void testLdapFailure() throws Exception {
+    miniKdcWithLdapService.createGroup("adminGroup", "adminUser", "kafkaUser");
+    miniKdcWithLdapService.createGroup("guestGroup", "guest");
+    authorizerConfig.put(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, "1000");
+    ldapAuthorizer.configure(authorizerConfig);
+
+    KafkaPrincipal adminGroupPrincipal = new KafkaPrincipal("Group", "adminGroup");
+    Resource topicResource = randomResource(Topic$.MODULE$);
+    addTopicAcl(adminGroupPrincipal, topicResource, All$.MODULE$);
+
+    TOPIC_OPS.forEach(op -> verifyAuthorization("adminUser", topicResource, op, true));
+
+    miniKdcWithLdapService.shutdown();
+    TestUtils.waitForCondition(() -> {
+      return !ldapAuthorizer.authorize(session("adminUser"), Read$.MODULE$, topicResource);
+    }, "LDAP failure not detected");
   }
 
   private void verifyResourceAcls(Resource resource, Collection<Operation> ops,

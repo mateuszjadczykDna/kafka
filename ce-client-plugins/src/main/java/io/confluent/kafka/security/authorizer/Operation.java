@@ -4,6 +4,11 @@ package io.confluent.kafka.security.authorizer;
 
 import java.util.Objects;
 
+/**
+ * Represents an authorizable operation, e.g. Read, Write. This includes all Kafka operations
+ * and additional operations may be added dynamically. Authorizers don't check the validity of
+ * operations against resource types, authorization succeeds if an access rule matches.
+ */
 public class Operation {
   public static final Operation ALL = new Operation("All");
 
@@ -15,6 +20,10 @@ public class Operation {
 
   public String name() {
     return name;
+  }
+
+  public boolean matches(Operation resourceOperation) {
+    return this.equals(ALL) || this.equals(resourceOperation);
   }
 
   @Override

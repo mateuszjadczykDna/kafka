@@ -2,6 +2,7 @@
 
 package io.confluent.security.auth.provider.ldap;
 
+import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
 import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig.SearchMode;
 import io.confluent.kafka.common.utils.RetryBackoff;
 
@@ -214,6 +215,8 @@ public class LdapGroupManager {
   }
 
   public Set<String> groups(String userPrincipal) {
+    if (failed())
+      throw new ProviderFailedException("LDAP Group provider has failed");
     return userGroupCache.getOrDefault(userPrincipal, Collections.emptySet());
   }
 

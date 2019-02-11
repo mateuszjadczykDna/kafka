@@ -18,8 +18,7 @@
 
 package io.confluent.kafka.security.authorizer;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import io.confluent.kafka.test.utils.KafkaTestUtils;
 import java.util.HashMap;
 import java.util.Map;
 import kafka.network.RequestChannel.Session;
@@ -82,28 +81,18 @@ public class ConfluentKafkaAuthorizerTest extends SimpleAclAuthorizerTest {
 
   private void initialize() {
     try {
-      for (Field field : SimpleAclAuthorizerTest.class.getDeclaredFields()) {
-        String name = field.getName();
-        field.setAccessible(true);
-        if (name.endsWith("superUsers")) {
-          superUsers = (String) field.get(this);
-        } else if (name.endsWith("simpleAclAuthorizer")) {
-          setAuthorizer(field, authorizer);
-        } else if (name.endsWith("simpleAclAuthorizer2")) {
-          setAuthorizer(field, authorizer2);
-        }
-      }
+      superUsers = KafkaTestUtils.fieldValue(this, SimpleAclAuthorizerTest.class, "superUsers");
+      KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
+          "simpleAclAuthorizer", simpleAclAuthorizer(authorizer));
+      KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
+          "simpleAclAuthorizer2", simpleAclAuthorizer(authorizer2));
     } catch (Exception e) {
       throw new RuntimeException("Could not initialize test", e);
     }
   }
 
-  protected void setAuthorizer(Field field, Authorizer authorizer) throws Exception {
-    Field modifiersField = Field.class.getDeclaredField("modifiers");
-    modifiersField.setAccessible(true);
-    int modifiers = field.getModifiers();
-    modifiersField.setInt(field, modifiers & ~Modifier.FINAL);
-    SimpleAclAuthorizer simpleAuthorizer = new SimpleAclAuthorizer() {
+  protected SimpleAclAuthorizer simpleAclAuthorizer(Authorizer authorizer) throws Exception {
+    return new SimpleAclAuthorizer() {
       @Override
       public void configure(Map<String, ?> javaConfigs) {
         authorizer.configure(javaConfigs);
@@ -149,7 +138,6 @@ public class ConfluentKafkaAuthorizerTest extends SimpleAclAuthorizerTest {
         authorizer.close();
       }
     };
-    field.set(this, simpleAuthorizer);
   }
 }
 

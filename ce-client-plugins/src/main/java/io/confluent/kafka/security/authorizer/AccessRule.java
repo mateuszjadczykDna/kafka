@@ -2,6 +2,7 @@
 
 package io.confluent.kafka.security.authorizer;
 
+import java.util.Objects;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 /**
@@ -52,6 +53,28 @@ public class AccessRule {
 
   public String sourceDescription() {
     return sourceDescription;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof AccessRule)) {
+      return false;
+    }
+
+    AccessRule that = (AccessRule) o;
+    return Objects.equals(this.principal, that.principal) &&
+        Objects.equals(this.permissionType, that.permissionType) &&
+        Objects.equals(this.host, that.host) &&
+        Objects.equals(this.operation, that.operation) &&
+        Objects.equals(this.sourceDescription, that.sourceDescription);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(principal, permissionType, host, operation, sourceDescription);
   }
 
   @Override

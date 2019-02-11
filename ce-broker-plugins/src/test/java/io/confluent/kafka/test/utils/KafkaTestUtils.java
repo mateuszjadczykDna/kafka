@@ -2,10 +2,14 @@
 
 package io.confluent.kafka.test.utils;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -22,7 +26,16 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.acl.AccessControlEntry;
+import org.apache.kafka.common.acl.AclBinding;
+import org.apache.kafka.common.acl.AclOperation;
+import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.errors.AuthorizationException;
+import org.apache.kafka.common.resource.PatternType;
+import org.apache.kafka.common.resource.ResourcePattern;
+import org.apache.kafka.common.resource.ResourceType;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -148,5 +161,119 @@ public class KafkaTestUtils {
     props.setProperty(SaslConfigs.SASL_KERBEROS_SERVICE_NAME, "kafka");
 
     return AdminClient.create(props);
+  }
+
+  @SuppressWarnings("unchecked")
+  public static <T> T fieldValue(Object o, Class<?> clazz, String fieldName)  {
+    try {
+      Field field = clazz.getDeclaredField(fieldName);
+      field.setAccessible(true);
+      return (T) field.get(o);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  public static void setFinalField(Object o, Class<?> clazz, String fieldName, Object value)  {
+    try {
+      Field field = clazz.getDeclaredField(fieldName);
+      field.setAccessible(true);
+      Field modifiersField = Field.class.getDeclaredField("modifiers");
+      modifiersField.setAccessible(true);
+      int modifiers = field.getModifiers();
+      modifiersField.setInt(field, modifiers & ~Modifier.FINAL);
+      field.set(o, value);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public static boolean canAccess(KafkaProducer<String, String> producer, String topic) {
+    try {
+      return producer.partitionsFor(topic).size() > 0;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  public static void verifyProduceConsume(ClientBuilder clientBuilder,
+                                          String topic,
+                                          String consumerGroup,
+                                          boolean authorized) throws Throwable {
+    try (KafkaProducer<String, String> producer = clientBuilder.buildProducer()) {
+      KafkaTestUtils.sendRecords(producer, topic, 0, 10);
+      assertTrue("No authorization exception from unauthorized client", authorized);
+    } catch (AuthorizationException e) {
+      assertFalse("Authorization exception from authorized client", authorized);
+    }
+
+    try (KafkaConsumer<String, String> consumer = clientBuilder.buildConsumer(consumerGroup)) {
+      KafkaTestUtils.consumeRecords(consumer, topic, 0, 10);
+      assertTrue("No authorization exception from unauthorized client", authorized);
+    } catch (AuthorizationException e) {
+      assertFalse("Authorization exception from authorized client", authorized);
+    }
+  }
+
+  public static void addProducerAcls(ClientBuilder clientBuilder,
+                                     KafkaPrincipal principal,
+                                     String topic,
+                                     PatternType patternType) throws Exception {
+    try (AdminClient adminClient = clientBuilder.buildAdminClient()) {
+      AclBinding topicAcl = new AclBinding(
+          new ResourcePattern(ResourceType.TOPIC, topic, patternType),
+          new AccessControlEntry(principal.toString(),
+              "*", AclOperation.WRITE, AclPermissionType.ALLOW));
+      adminClient.createAcls(Arrays.asList(topicAcl)).all().get();
+    }
+  }
+
+  public static void addConsumerAcls(ClientBuilder clientBuilder,
+                                     KafkaPrincipal principal,
+                                     String topic,
+                                     String consumerGroup,
+                                     PatternType patternType) throws Exception {
+    try (AdminClient adminClient = clientBuilder.buildAdminClient()) {
+      AclBinding topicAcl = new AclBinding(
+          new ResourcePattern(ResourceType.TOPIC, topic, patternType),
+          new AccessControlEntry(principal.toString(),
+              "*", AclOperation.READ, AclPermissionType.ALLOW));
+      AclBinding consumerGroupAcl = new AclBinding(
+          new ResourcePattern(ResourceType.GROUP, consumerGroup, patternType),
+          new AccessControlEntry(principal.toString(),
+              "*", AclOperation.ALL, AclPermissionType.ALLOW));
+      List<AclBinding> acls = Arrays.asList(topicAcl, consumerGroupAcl);
+      adminClient.createAcls(acls).all().get();
+    }
+  }
+
+  public static class ClientBuilder {
+    private final String bootstrapServers;
+    private final SecurityProtocol securityProtocol;
+    private final String saslMechanism;
+    private final String jaasConfig;
+
+    public ClientBuilder(String bootstrapServers,
+                        SecurityProtocol securityProtocol,
+                        String saslMechanism,
+                        String jaasConfig) {
+      this.bootstrapServers = bootstrapServers;
+      this.securityProtocol = securityProtocol;
+      this.saslMechanism = saslMechanism;
+      this.jaasConfig = jaasConfig;
+    }
+
+    public KafkaProducer<String, String> buildProducer() {
+      return createProducer(bootstrapServers, securityProtocol, saslMechanism, jaasConfig);
+    }
+
+    public KafkaConsumer<String, String> buildConsumer(String consumerGroup) {
+      return createConsumer(bootstrapServers, securityProtocol, saslMechanism, jaasConfig, consumerGroup);
+    }
+
+    public AdminClient buildAdminClient() {
+      return createAdminClient(bootstrapServers, securityProtocol, saslMechanism, jaasConfig);
+    }
   }
 }

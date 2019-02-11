@@ -6,6 +6,8 @@ import io.confluent.kafka.common.license.LicenseValidator;
 import io.confluent.kafka.security.authorizer.acl.AclMapper;
 import io.confluent.kafka.security.authorizer.acl.AclProvider;
 import io.confluent.license.validator.ConfluentLicenseValidator;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import kafka.network.RequestChannel;
@@ -15,11 +17,12 @@ import kafka.security.auth.Authorizer;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
 import org.apache.kafka.common.errors.InvalidRequestException;
+import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Time;
 
 
-public class ConfluentKafkaAuthorizer extends AbstractConfluentAuthorizer implements Authorizer {
+public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements Authorizer {
 
   private Authorizer aclAuthorizer;
 
@@ -43,11 +46,19 @@ public class ConfluentKafkaAuthorizer extends AbstractConfluentAuthorizer implem
 
   @Override
   public boolean authorize(RequestChannel.Session session, Operation operation, Resource resource) {
+
+    if (resource.patternType() != PatternType.LITERAL) {
+      throw new IllegalArgumentException("Only literal resources are supported, got: "
+          + resource.patternType());
+    }
+    Action action = new Action(scope(),
+                               AclMapper.resourceType(resource.resourceType()),
+                               resource.name(),
+                               AclMapper.operation(operation));
     String host = session.clientAddress().getHostAddress();
-    return super.authorize(session.principal(),
-        host,
-        AclMapper.operation(operation),
-        AclMapper.resource(resource));
+
+    List<AuthorizeResult> result = super.authorize(session.principal(), host, Collections.singletonList(action));
+    return result.get(0) == AuthorizeResult.ALLOWED;
   }
 
   @Override

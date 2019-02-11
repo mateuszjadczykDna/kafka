@@ -1,0 +1,116 @@
+// (Copyright) [2019 - 2019] Confluent, Inc.
+
+// Default role definitions with access policies
+{
+  "roles" : [
+    {
+      "name" : "Super User",
+      "policy" : {
+        "scope" : "Cluster",
+        "isSuperUser" : "true"
+      }
+    },
+    {
+      "name" : "User Admin",
+      "policy" : {
+        "scope" : "Cluster",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Cluster",
+            "operations" : ["Alter"]
+          },
+          {
+            "resourceType" : "DelegationToken",
+            "operations" : ["Describe"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "Cluster Admin",
+      "policy" : {
+        "scope" : "Cluster",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Cluster",
+            "operations" : ["Alter", "AlterConfigs", "Describe", "DescribeConfigs"]
+          },
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Create", "Delete", "Alter", "AlterConfigs", "Describe", "DescribeConfigs"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "Operator",
+      "policy" : {
+        "scope" : "Cluster",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+        ]
+      }
+    },
+    {
+      "name" : "Security Admin",
+      "policy" : {
+        "scope" : "Cluster",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+        ]
+      }
+    },
+    {
+      "name" : "Resource Owner",
+      "policy" : {
+        "scope" : "Resource",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Create", "Delete", "Read", "Write", "Describe", "DescribeConfigs", "Alter", "AlterConfigs"]
+          },
+          {
+            "resourceType" : "Group",
+            "operations" : ["Read", "Describe", "Delete"]
+          },
+          {
+            "resourceType" : "TransactionalId",
+            "operations" : ["Write", "Describe"]
+          },
+          {
+            "resourceType" : "Cluster",
+            "operations" : ["Describe", "DescribeConfigs", "IdempotentWrite"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "Developer",
+      "policy" : {
+        "scope" : "Resource",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Read", "Write", "Describe", "DescribeConfigs"]
+          },
+          {
+            "resourceType" : "Group",
+            "operations" : ["Read", "Describe"]
+          },
+          {
+            "resourceType" : "TransactionalId",
+            "operations" : ["Write", "Describe"]
+          },
+          {
+            "resourceType" : "Cluster",
+            "operations" : ["Describe", "DescribeConfigs", "IdempotentWrite"]
+          }
+        ]
+      }
+    }
+  ]
+}

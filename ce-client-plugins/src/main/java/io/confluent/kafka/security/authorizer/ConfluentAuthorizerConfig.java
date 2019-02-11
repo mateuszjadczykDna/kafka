@@ -25,6 +25,11 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
   private static final ConfigDef CONFIG;
 
+  public static final String SCOPE_PROP = "confluent.authorizer.scope";
+  private static final String SCOPE_DEFAULT = "";
+  private static final String SCOPE_DOC = "The root scope of this authorizer."
+      + " This may be empty if RBAC provider is not enabled.";
+
   public static final String GROUP_PROVIDER_PROP = "confluent.authorizer.group.provider";
   private static final String GROUP_PROVIDER_DEFAULT = GroupProviders.NONE.name();
   private static final String GROUP_PROVIDER_DOC = "Group provider for the authorizer to map users to groups. "
@@ -56,6 +61,8 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
   static {
     CONFIG = new ConfigDef()
+        .define(SCOPE_PROP, Type.STRING, SCOPE_DEFAULT,
+            Importance.HIGH, SCOPE_DOC)
         .define(ALLOW_IF_NO_ACLS_PROP, Type.BOOLEAN, ALLOW_IF_NO_ACLS_DEFAULT,
             Importance.MEDIUM, ALLOW_IF_NO_ACLS_DOC)
         .define(SUPER_USERS_PROP, Type.STRING, SUPER_USERS_DEFAULT,
@@ -70,10 +77,12 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
   public final boolean allowEveryoneIfNoAcl;
   public final List<AccessRuleProvider> accessRuleProviders;
   public final GroupProvider groupProvider;
+  public final String scope;
 
   public ConfluentAuthorizerConfig(Map<?, ?> props) {
     super(CONFIG, props);
 
+    scope = getString(SCOPE_PROP);
     allowEveryoneIfNoAcl = getBoolean(ALLOW_IF_NO_ACLS_PROP);
 
     List<String> authProviderNames = getList(ACCESS_RULE_PROVIDERS_PROP);

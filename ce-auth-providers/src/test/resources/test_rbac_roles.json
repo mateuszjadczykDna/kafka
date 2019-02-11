@@ -1,0 +1,64 @@
+// (Copyright) [2019 - 2019] Confluent, Inc.
+
+// Roles used in unit tests. This is different from default role definitions to ensure that
+// changes to default role definitions don't break unit tests which rely on specific
+// role definitions.
+{
+  "roles" : [
+    {
+      "name" : "Super User",
+      "policy" : {
+        "scope" : "Cluster",
+        "isSuperUser" : "true"
+      }
+    },
+    {
+      "name" : "Cluster Admin",
+      "policy" : {
+        "scope" : "Cluster",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Cluster",
+            "operations" : ["DescribeConfigs", "AlterConfigs"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "Operator",
+      "policy" : {
+        "scope" : "Cluster",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["DescribeConfigs", "AlterConfigs"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "Reader",
+      "policy" : {
+        "scope" : "Resource",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Read", "Describe"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "Writer",
+      "policy" : {
+        "scope" : "Resource",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Write", "Describe"]
+          }
+        ]
+      }
+    }
+  ]
+}

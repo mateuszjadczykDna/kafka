@@ -4,6 +4,10 @@ package io.confluent.kafka.security.authorizer;
 
 import java.util.Objects;
 
+/**
+ * Represents an authorizable resource type, e.g. Topic. This includes all Kafka resource types
+ * and additional resource types may be added dynamically.
+ */
 public class ResourceType {
 
   public static final ResourceType ALL = new ResourceType("All");

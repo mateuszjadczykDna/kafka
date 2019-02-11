@@ -67,6 +67,8 @@ public class ConfluentBuiltInProviders {
         break;
       }
     }
+    if (groupProvider == null)
+      throw new ConfigException("Group provider not found for " + name);
     return groupProvider;
   }
 

@@ -2,6 +2,7 @@
 
 package io.confluent.security.test.utils;
 
+import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import java.io.File;
 
@@ -24,5 +25,11 @@ public class User {
   public static User gssapiUser(String name, String fullPrincipal, File keytabFile, String serviceName) {
     String jaasConfig = SecurityTestUtils.gssapiSaslJaasConfig(keytabFile, fullPrincipal, serviceName);
     return new User(name, fullPrincipal, jaasConfig);
+  }
+
+  public static User createScramUser(EmbeddedKafkaCluster kafkaCluster, String name) {
+    String password = name + "-secret";
+    String scramSecret = SecurityTestUtils.createScramUser(kafkaCluster.zkConnect(), name, password);
+    return scramUser(name, scramSecret);
   }
 }

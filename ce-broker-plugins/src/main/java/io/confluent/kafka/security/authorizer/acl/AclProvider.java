@@ -49,7 +49,9 @@ public class AclProvider extends SimpleAclAuthorizer implements AccessRuleProvid
   }
 
   @Override
-  public boolean isSuperUser(KafkaPrincipal sessionPrincipal, Set<KafkaPrincipal> groupPrincipals) {
+  public boolean isSuperUser(KafkaPrincipal sessionPrincipal,
+                             Set<KafkaPrincipal> groupPrincipals,
+                             String scope) {
     KafkaPrincipal userPrincipal = userPrincipal(sessionPrincipal);
     if (superUsers.contains(userPrincipal)) {
       log.debug("principal = {} is a super user, allowing operation without checking acls.", userPrincipal);
@@ -74,6 +76,7 @@ public class AclProvider extends SimpleAclAuthorizer implements AccessRuleProvid
   @Override
   public Set<AccessRule> accessRules(KafkaPrincipal sessionPrincipal,
                                      Set<KafkaPrincipal> groupPrincipals,
+                                     String scope,
                                      Resource resource) {
     ResourceType resourceType = AclMapper.kafkaResourceType(resource.resourceType());
     KafkaPrincipal userPrincipal = userPrincipal(sessionPrincipal);
@@ -98,10 +101,10 @@ public class AclProvider extends SimpleAclAuthorizer implements AccessRuleProvid
         : sessionPrincipal;
   }
 
-  private boolean userOrGroupAcl(AccessRule permission,
-      KafkaPrincipal userPrincipal,
-      Set<KafkaPrincipal> groupPrincipals) {
-    KafkaPrincipal aclPrincipal = permission.principal();
+  private boolean userOrGroupAcl(AccessRule rule,
+                                 KafkaPrincipal userPrincipal,
+                                 Set<KafkaPrincipal> groupPrincipals) {
+    KafkaPrincipal aclPrincipal = rule.principal();
     return aclPrincipal.equals(userPrincipal) ||
         aclPrincipal.equals(AccessRule.WILDCARD_USER_PRINCIPAL) ||
         groupPrincipals.contains(aclPrincipal) ||

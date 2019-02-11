@@ -20,9 +20,9 @@ package io.confluent.security.test.integration.ldap;
 
 import io.confluent.kafka.security.authorizer.ConfluentKafkaAuthorizerTest;
 import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizer;
+import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.security.test.utils.LdapTestUtils;
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import kafka.security.auth.SimpleAclAuthorizer;
@@ -90,17 +90,11 @@ public class LdapAuthorizerUserAclTest extends ConfluentKafkaAuthorizerTest {
 
   private void initializeForLdapTest() {
     try {
-      for (Field field : SimpleAclAuthorizerTest.class.getDeclaredFields()) {
-        String name = field.getName();
-        field.setAccessible(true);
-        if (name.endsWith("superUsers")) {
-          ldapSuperUsers = (String) field.get(this);
-        } else if (name.endsWith("simpleAclAuthorizer")) {
-          setAuthorizer(field, ldapAuthorizer);
-        } else if (name.endsWith("simpleAclAuthorizer2")) {
-          setAuthorizer(field, ldapAuthorizer2);
-        }
-      }
+      ldapSuperUsers = KafkaTestUtils.fieldValue(this, SimpleAclAuthorizerTest.class, "superUsers");
+      KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
+          "simpleAclAuthorizer", simpleAclAuthorizer(ldapAuthorizer));
+      KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
+          "simpleAclAuthorizer2", simpleAclAuthorizer(ldapAuthorizer2));
     } catch (Exception e) {
       throw new RuntimeException("Could not initialize test", e);
     }
