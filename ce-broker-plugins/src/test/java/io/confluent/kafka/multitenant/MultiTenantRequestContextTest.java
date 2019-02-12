@@ -21,6 +21,7 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.errors.InvalidGroupIdException;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
@@ -571,9 +572,10 @@ public class MultiTenantRequestContextTest {
   public void testLeaveGroupRequest() {
     for (short ver = ApiKeys.LEAVE_GROUP.oldestVersion(); ver <= ApiKeys.LEAVE_GROUP.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.LEAVE_GROUP, ver);
-      LeaveGroupRequest inbound = new LeaveGroupRequest.Builder("group", "memberId").build(ver);
+      LeaveGroupRequest inbound = new LeaveGroupRequest.Builder(new LeaveGroupRequestData()
+              .setGroupId("group").setMemberId("memberId")).build(ver);
       LeaveGroupRequest intercepted = (LeaveGroupRequest) parseRequest(context, inbound);
-      assertEquals("tenant_group", intercepted.groupId());
+      assertEquals("tenant_group", intercepted.data().groupId());
       verifyRequestMetrics(ApiKeys.LEAVE_GROUP);
     }
   }

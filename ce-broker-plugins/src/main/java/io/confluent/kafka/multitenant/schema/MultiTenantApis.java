@@ -196,6 +196,16 @@ public class MultiTenantApis {
           }
           break;
 
+        case LEAVE_GROUP:
+          // An explicit transformer is necessary because the relevant message type is
+          // auto-generated from schema; it does not leverage CommonFields.GROUP_ID.
+          if (field != null && field.name.equals("group_id")) {
+            return Optional.some(
+                    new StringTenantTransformer(type, TenantContext.ValueType.GROUP,
+                            TenantTransform.ADD_PREFIX));
+          }
+          break;
+
         case DESCRIBE_CONFIGS:
         case ALTER_CONFIGS:
           if (field != null && field.name.equals("resources") && type instanceof Schema) {
