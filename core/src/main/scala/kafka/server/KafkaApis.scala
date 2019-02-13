@@ -48,6 +48,7 @@ import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, TRANS
 import org.apache.kafka.common.message.ElectPreferredLeadersResponseData
 import org.apache.kafka.common.message.TierListOffsetResponseData
 import org.apache.kafka.common.message.TierListOffsetResponseData.{TierListOffsetPartitionResponse, TierListOffsetTopicResponse}
+import org.apache.kafka.common.message.LeaveGroupResponseData
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.network.{ListenerName, Send}
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
@@ -1413,7 +1414,8 @@ class KafkaApis(val requestChannel: RequestChannel,
     // the callback for sending a leave-group response
     def sendResponseCallback(error: Errors) {
       def createResponse(requestThrottleMs: Int): AbstractResponse = {
-        val response = new LeaveGroupResponse(requestThrottleMs, error)
+        val response = new LeaveGroupResponse(new LeaveGroupResponseData()
+          .setThrottleTimeMs(requestThrottleMs).setErrorCode(error.code()))
         trace("Sending leave group response %s for correlation id %d to client %s."
                     .format(response, request.header.correlationId, request.header.clientId))
         response
@@ -1421,14 +1423,15 @@ class KafkaApis(val requestChannel: RequestChannel,
       sendResponseMaybeThrottle(request, createResponse)
     }
 
-    if (!authorize(request.session, Read, Resource(Group, leaveGroupRequest.groupId, LITERAL))) {
+    if (!authorize(request.session, Read, Resource(Group, leaveGroupRequest.data().groupId(), LITERAL))) {
       sendResponseMaybeThrottle(request, requestThrottleMs =>
-        new LeaveGroupResponse(requestThrottleMs, Errors.GROUP_AUTHORIZATION_FAILED))
+        new LeaveGroupResponse(new LeaveGroupResponseData()
+          .setThrottleTimeMs(requestThrottleMs).setErrorCode(Errors.GROUP_AUTHORIZATION_FAILED.code())))
     } else {
       // let the coordinator to handle leave-group
       groupCoordinator.handleLeaveGroup(
-        leaveGroupRequest.groupId,
-        leaveGroupRequest.memberId,
+        leaveGroupRequest.data().groupId(),
+        leaveGroupRequest.data().memberId(),
         sendResponseCallback)
     }
   }
