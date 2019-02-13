@@ -8,6 +8,8 @@ import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.PermissionType;
 import io.confluent.kafka.security.authorizer.ResourceType;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
+import io.confluent.security.auth.metadata.AuthCache;
+import io.confluent.security.auth.metadata.AuthListener;
 import io.confluent.security.rbac.AccessPolicy;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.RbacResource;
@@ -34,8 +36,8 @@ import org.slf4j.LoggerFactory;
  * Cache containing authorization and authentication metadata. This is obtained from
  * a Kafka metadata topic.
  */
-public class AuthCache implements AuthListener {
-  private static final Logger log = LoggerFactory.getLogger(AuthCache.class);
+public class KafkaAuthCache implements AuthCache, AuthListener {
+  private static final Logger log = LoggerFactory.getLogger(KafkaAuthCache.class);
 
   private static final String WILDCARD_HOST = "*";
   private static final NavigableMap<Resource, Set<AccessRule>> NO_RULES = Collections.emptyNavigableMap();
@@ -46,7 +48,7 @@ public class AuthCache implements AuthListener {
   private final Map<Scope, Set<RoleAssignment>> roleAssignments;
   private final Map<Scope, NavigableMap<Resource, Set<AccessRule>>> rbacAccessRules;
 
-  public AuthCache(RbacRoles rbacRoles, Scope rootScope) {
+  public KafkaAuthCache(RbacRoles rbacRoles, Scope rootScope) {
     this.rbacRoles = rbacRoles;
     this.rootScope = rootScope;
     this.users = new ConcurrentHashMap<>();
@@ -63,6 +65,7 @@ public class AuthCache implements AuthListener {
    * @param groupPrincipals Set of group principals of the user
    * @return true if the provided principal is a super user or super group.
    */
+  @Override
   public boolean isSuperUser(Scope scope,
                            KafkaPrincipal userPrincipal,
                            Set<KafkaPrincipal> groupPrincipals) {
@@ -86,6 +89,7 @@ public class AuthCache implements AuthListener {
    * @param userPrincipal User principal
    * @return Set of group principals of the user, which may be empty
    */
+  @Override
   public Set<KafkaPrincipal> groups(KafkaPrincipal userPrincipal) {
     UserMetadata user = users.get(userPrincipal);
     return user == null ? Collections.emptySet() : user.groups();
@@ -101,6 +105,7 @@ public class AuthCache implements AuthListener {
    * @param groupPrincipals Set of group principals of the user
    * @return Set of access rules that match the principals and resource
    */
+  @Override
   public Set<AccessRule> rbacRules(Scope resourceScope,
                                    Resource resource,
                                    KafkaPrincipal userPrincipal,
@@ -148,6 +153,26 @@ public class AuthCache implements AuthListener {
     principals.addAll(groupPrincipals);
     principals.add(userPrincipal);
     return principals;
+  }
+
+  @Override
+  public Collection<RoleAssignment> rbacRoleAssignments(Scope scope) {
+    return Collections.unmodifiableSet(roleAssignments.getOrDefault(scope, Collections.emptySet()));
+  }
+
+  @Override
+  public UserMetadata userMetadata(KafkaPrincipal userPrincipal) {
+    return users.get(userPrincipal);
+  }
+
+  @Override
+  public Scope rootScope() {
+    return rootScope;
+  }
+
+  @Override
+  public RbacRoles rbacRoles() {
+    return rbacRoles;
   }
 
   @Override

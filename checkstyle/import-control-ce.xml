@@ -106,7 +106,7 @@
     <allow pkg="org.apache.kafka.common" />
     <allow pkg="scala" />
 
-    <subpackage name="auth.provider.ldap">
+    <subpackage name="auth.provider">
       <allow pkg="org.apache.kafka.test" />
       <allow pkg="io.confluent.kafka.test" />
     </subpackage>

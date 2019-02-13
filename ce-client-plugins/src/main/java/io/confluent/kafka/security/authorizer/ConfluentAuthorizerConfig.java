@@ -4,9 +4,11 @@ package io.confluent.kafka.security.authorizer;
 
 import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders;
+import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.MetadataProviders;
 import io.confluent.kafka.security.authorizer.provider.GroupProvider;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.GroupProviders;
+import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -42,6 +44,14 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
       + " Access rule providers supported are " + ConfluentBuiltInProviders.builtInAccessRuleProviders()
       + ". ACL-based provider is enabled by default.";
 
+  public static final String METADATA_PROVIDER_PROP = "confluent.authorizer.metadata.provider";
+  private static final String METADATA_PROVIDER_DEFAULT = MetadataProviders.NONE.name();
+  private static final String METATDATA_PROVIDER_DOC = "Metadata provider that provides authentication "
+      + " and authorization metadata for other components using a metadata server embedded in the broker."
+      + " Supported providers are " + ConfluentBuiltInProviders.builtInMetadataProviders()
+      + ". Metadata servers are disabled by default. Note that the metadata server started by this provider"
+      + " enables authorization in other components, but is not used for authorization within this broker.";
+
   public static final String LICENSE_PROP = "confluent.license";
   private static final String LICENSE_DEFAULT = "";
   private static final String LICENSE_DOC = "License for Confluent plugins.";
@@ -69,14 +79,17 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
             Importance.MEDIUM, SUPER_USERS_DOC)
         .define(ACCESS_RULE_PROVIDERS_PROP, Type.LIST, ACCESS_RULE_PROVIDERS_DEFAULT,
             Importance.MEDIUM, ACCESS_RULE_PROVIDERS_DOC)
-        .define(GROUP_PROVIDER_PROP, Type.LIST, GROUP_PROVIDER_DEFAULT,
+        .define(GROUP_PROVIDER_PROP, Type.STRING, GROUP_PROVIDER_DEFAULT,
             Importance.MEDIUM, GROUP_PROVIDER_DOC)
+        .define(METADATA_PROVIDER_PROP, Type.STRING, METADATA_PROVIDER_DEFAULT,
+            Importance.MEDIUM, METATDATA_PROVIDER_DOC)
         .define(LICENSE_PROP, Type.STRING, LICENSE_DEFAULT,
             Importance.HIGH, LICENSE_DOC);
   }
   public final boolean allowEveryoneIfNoAcl;
   public final List<AccessRuleProvider> accessRuleProviders;
   public final GroupProvider groupProvider;
+  public final MetadataProvider metadataProvider;
   public final String scope;
 
   public ConfluentAuthorizerConfig(Map<?, ?> props) {
@@ -110,6 +123,12 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
       groupProvider = ConfluentBuiltInProviders.loadGroupProvider(groupProviderName);
       groupProvider.configure(originals());
     }
+
+    String metadataFeature = (String) props.get(METADATA_PROVIDER_PROP);
+    String metadataProviderName = metadataFeature == null || metadataFeature.isEmpty()
+        ? MetadataProviders.NONE.name() : metadataFeature;
+    metadataProvider = ConfluentBuiltInProviders.loadMetadataProvider(metadataProviderName);
+    metadataProvider.configure(originals());
   }
 
   @Override

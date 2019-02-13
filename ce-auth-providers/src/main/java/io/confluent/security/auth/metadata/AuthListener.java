@@ -1,6 +1,6 @@
 // (Copyright) [2019 - 2019] Confluent, Inc.
 
-package io.confluent.security.auth.store;
+package io.confluent.security.auth.metadata;
 
 import io.confluent.security.rbac.RoleAssignment;
 import io.confluent.security.rbac.UserMetadata;
@@ -15,6 +15,5 @@ public interface AuthListener {
   void onUserUpdate(KafkaPrincipal userPrincipal, UserMetadata userMetadata);
 
   void onUserDelete(KafkaPrincipal userPrincipal);
-
 
 }

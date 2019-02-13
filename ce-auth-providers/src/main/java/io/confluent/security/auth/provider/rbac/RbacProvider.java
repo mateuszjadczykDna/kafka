@@ -8,26 +8,30 @@ import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders
 import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
 import io.confluent.kafka.security.authorizer.provider.GroupProvider;
 import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.security.auth.store.AuthCache;
+import io.confluent.security.auth.store.KafkaAuthCache;
 import io.confluent.security.auth.store.clients.KafkaAuthStore;
 import io.confluent.security.rbac.Scope;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+import org.apache.kafka.clients.ClientUtils;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 public class RbacProvider implements AccessRuleProvider, GroupProvider {
 
   private KafkaAuthStore authStore;
-  private AuthCache authCache;
+  private KafkaAuthCache authCache;
 
   @Override
   public void configure(Map<String, ?> configs) {
     String scope = (String) configs.get(ConfluentAuthorizerConfig.SCOPE_PROP);
     if (scope == null || scope.isEmpty())
       throw new ConfigException("Scope must be non-empty for RBAC provider");
-    authStore = new KafkaAuthStore(new Scope(scope));
-    authStore.startReader();
+    Scope authScope = new Scope(scope);
+    authStore = new KafkaAuthStore(authScope);
+    authStore.start();
     this.authCache = authStore.authCache();
   }
 
@@ -66,9 +70,11 @@ public class RbacProvider implements AccessRuleProvider, GroupProvider {
 
   @Override
   public void close() {
-    if (authStore != null) {
-      authStore.close();
-    }
+    AtomicReference<Throwable> firstException = new AtomicReference<>();
+    ClientUtils.closeQuietly(authStore, "authStore", firstException);
+    Throwable exception = firstException.getAndSet(null);
+    if (exception != null)
+      throw new KafkaException("RbacProvider could not be closed cleanly", exception);
   }
 
   private KafkaPrincipal userPrincipal(KafkaPrincipal sessionPrincipal) {
@@ -76,4 +82,10 @@ public class RbacProvider implements AccessRuleProvider, GroupProvider {
         ? new KafkaPrincipal(sessionPrincipal.getPrincipalType(), sessionPrincipal.getName())
         : sessionPrincipal;
   }
+
+  // Visibility for testing
+  public KafkaAuthStore authStore() {
+    return authStore;
+  }
+
 }

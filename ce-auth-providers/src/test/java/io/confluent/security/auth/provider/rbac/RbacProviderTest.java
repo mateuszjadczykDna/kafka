@@ -10,13 +10,13 @@ import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
-import io.confluent.security.auth.store.AuthCache;
+import io.confluent.kafka.test.utils.KafkaTestUtils;
+import io.confluent.security.auth.store.KafkaAuthCache;
 import io.confluent.security.auth.store.clients.KafkaAuthStore;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.RbacResource;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.test.utils.RbacTestUtils;
-import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -34,7 +34,7 @@ public class RbacProviderTest {
   private final MockTime time = new MockTime();
   private final String clusterA = "testOrg/clusterA";
   private RbacProvider rbacProvider;
-  private AuthCache authCache;
+  private KafkaAuthCache authCache;
   private RbacResource topic = new RbacResource("Topic", "topicA", PatternType.LITERAL);
 
   @Before
@@ -249,10 +249,8 @@ public class RbacProviderTest {
 
     RbacRoles rbacRoles = RbacRoles.load(this.getClass().getClassLoader(), "test_rbac_roles.json");
     KafkaAuthStore authStore = new KafkaAuthStore(rbacRoles, time, new Scope(scope));
-    Field field = rbacProvider.getClass().getDeclaredField("authCache");
-    field.setAccessible(true);
-    field.set(rbacProvider, authStore.authCache());
     authCache = authStore.authCache();
+    KafkaTestUtils.setFinalField(rbacProvider, RbacProvider.class, "authCache", authCache);
   }
 
   private Set<AccessRule> accessRules(KafkaPrincipal userPrincipal,

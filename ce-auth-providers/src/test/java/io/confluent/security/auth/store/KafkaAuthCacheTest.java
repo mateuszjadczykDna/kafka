@@ -1,15 +1,15 @@
 // (Copyright) [2019 - 2019] Confluent, Inc.
 
-package io.confluent.security.auth.store.cache;
+package io.confluent.security.auth.store;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
-import io.confluent.security.auth.store.AuthCache;
 import io.confluent.security.auth.store.clients.KafkaAuthStore;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.RbacResource;
@@ -27,20 +27,20 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-public class AuthCacheTest {
+public class KafkaAuthCacheTest {
 
   private final MockTime time = new MockTime();
   private final Scope clusterA = new Scope("clusterA");
   private RbacRoles rbacRoles;
   private KafkaAuthStore authStore;
-  private AuthCache authCache;
+  private KafkaAuthCache authCache;
 
   @Before
   public void setUp() throws Exception {
     rbacRoles = RbacRoles.load(this.getClass().getClassLoader(), "test_rbac_roles.json");
     this.authStore = new KafkaAuthStore(rbacRoles, time, clusterA);
     authStore.configure(Collections.emptyMap());
-    authStore.startReader();
+    authStore.start();
     authCache = authStore.authCache();
   }
 
@@ -56,9 +56,14 @@ public class AuthCacheTest {
     RbacTestUtils.addRoleAssignment(authCache, alice, "Cluster Admin", "clusterA", null);
     assertEquals(1, authCache.rbacRules(clusterA).size());
     verifyPermissions(alice, Resource.CLUSTER, "DescribeConfigs", "AlterConfigs");
+    assertEquals(Collections.singleton(RbacTestUtils.roleAssignment(alice, "Cluster Admin", "clusterA", null)),
+        authCache.rbacRoleAssignments(clusterA));
+    assertEquals(Collections.emptySet(), authCache.rbacRoleAssignments(new Scope("clusterB")));
 
     RbacTestUtils.deleteRoleAssignment(authCache, alice, "Cluster Admin", "clusterA", null);
     assertTrue(authCache.rbacRules(clusterA).isEmpty());
+
+    assertEquals(rbacRoles, authCache.rbacRoles());
   }
 
   @Test
@@ -135,23 +140,28 @@ public class AuthCacheTest {
     assertEquals(Collections.emptySet(), authCache.groups(alice));
     authCache.onUserUpdate(alice, userMetadata);
     assertEquals(Collections.emptySet(), authCache.groups(alice));
+    assertEquals(userMetadata, authCache.userMetadata(alice));
 
     KafkaPrincipal developer = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "Developer");
     userMetadata = new UserMetadata(Collections.singleton(developer));
     authCache.onUserUpdate(alice, userMetadata);
     assertEquals(Collections.singleton(developer), authCache.groups(alice));
+    assertEquals(userMetadata, authCache.userMetadata(alice));
 
     KafkaPrincipal tester = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "Tester");
     userMetadata = new UserMetadata(Utils.mkSet(developer, tester));
     authCache.onUserUpdate(alice, userMetadata);
     assertEquals(Utils.mkSet(developer, tester), authCache.groups(alice));
+    assertEquals(userMetadata, authCache.userMetadata(alice));
 
     userMetadata = new UserMetadata(Collections.singleton(tester));
     authCache.onUserUpdate(alice, userMetadata);
     assertEquals(Collections.singleton(tester), authCache.groups(alice));
+    assertEquals(userMetadata, authCache.userMetadata(alice));
 
     authCache.onUserDelete(alice);
     assertEquals(Collections.emptySet(), authCache.groups(alice));
+    assertNull(authCache.userMetadata(alice));
   }
 
   @Test
@@ -159,7 +169,7 @@ public class AuthCacheTest {
     Scope clusterA = new Scope("org1/clusterA");
     this.authStore = new KafkaAuthStore(rbacRoles, time, new Scope("org1"));
     authStore.configure(Collections.emptyMap());
-    authStore.startReader();
+    authStore.start();
     authCache = authStore.authCache();
 
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");

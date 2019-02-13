@@ -6,6 +6,7 @@ import io.confluent.kafka.common.license.LicenseExpiredException;
 import io.confluent.kafka.common.license.InvalidLicenseException;
 import io.confluent.kafka.common.license.LicenseValidator;
 import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
+import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
 import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
 import io.confluent.kafka.security.authorizer.provider.GroupProvider;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
@@ -15,10 +16,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.apache.kafka.common.Configurable;
+import org.apache.kafka.clients.ClientUtils;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.Logger;
@@ -28,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * Cross-component embedded authorizer that implements common authorization logic. This
  * authorizer loads configured providers and uses them to perform authorization.
  */
-public class EmbeddedAuthorizer implements Authorizer, Configurable, AutoCloseable {
+public class EmbeddedAuthorizer implements Authorizer {
 
   protected static final Logger log = LoggerFactory.getLogger("kafka.authorizer.logger");
 
@@ -42,6 +46,7 @@ public class EmbeddedAuthorizer implements Authorizer, Configurable, AutoCloseab
   private LicenseValidator licenseValidator;
   private GroupProvider groupProvider;
   private List<AccessRuleProvider> accessRuleProviders;
+  private MetadataProvider metadataProvider;
   private boolean allowEveryoneIfNoAcl;
   private String scope;
 
@@ -68,6 +73,7 @@ public class EmbeddedAuthorizer implements Authorizer, Configurable, AutoCloseab
     ConfluentAuthorizerConfig authorizerConfig = new ConfluentAuthorizerConfig(configs);
     groupProvider = authorizerConfig.groupProvider;
     accessRuleProviders = authorizerConfig.accessRuleProviders;
+    metadataProvider = authorizerConfig.metadataProvider;
     allowEveryoneIfNoAcl = authorizerConfig.allowEveryoneIfNoAcl;
     scope = authorizerConfig.scope;
 
@@ -83,8 +89,19 @@ public class EmbeddedAuthorizer implements Authorizer, Configurable, AutoCloseab
         .map(action -> authorize(sessionPrincipal, host, action))
         .collect(Collectors.toList());
   }
+
   public GroupProvider groupProvider() {
     return groupProvider;
+  }
+
+  public AccessRuleProvider accessRuleProvider(String providerName) {
+    Optional<AccessRuleProvider> provider = accessRuleProviders.stream()
+        .filter(p -> p.providerName().equals(providerName))
+        .findFirst();
+    if (provider.isPresent())
+      return provider.get();
+    else
+      throw new IllegalArgumentException("Access rule provider not found: " + providerName);
   }
 
   protected List<AccessRuleProvider> accessRuleProviders() {
@@ -148,12 +165,17 @@ public class EmbeddedAuthorizer implements Authorizer, Configurable, AutoCloseab
 
   @Override
   public void close() {
-    if (groupProvider != null)
-      groupProvider.close();
-    accessRuleProviders.forEach(AccessRuleProvider::close);
-    if (licenseValidator != null) {
-      licenseValidator.close();
+    AtomicReference<Throwable> firstException = new AtomicReference<>();
+    ClientUtils.closeQuietly(groupProvider, "groupProvider", firstException);
+    if (accessRuleProviders != null) {
+      accessRuleProviders.forEach(p ->
+          ClientUtils.closeQuietly(p, "accessRuleProvider", firstException));
     }
+    ClientUtils.closeQuietly(metadataProvider, "metadataProvider", firstException);
+    ClientUtils.closeQuietly(licenseValidator, "licenseValidator", firstException);
+    Throwable exception = firstException.getAndSet(null);
+    if (exception != null)
+      throw new KafkaException("Failed to close authorizer cleanly", exception);
   }
 
   protected String scope() {

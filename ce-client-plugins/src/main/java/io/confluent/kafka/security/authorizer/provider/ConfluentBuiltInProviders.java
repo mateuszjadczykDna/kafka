@@ -28,6 +28,11 @@ public class ConfluentBuiltInProviders {
     NONE           // Groups disabled
   }
 
+  public enum MetadataProviders {
+    RBAC,          // Embedded Metadata Server with REST interface
+    NONE           // Embedded Metadata Service not enabled on the broker
+  }
+
   public static Set<String> builtInAccessRuleProviders() {
     return Utils.mkSet(AccessRuleProviders.values()).stream()
         .map(AccessRuleProviders::name).collect(Collectors.toSet());
@@ -36,6 +41,11 @@ public class ConfluentBuiltInProviders {
   public static Set<String> builtInGroupProviders() {
     return Utils.mkSet(GroupProviders.values()).stream()
         .map(GroupProviders::name).collect(Collectors.toSet());
+  }
+
+  public static Set<String> builtInMetadataProviders() {
+    return Utils.mkSet(MetadataProviders.values()).stream()
+        .map(MetadataProviders::name).collect(Collectors.toSet());
   }
 
   public static List<AccessRuleProvider> loadAccessRuleProviders(List<String> names) {
@@ -72,6 +82,23 @@ public class ConfluentBuiltInProviders {
     return groupProvider;
   }
 
+  public static MetadataProvider loadMetadataProvider(String name) {
+    if (name.equals(MetadataProviders.NONE.name()))
+      return new EmptyMetadataProvider();
+
+    MetadataProvider metadataProvider = null;
+    ServiceLoader<MetadataProvider> providers = ServiceLoader.load(MetadataProvider.class);
+    for (MetadataProvider provider : providers) {
+      if (provider.providerName().equals(name)) {
+        metadataProvider = provider;
+        break;
+      }
+    }
+    if (metadataProvider == null)
+      throw new ConfigException("Metadata provider not found for " + name);
+    return metadataProvider;
+  }
+
   private static class EmptyGroupProvider implements GroupProvider {
 
     @Override
@@ -86,6 +113,22 @@ public class ConfluentBuiltInProviders {
     @Override
     public String providerName() {
       return GroupProviders.NONE.name();
+    }
+
+    @Override
+    public void close() {
+    }
+  }
+
+  private static class EmptyMetadataProvider implements MetadataProvider {
+
+    @Override
+    public void configure(Map<String, ?> configs) {
+    }
+
+    @Override
+    public String providerName() {
+      return MetadataProviders.NONE.name();
     }
 
     @Override

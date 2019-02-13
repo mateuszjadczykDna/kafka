@@ -3,7 +3,7 @@
 package io.confluent.security.test.integration;
 
 import io.confluent.kafka.test.utils.KafkaTestUtils;
-import io.confluent.security.auth.store.AuthCache;
+import io.confluent.security.auth.store.KafkaAuthCache;
 import io.confluent.security.rbac.RbacResource;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.test.integration.rbac.RbacEndToEndAuthorizationTest;
@@ -18,7 +18,7 @@ public class EmbeddedAuthorizerTest extends RbacEndToEndAuthorizationTest {
   @Before
   public void setUp() throws Throwable {
     super.setUp();
-    KafkaTestUtils.setFinalField(rbacCluster.authCache, AuthCache.class, "rootScope", SCOPE);
+    KafkaTestUtils.setFinalField(rbacCluster.authCache, KafkaAuthCache.class, "rootScope", SCOPE);
     createAdditionalRoles("confluent/core/anotherCluster");
     createAdditionalRoles("confluent/anotherDepartment/testCluster");
   }

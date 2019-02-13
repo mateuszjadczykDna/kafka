@@ -1,0 +1,86 @@
+// (Copyright) [2019 - 2019] Confluent, Inc.
+
+package io.confluent.security.auth.metadata;
+
+import io.confluent.kafka.security.authorizer.AccessRule;
+import io.confluent.kafka.security.authorizer.Resource;
+import io.confluent.security.rbac.RbacRoles;
+import io.confluent.security.rbac.RoleAssignment;
+import io.confluent.security.rbac.Scope;
+import io.confluent.security.rbac.UserMetadata;
+import java.util.Collection;
+import java.util.Set;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
+
+/**
+ * Cache containing authorization and authentication metadata. This is obtained from
+ * a Kafka metadata topic.
+ */
+public interface AuthCache {
+
+  /**
+   * Returns true if the provided user principal or any of the group principals has
+   * `Super User` role at the specified scope.
+   *
+   * @param scope Scope being checked, super-users are parent level also return true
+   * @param userPrincipal User principal
+   * @param groupPrincipals Set of group principals of the user
+   * @return true if the provided principal is a super user or super group.
+   */
+  boolean isSuperUser(Scope scope,
+                      KafkaPrincipal userPrincipal,
+                      Set<KafkaPrincipal> groupPrincipals);
+
+  /**
+   * Returns the groups of the provided user principal.
+   * @param userPrincipal User principal
+   * @return Set of group principals of the user, which may be empty
+   */
+  Set<KafkaPrincipal> groups(KafkaPrincipal userPrincipal);
+
+  /**
+   * Returns the RBAC rules corresponding to the provided principals that match
+   * the specified resource.
+   *
+   * @param resourceScope Scope of the resource
+   * @param resource Resource pattern to match
+   * @param userPrincipal User principal
+   * @param groupPrincipals Set of group principals of the user
+   * @return Set of access rules that match the principals and resource
+   */
+  Set<AccessRule> rbacRules(Scope resourceScope,
+                            Resource resource,
+                            KafkaPrincipal userPrincipal,
+                            Set<KafkaPrincipal> groupPrincipals);
+
+
+  /**
+   * Returns the role assignments at the specified scope. Note that roles assignments of
+   * parent scopes are not returned. The returned collection may be empty.
+   *
+   * @param scope Scope for which role assignments are requested.
+   * @return Set of roles currently assigned at the specified scope
+   */
+  Collection<RoleAssignment> rbacRoleAssignments(Scope scope);
+
+  /**
+   * Returns metadata for the specified user principal if available or null if user is not known.
+   *
+   * @param userPrincipal KafkaPrincipal of user
+   * @return user metadata including group membership
+   */
+  UserMetadata userMetadata(KafkaPrincipal userPrincipal);
+
+  /**
+   * Returns the root scope of this cache. The cache discards entries with scope that is
+   * not contained within the root scope.
+   * @return root scope of cache
+   */
+  Scope rootScope();
+
+  /**
+   * Returns the RBAC role definitions associated with this cache.
+   * @return RBAC role definitions
+   */
+  RbacRoles rbacRoles();
+}

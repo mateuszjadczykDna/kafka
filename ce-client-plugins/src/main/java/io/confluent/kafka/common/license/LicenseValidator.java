@@ -2,13 +2,12 @@
 
 package io.confluent.kafka.common.license;
 
+import java.io.Closeable;
 import org.apache.kafka.common.utils.Time;
 
-public interface LicenseValidator {
+public interface LicenseValidator extends Closeable {
 
   void initializeAndVerify(String license, String zkConnect, Time time, String metricGroup);
 
   void verifyLicense(boolean failOnError);
-
-  void close();
 }

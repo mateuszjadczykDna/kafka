@@ -2,6 +2,7 @@
 
 package io.confluent.kafka.security.authorizer.provider;
 
+import java.io.Closeable;
 import java.util.Set;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -9,7 +10,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 /**
  * Interface used by providers of user to group mapping used for authorization.
  */
-public interface GroupProvider extends Configurable {
+public interface GroupProvider extends Configurable, Closeable {
 
   /**
    * Returns the groups of the provided user principal.
@@ -23,9 +24,4 @@ public interface GroupProvider extends Configurable {
    * @return provider name
    */
   String providerName();
-
-  /**
-   * Closes this provider.
-   */
-  void close();
 }

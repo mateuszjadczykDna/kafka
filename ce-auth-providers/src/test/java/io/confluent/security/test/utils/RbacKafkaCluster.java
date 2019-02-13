@@ -15,7 +15,7 @@ import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import io.confluent.security.auth.provider.rbac.RbacProvider;
-import io.confluent.security.auth.store.AuthCache;
+import io.confluent.security.auth.store.KafkaAuthCache;
 import io.confluent.security.rbac.RbacResource;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,7 +43,7 @@ public class RbacKafkaCluster {
   private final String kafkaSaslMechanism = "SCRAM-SHA-256";
   public final EmbeddedKafkaCluster kafkaCluster;
   private final Map<String, User> users;
-  public AuthCache authCache;
+  public KafkaAuthCache authCache;
 
   public RbacKafkaCluster(String authorizerScope,
                           String brokerUser,
@@ -134,10 +134,10 @@ public class RbacKafkaCluster {
 
   // RS: TODO: This is temporary code to enable auth cache to be populated. This will be removed
   // when the Kafka storage layer is implemented for RBAC.
-  private AuthCache authCache() {
+  private KafkaAuthCache authCache() {
     assertEquals(1, kafkaCluster.brokers().size());
     KafkaServer server = kafkaCluster.brokers().get(0);
-    AuthCache authCache = null;
+    KafkaAuthCache authCache = null;
     Option<Authorizer> authorizer = KafkaTestUtils.fieldValue(server, KafkaServer.class, "authorizer");
     List<AccessRuleProvider> providers = KafkaTestUtils.fieldValue(authorizer.get(),
         EmbeddedAuthorizer.class, "accessRuleProviders");
