@@ -15,6 +15,7 @@
 <import-control pkg="io.confluent">
   <!-- common library dependencies -->
   <allow pkg="com" />
+  <allow pkg="io.netty" />
   <allow pkg="java" />
   <allow pkg="org.I0Itec" />
   <allow pkg="java.security" />
@@ -24,6 +25,7 @@
   <allow pkg="javax.security" />
   <allow pkg="javax.xml.bind" />
   <allow pkg="junit" />
+  <allow pkg="net" />
   <allow pkg="org.bouncycastle" />
   <allow pkg="org.easymock" />
   <allow pkg="org.hamcrest" />
@@ -35,6 +37,10 @@
   <allow pkg="org.slf4j" />
   <allow pkg="org.mockito" />
   <allow pkg="org.mockito.stubbing" />
+
+  <subpackage name="common">
+    <allow pkg="org.apache.kafka.common" />
+  </subpackage>
 
   <subpackage name="license">
     <allow pkg="io.confluent.command" />
@@ -123,4 +129,39 @@
     </subpackage>
   </subpackage>
 
+  <subpackage name="aegis">
+    <allow pkg="io.confluent.aegis.test" />
+    <allow pkg="io.confluent.common" />
+    <allow pkg="io.confluent.common.network" />
+    <allow pkg="io.confluent.common.security" />
+    <allow pkg="io.confluent.common.utils" />
+    <allow pkg="io.confluent.kafka" />
+    <allow pkg="org.apache.kafka.clients" />
+    <allow pkg="org.apache.kafka.common" />
+    <allow pkg="org.apache.kafka.common.network" />
+    <allow pkg="org.apache.kafka.common.security.auth" />
+    <allow pkg="org.apache.kafka.common.utils" />
+
+    <subpackage name="config">
+      <allow pkg="io.confluent.aegis.common" />
+      <allow pkg="io.confluent.aegis.config" />
+    </subpackage>
+
+    <subpackage name="proxy">
+      <allow pkg="io.confluent.aegis.common" />
+      <allow pkg="io.confluent.aegis.config" />
+      <allow pkg="io.confluent.license" />
+      <allow pkg="org.apache.kafka.clients" />
+      <allow pkg="org.apache.kafka.server" />
+    </subpackage>
+
+    <subpackage name="test">
+      <allow pkg="io.confluent.aegis.common" />
+      <allow pkg="io.confluent.aegis.config" />
+      <allow pkg="io.confluent.aegis.proxy" />
+      <allow pkg="io.confluent.license" />
+      <allow pkg="org.apache.kafka.clients" />
+      <allow pkg="org.apache.kafka.server" />
+    </subpackage>
+  </subpackage>
   </import-control>

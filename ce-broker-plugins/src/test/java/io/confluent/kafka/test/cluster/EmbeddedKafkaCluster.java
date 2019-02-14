@@ -86,7 +86,9 @@ public class EmbeddedKafkaCluster {
   public void shutdown() {
     if (brokers != null) {
       for (EmbeddedKafka broker : brokers) {
-        broker.shutdown();
+        if (broker != null) {
+          broker.shutdown();
+        }
       }
     }
     if (zookeeper != null) {
@@ -160,6 +162,10 @@ public class EmbeddedKafkaCluster {
     } catch (InterruptedException e) {
       throw new RuntimeException("Interrupted", e);
     }
+  }
+
+  public List<EmbeddedKafka> kafkas() {
+      return Arrays.asList(brokers);
   }
 
   public List<KafkaServer> brokers() {

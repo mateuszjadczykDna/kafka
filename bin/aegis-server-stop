@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Copyright 2018, Confluent
+
+SIGNAL=${SIGNAL:-TERM}
+PIDS=$(ps ax | grep 'io.confluent.aegis.proxy.[A]egis' | awk '{print $1}')
+
+if [[ -n "${PIDS}" ]]; then
+  kill -s ${SIGNAL} ${PIDS}
+fi

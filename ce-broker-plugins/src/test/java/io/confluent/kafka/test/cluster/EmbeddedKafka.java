@@ -17,6 +17,7 @@
 
 package io.confluent.kafka.test.cluster;
 
+import io.confluent.common.EndPoint;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
@@ -35,6 +36,7 @@ import kafka.utils.TestUtils;
 import kafka.zk.AdminZkClient;
 import kafka.zk.KafkaZkClient;
 import org.apache.kafka.common.network.ListenerName;
+import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.rules.TemporaryFolder;
@@ -56,6 +58,7 @@ public class EmbeddedKafka {
   private static final int DEFAULT_ZK_CONNECTION_TIMEOUT_MS = 8 * 1000;
 
   private final File logDir;
+  private final Properties effectiveConfig;
   public final TemporaryFolder tmpFolder;
   private final KafkaServer kafka;
 
@@ -72,7 +75,8 @@ public class EmbeddedKafka {
     tmpFolder.create();
     logDir = tmpFolder.newFolder();
     final boolean loggingEnabled = true;
-    final KafkaConfig kafkaConfig = new KafkaConfig(brokerConfigs(config), loggingEnabled);
+    effectiveConfig = brokerConfigs(config);
+    final KafkaConfig kafkaConfig = new KafkaConfig(effectiveConfig, loggingEnabled);
     log.debug("Starting embedded Kafka broker (with log.dirs={} and ZK ensemble at {}) ...",
         logDir, kafkaConfig.zkConnect());
     kafka = TestUtils.createServer(kafkaConfig, time);
@@ -161,6 +165,17 @@ public class EmbeddedKafka {
 
   public KafkaServer kafkaServer() {
     return kafka;
+  }
+
+  public EndPoint endPoint() {
+    Object listenerConfig = effectiveConfig.get(KafkaConfig$.MODULE$.InterBrokerListenerNameProp());
+    SecurityProtocol securityProtocol = SecurityProtocol.PLAINTEXT;
+    if (listenerConfig != null) {
+      securityProtocol = SecurityProtocol.forName(listenerConfig.toString());
+    }
+    return new EndPoint(kafka.config().hostName(),
+      kafka.boundPort(ListenerName.forSecurityProtocol(securityProtocol)),
+      securityProtocol);
   }
 
   public List<String> listeners() {

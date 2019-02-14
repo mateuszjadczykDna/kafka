@@ -575,7 +575,7 @@ def connectPkgs = ['connect:api', 'connect:runtime', 'connect:transforms', 'conn
 def pkgs = ['clients', 'examples', 'log4j-appender', 'tools',
             'streams', 'streams:streams-scala', 'streams:test-utils', 'streams:examples',
             'ce-security', 'ce-serializers', 'ce-licensing', 'ce-client-plugins', 'ce-broker-plugins',
-            'ce-rbac-clients', 'ce-auth-providers', 'ce-metrics'] + connectPkgs
+            'ce-rbac-clients', 'ce-auth-providers', 'ce-metrics', 'ce-aegis'] + connectPkgs
 
 /** Create one task per default Scala version */
 def withDefScalaVersions(taskName) {
@@ -2079,6 +2079,45 @@ project(':ce-auth-providers') {
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
   }
 
+}
+
+project(':ce-aegis') {
+  archivesBaseName = "ce-aegis"
+
+  dependencies {
+    compile libs.argparse4j
+    compile libs.netty
+    compile project(':clients')
+    compile project(':ce-broker-plugins')
+
+    testCompile libs.junit
+    testCompile libs.log4j
+    testCompile project(':ce-broker-plugins')
+    testCompile project(':ce-broker-plugins').sourceSets.test.output
+    testCompile project(':clients')
+    testCompile project(':clients').sourceSets.test.output
+    testCompile project(':core')
+    testCompile project(':core').sourceSets.test.output
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.testRuntime) {
+      include('slf4j-log4j12*')
+      include('log4j*jar')
+    }
+    from (configurations.runtime) {
+    }
+    into "$buildDir/dependant-libs"
+    duplicatesStrategy 'exclude'
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
+
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
 }
 
 task aggregatedJavadoc(type: Javadoc) {
