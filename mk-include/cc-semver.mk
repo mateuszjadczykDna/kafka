@@ -1,4 +1,4 @@
-_empty := 
+_empty :=
 _space := $(_empty) $(empty)
 
 # Gets added after the version
@@ -14,7 +14,7 @@ else
 DEFAULT_BUMP ?= patch
 endif
 
-VERSION := $(shell [ -d .git ] && git describe --tags --always --dirty)
+VERSION := $(shell git rev-parse --is-inside-work-tree > /dev/null && git describe --tags --always --dirty)
 ifneq (,$(findstring dirty,$(VERSION)))
 VERSION := $(VERSION)-$(USER)
 endif
@@ -26,7 +26,7 @@ CI_SKIP ?= [ci skip]
 ifeq ($(CLEAN_VERSION),$(_empty))
 CLEAN_VERSION := 0.0.0
 else
-GIT_MESSAGES := $(shell [ -d .git ] && git log --pretty='%s' v$(CLEAN_VERSION)...HEAD 2>/dev/null | tr '\n' ' ')
+GIT_MESSAGES := $(shell git rev-parse --is-inside-work-tree > /dev/null && git log --pretty='%s' v$(CLEAN_VERSION)...HEAD 2>/dev/null | tr '\n' ' ')
 endif
 
 # If auto bump enabled, search git messages for bump hash

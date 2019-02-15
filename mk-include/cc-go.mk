@@ -45,6 +45,7 @@ INIT_CI_TARGETS += deps
 BUILD_TARGETS += $(GO_BUILD_TARGET)
 TEST_TARGETS += $(GO_TEST_TARGET)
 CLEAN_TARGETS += $(GO_CLEAN_TARGET)
+RELEASE_POSTCOMMIT += $(GO_DOWNSTREAM_DEPS)
 DOCKER_BUILD_PRE += .gomodcache
 
 GO_BINDATA_VERSION := 3.11.0
@@ -70,6 +71,7 @@ show-go:
 	@echo "GO111MODULE: $(GO111MODULE)"
 	@echo "GO_BINDATA_VERSION: $(GO_BINDATA_VERSION)"
 	@echo "DB_URL: $(DB_URL)"
+	@echo "GO_DOWNSTREAM_DEPS: $(GO_DOWNSTREAM_DEPS)"
 
 .PHONY: clean-go
 clean-go:
@@ -98,7 +100,9 @@ $(HOME)/.hgrc:
 
 .PHONY: .gomodcache
 .gomodcache:
+ifeq ($(GO111MODULE),on)
 	rm -rf .gomodcache; cp -r $(GOPATH)/pkg/mod/cache/download .gomodcache
+endif
 
 .PHONY: lint-go
 ## Lints (gofmt)
@@ -143,11 +147,15 @@ endif
 generate:
 	go generate
 
+SEED_POSTGRES_URL ?= postgres://
+
 .PHONY: seed-local-mothership
+## Seed local mothership DB. Optionally set SEED_POSTGRES_URL for base postgres url
 seed-local-mothership:
-	psql -d postgres -c 'DROP DATABASE IF EXISTS mothership;'
-	psql -d postgres -c 'CREATE DATABASE mothership;'
-	psql -d mothership -f mk-include/seed-db/mothership-seed.sql
+	@echo "Seeding postgres in 'SEED_POSTGRES_URL=${SEED_POSTGRES_URL}'. Set SEED_POSTGRES_URL to override"
+	psql ${SEED_POSTGRES_URL}/postgres -c 'DROP DATABASE IF EXISTS mothership;'
+	psql ${SEED_POSTGRES_URL}/postgres -c 'CREATE DATABASE mothership;'
+	psql ${SEED_POSTGRES_URL}/mothership -f mk-include/seed-db/mothership-seed.sql
 
 .PHONY: install-go-bindata
 GO_BINDATA_INSTALLED_VERSION := $(shell $(BIN_PATH)/go-bindata -version 2>/dev/null | head -n 1 | awk '{print $$2}' | xargs)
@@ -172,9 +180,53 @@ else
 	git diff --exit-code --name-status || \
 		(git add deploy/bindata.go && \
 		git commit -m 'chore: updating bindata' && \
-		git push origin $(BRANCH_NAME))
+		git push $(GIT_REMOTE_NAME) $(BRANCH_NAME))
 endif
 endif
 else
 go-bindata:
+endif
+
+.PHONY: go-update-deps
+## Update dependencies (go get -u)
+go-update-deps:
+ifeq ($(HOTFIX),true)
+	go get -u=patch
+else
+	go get -u
+endif
+	go mod tidy
+
+.PHONY: go-update-dep
+## Update single dependency, specify with DEP=
+go-update-dep:
+ifeq ($(DEP),)
+	@echo "Error: must specify DEP= on the commandline"
+	@echo "Usage: make go-update-dep DEP=github.com/confluentinc/example@v1.2.3"
+else
+	go get $(DEP)
+	go mod tidy
+endif
+
+.PHONY: go-commit-deps
+## Commit (and push) updated go deps
+go-commit-deps:
+	git diff --exit-code --name-status || \
+		(git add go.mod go.sum && \
+		git commit -m 'chore: $(UPSTREAM_MOD):$(UPSTREAM_VERSION) updating go deps' && \
+		git push $(GIT_REMOTE_NAME) $(GIT_BRANCH_NAME))
+
+.PHONY: $(GO_DOWNSTREAM_DEPS)
+$(GO_DOWNSTREAM_DEPS):
+ifeq ($(HOTFIX),true)
+	@echo "Skipping bumping downstream go dep $@ on hotfix branch"
+else ifeq ($(BUMP),major)
+	@echo "Skipping bumping downstream go dep $@ with major version bump"
+else
+	git clone git@github.com:confluentinc/$@.git $@
+	make -C $@ go-update-dep go-commit-deps \
+		DEP=$(shell grep module go.mod | awk '{print $$2}')@$(BUMPED_VERSION) \
+		UPSTREAM_MOD=$(SERVICE_NAME) \
+		UPSTREAM_VERSION=$(BUMPED_VERSION)
+	rm -rf $@
 endif

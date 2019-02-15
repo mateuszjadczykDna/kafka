@@ -77,7 +77,11 @@ endif
 ifeq ($(BUILD_DOCKER_OVERRIDE),)
 ## Build just the docker image
 build-docker: .netrc .ssh docker-pull-base $(DOCKER_BUILD_PRE)
-	docker build --no-cache --build-arg version=$(IMAGE_VERSION) -t $(BUILD_TAG) .
+	docker build --no-cache \
+		--build-arg version=$(IMAGE_VERSION) \
+		--build-arg base_version=$(BASE_VERSION) \
+		--build-arg base_image=$(BASE_IMAGE) \
+		-t $(BUILD_TAG) .
 	rm -rf .netrc .ssh
 else
 build-docker: $(BUILD_DOCKER_OVERRIDE)

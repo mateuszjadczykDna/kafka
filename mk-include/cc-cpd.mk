@@ -4,7 +4,7 @@ CPD_UPDATE ?= true
 
 INIT_CI_TARGETS += cpd-update gcloud-install
 TEST_TARGETS += test-cc-system
-CLEAN_TARGETS += cpd-clean clean-cc-system-tests
+CLEAN_TARGETS += clean-cc-system-tests
 
 # Set path for cpd binary
 CPD_PATH := $(BIN_PATH)/cpd
@@ -17,7 +17,7 @@ CPD_NAME ?= random
 CPD_EXPIRE ?= 24h
 
 # Create Arguments
-CPD_CR_ARGS ?= --deploy-umbrella=false --name $(CPD_NAME) --expire-time $(CPD_EXPIRE) --initial-size 6
+CPD_CR_ARGS ?= --deploy-umbrella=false --name $(CPD_NAME) --expire-time $(CPD_EXPIRE) --initial-size 15 --yes
 
 # Deploy Arguments
 ifeq ($(CHART_NAME),cc-umbrella-chart)
@@ -39,22 +39,6 @@ RUN_SYSTEM_TESTS ?= false
 # system test variables
 CC_SYSTEM_TESTS_URI ?= git@github.com:confluentinc/cc-system-tests.git
 CC_SYSTEM_TESTS_REF ?= $(shell (test -f CC_SYSTEM_TESTS_VERSION && head -n 1 CC_SYSTEM_TESTS_VERSION) || echo master)
-
-CREATE_CLOUD ?= gcp
-export CREATE_CLOUD
-CREATE_REGION ?= us-central1
-export CREATE_REGION
-CCLOUD_USER_EMAIL ?= caas-team+cpdent@confluent.io
-export CCLOUD_USER_EMAIL
-CCLOUD_USER_PASSWORD ?= Confluent101
-export CCLOUD_USER_PASSWORD
-CCLOUD_ACCOUNT_NAME ?= EnterpriseSystemTesting
-export CCLOUD_ACCOUNT_NAME
-METRICS_ROUTER_API_KEY := router
-export METRICS_ROUTER_API_KEY
-METRICS_ROUTER_API_SECRET := router-secret
-export METRICS_ROUTER_API_SECRET
-
 
 .PHONY: show-cpd
 ## Show cpd vars
@@ -85,16 +69,9 @@ endif
 .PHONY: cpd-install
 # Install cpd if it's not installed
 cpd-install:
-ifeq ($(shell uname),Darwin)
-	@test -f $(CPD_PATH) ||\
-		((brew tap | grep -q 'confluentinc/internal' || \
-			brew tap confluentinc/internal git@github.com:confluentinc/homebrew-internal.git) && \
-		brew install cpd)
-else
 	@test -f $(CPD_PATH) ||\
 		(aws --profile default s3 cp s3://cloud-confluent-bin/cpd/cpd-$(CPD_VERSION)-$(shell go env GOOS)-$(shell go env GOARCH) $(CPD_PATH) && \
 		chmod +x $(CPD_PATH))
-endif
 
 .PHONY: cpd-update
 # Update cpd if needed, install if missing
@@ -128,9 +105,9 @@ else
 endif
 	$(CPD_PATH) priv dep --id $(CPD_RUNNING_ID) $(CPD_DEP_ARGS)
 
-.PHONY: cpd-clean
+.PHONY: cpd-destroy
 ## Clean up all cpd clusters
-cpd-clean:
+cpd-destroy:
 	$(CPD_PATH) priv ls --format json | jq -r '.[].Id' | xargs -IID $(CPD_PATH) priv del --id ID --yes
 
 .cc-system-tests:
@@ -141,41 +118,22 @@ checkout-cc-system-tests: .cc-system-tests
 	git -C ./.cc-system-tests fetch origin
 	git -C ./.cc-system-tests checkout $(CC_SYSTEM_TESTS_REF)
 	git -C ./.cc-system-tests merge origin/$(CC_SYSTEM_TESTS_REF)
+	@echo "cc-system-tests last commit:"
+	@git -C ./.cc-system-tests log -n 1
+
+define _newline
+
+
+endef
 
 .PHONY: test-cc-system
 ifeq ($(RUN_SYSTEM_TESTS),true)
 ## Run cc-system tests
 test-cc-system: checkout-cc-system-tests helm-set-version cpd-deploy-local
-	@echo CREATE_CLOUD=$(CREATE_CLOUD)
-	@echo CREATE_REGION=$(CREATE_REGION)
-	@echo CCLOUD_USER_EMAIL=$(CCLOUD_USER_EMAIL)
-	@echo CCLOUD_USER_PASSWORD=$(CCLOUD_USER_PASSWORD)
-	@echo CCLOUD_ACCOUNT_NAME=$(CCLOUD_ACCOUNT_NAME)
-	@echo METRICS_ROUTER_API_KEY=$(METRICS_ROUTER_API_KEY)
-	@echo METRICS_ROUTER_API_SECRET=$(METRICS_ROUTER_API_SECRET)
-	$(eval CREATE_EXPECTED_K8S := $(CPD_RUNNING_ID))
-	$(eval export CPD_RUNNING_ID)
-	@echo CREATE_EXPECTED_K8S=$(CREATE_EXPECTED_K8S)
-	$(eval CCLOUD_DNS := $(shell kubectl -n cc-system get ingress cc-fe-ingress -o jsonpath="{.metadata.annotations.external-dns\.alpha\.kubernetes\.io/hostname}"))
-	$(eval CCLOUD_URL := https://$(CCLOUD_DNS))
-	$(eval export CCLOUD_URL)
-	@echo CCLOUD_URLs=$(CCLOUD_URL)
-	$(eval METRICS_ROUTER_BROKERLIST := $(shell kubectl get psc --all-namespaces -l release=cc-kafka -o jsonpath="{.items[0].spec.common.network.proxy.bootstrap.dns}"))
-	$(eval export METRICS_ROUTER_BROKERLIST)
-	@echo METRICS_ROUTER_BROKERLIST=$(METRICS_ROUTER_BROKERLIST)
-	@i=0; while ! $$(dig $(CCLOUD_DNS) +short | grep -Evq '^$$'); do \
-		if [ $$i -gt 300 ]; then \
-			echo "Timed out after 300 seconds"; \
-			exit 1; \
-		fi; \
-		echo "Waiting for DNS to propagate ($${i}s/300s)..."; \
-		sleep 10; \
-		(( i += 10 )); \
-	done
-	@echo "DNS Propagated"
-	@sleep 10
-	make -C ./.cc-system-tests run-tests
-	make cpd-clean
+	$(eval $(subst ||,$(_newline),$(shell $(CPD_PATH) priv testenv --id $(CPD_RUNNING_ID) --ready-wait-timeout 600 --output-format make --separator '||')))
+	@env | grep -E 'CREATE_|CCLOUD_|METRICS_'
+	make -C ./.cc-system-tests init-env test
+	make cpd-destroy
 else
 test-cc-system:
 	true

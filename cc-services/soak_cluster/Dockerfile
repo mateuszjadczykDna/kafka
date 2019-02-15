@@ -8,10 +8,11 @@ COPY .netrc ./
 RUN ssh-keyscan -t rsa github.com > /root/.ssh/known_hosts
 
 WORKDIR /go/src/github.com/confluentinc/ce-kafka/cc-services/soak_cluster
-COPY mk-include ./mk-include
-COPY Gopkg.toml Gopkg.lock Makefile ./
 COPY . .
-RUN make deps DEP_ARGS=-vendor-only
+# Replace mk-include link with the local context copy
+RUN rm ./mk-include
+COPY .mk-include.local-context-copy ./mk-include
+RUN make deps DEP_ARGS=-vendor-only VERSION=${version}
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make build-go GO_OUTDIR= VERSION=${version}
 

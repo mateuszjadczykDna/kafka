@@ -4,10 +4,10 @@
 
 # Builds a Confluent Cloud Docker image for Trogdor
 
-ARG base_version
-ARG image_version
+ARG base_version=latest
+ARG base_image=confluent-docker.jfrog.io/confluentinc/ce-kafka
 
-FROM confluent-docker.jfrog.io/confluentinc/ce-kafka:latest
+FROM $base_image:$base_version
 
 EXPOSE 8881
 

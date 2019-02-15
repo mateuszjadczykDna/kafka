@@ -521,6 +521,9 @@ ALTER TABLE region OWNER TO caas;
 CREATE TABLE users (
     id integer NOT NULL,
     email character varying(128) NOT NULL,
+    service_name character varying(64) DEFAULT '' NOT NULL,
+    service_description character varying(128) DEFAULT '' NOT NULL,
+    service_account boolean DEFAULT false NOT NULL,
     first_name character varying(32) NOT NULL,
     last_name character varying(32) NOT NULL,
     password character varying(64) NOT NULL,
@@ -533,6 +536,7 @@ CREATE TABLE users (
 );
 
 CREATE UNIQUE INDEX users_email_one_active ON deployment.users USING btree (email) WHERE (deactivated = FALSE);
+CREATE UNIQUE INDEX users_service_name_is_unique ON deployment.users USING btree (service_name, organization_id) WHERE (service_account = TRUE AND deactivated = FALSE);
 
 
 ALTER TABLE users OWNER TO caas;

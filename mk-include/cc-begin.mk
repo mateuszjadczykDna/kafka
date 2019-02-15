@@ -33,9 +33,16 @@ endif
 # Git stuff
 BRANCH_NAME ?= $(shell test -d .git && git rev-parse --abbrev-ref HEAD)
 # Set RELEASE_BRANCH if we're on master or vN.N.x
-RELEASE_BRANCH := $(shell echo $(BRANCH_NAME) | grep -E '$(MASTER_BRANCH)|v[0-9]+\.[0-9]+\.x')
+RELEASE_BRANCH := $(shell echo $(BRANCH_NAME) | grep -E '^($(MASTER_BRANCH)|v[0-9]+\.[0-9]+\.x)$$')
 # assume the remote name is origin by default
 GIT_REMOTE_NAME ?= origin
+
+# Determine if we're on a hotfix branch
+ifeq ($(RELEASE_BRANCH),$(MASTER_BRANCH))
+HOTFIX := false
+else
+HOTFIX := true
+endif
 
 ifeq ($(CI),true)
 _ := $(shell test -d $(CI_BIN) || mkdir -p $(CI_BIN))

@@ -20,7 +20,7 @@ GEM
       aws-sdk (~> 2)
       thor (~> 0.19.0)
     dotenv (2.2.1)
-    ffi (1.9.18)
+    ffi (1.9.24)
     fpm (1.9.3)
       arr-pm (~> 0.0.10)
       backports (>= 2.6.2)

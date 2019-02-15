@@ -4,48 +4,77 @@ Here we store CCloud utilities (written in Go) that are closely tied to Kafka.
 Currently we have a Trogdor client, performance tests that leverage Trogdor and Soak cluster clients.
 
 # Soak Testing
+
 ### How to run on CPD
-1. Configurations
-    * `charts/cc-trogdor-service/values.yaml` with the desired docker image, number of Trogdor agents
-    * `charts/cc-soak-clients/values.yaml` with the same number of Trogdor agents, bootstrap URL, api keys/secrets, docker image
-    * `charts/cc-soak-clients/templates/configMaps.yaml` with the desired throughput/client count for every topic
-2. Spawn the Trogdor agents
-    * `helm install charts/cc-trogdor-service`
-    * Inspect the pods: `kubectl get pods -n default | grep "trogdor"`
-3. Spawn the Soak clients 
-    1. `helm install charts/cc-soak-clients`
-    2. Edit the clients-spawner cronjob to start soon
-        `kubectl edit cronjobs -n default clients-spawner`. Change the `schedule:` field with the appropriate cron schedule expression.
-    3. Track the new clients-spawner pod from the cronjob: `kubectl get pods --all-namespaces | grep "clients-spawner"`
-    
+
+You need:
+ - a running CPD cluster: https://github.com/confluentinc/cpd
+ - A kafka cluster provisioned in that CPD
+ - A pair of keys from that cluster
+
+Target your CPD k8s in kubectl. It is recommended to inject the required creds for your CPD instance in the new namespace, so that your CPD can pull images from the docker repositories directly:
+
+```
+CPD_ID="$(cpd priv ls | fgrep ' gke-' | head -1 | awk '{print $1}')"
+
+cpd priv export --id ${CPD_ID}
+
+cpd priv inject-credentials --id ${CPD_ID} --namespace soak-tests
+```
+
+Then:
+
+1. Update the configurations
+    * `cc-services/trogdor/charts/values/local.yaml`
+        - number of Trogdor agents
+    * `cc-services/soak_cluster/charts/values/local.yaml`
+        - with the same number of Trogdor agents,
+        - bootstrap URL,
+        - api keys/secrets
+    * `cc-services/soak_cluster/charts/cc-soak-clients/templates/configMaps.yaml`
+        - with the desired throughput/client count for every topic
+
+2. Optionally build and push your custom docker images, unless already pushed by CI. See the section [on building images](#building-new-docker-images) below.
+   > **Important**: You must do this if you are working on a branch or new commit.
+
+3. Deploy the Trogdor agents
+    * Optionally `make -C cc-services/trogdor helm-clean` to clean the state.
+    * `make -C cc-services/trogdor helm-deploy-soak`
+    * Inspect the pods: `kubectl get pods -n soak-tests`
+
+4. Deploy the Soak clients
+    * Optionally `make -C cc-services/soak_cluster helm-clean` to clean the state.
+    * `make -C cc-services/soak_cluster helm-deploy-soak`
+
+5. Trigger the `clients-spawner`:
+    * Option 1: Edit the clients-spawner cronjob `schedule:` field in `kubectl edit cronjobs -n soak-tests cc-soak-clients-clients-spawner`.
+    * Option 2: start a oneoff job: `kubectl create job --from=cronjob/cc-soak-clients-clients-spawner -n soak-tests cc-soak-clients-clients-spawner-oneoff`
+    * Track the new clients-spawner pod from the cronjob: `kubectl get pods -n soak-tests`
+
 If all goes well, you should have clients producing and consuming from the configured Kafka cluster.
 
 It is easiest to inspect the tasks by manually querying the Trogdor coordinator.
+
 ```bash
 kubectl port-forward cc-trogdor-service-coordinator-0 9002:9002 &
 curl -X GET 'http://localhost:9002/coordinator/tasks?state=RUNNING'
 ```
 
+### Building new docker images
 
-### Testing new builds
-To test a newer build of `cc-trogdor-service` or `cc-soak-clients`, you need to build a docker image and push it to [JFrog's Artifactory](https://confluent.jfrog.io/confluent/webapp/)
+To test a newer build of `cc-trogdor` or `cc-soak-clients`, you need to build a docker image and push it to [JFrog's Artifactory](https://confluent.jfrog.io/confluent/webapp/):
 
-#### cc-trogdor-service
-The soak tests can prove useful in cases where you'd like to test changes in Trogdor itself.
-To test the new changes, you need to have a docker image of the build. This is easily done through Semaphore:
-1. Push your changes to a branch
-2. Open https://semaphoreci.com/confluent/ce-kafka and click on the plus (+) sign next to Branches
-3. Add your branch and wait for the build to finish
-4. When the build passes, open "Job #1"->"make build" and take the docker image tag from there. It should be something like: `Successfully tagged confluentinc/ce-kafka:0.8.0-beta1-5210-g1fd081560
-5. Make the `cc-services/trogdor/Dockerfile` dockerfile load that image (`FROM confluentinc/ce-kafka:0.8.0-beta1-5210-g1fd081560`)
-6. Build that Dockerfile - `docker build .`
-7. The previous command should have output something similar to `Successfully built 7158e4c15226`. Tag that docker build with an arbitrary **low** version - `docker tag 7158e4c15226 confluent-docker.jfrog.io/confluentinc/cc-trogdor:v0.0.0.1`
-8. Push that to JFrog - `docker push confluent-docker.jfrog.io/confluentinc/cc-trogdor:v0.0.0.1`
-9. Edit the `cc-services/charts/cc-trogdor-service/values.yaml` to use that new `0.0.0.1` version (`tag: 0.0.0.1`)
+You can build and push for all the `cc-services` based on your current branch using:
 
-#### cc-soak-clients
-You might also want to test out new builds of the code that spawns the soak clients. This can easily be done locally
-1. `cd ./cc-services/soak_cluster`
-2. `docker build .`
-3. The previous command should have output something similar to `Successfully built 7158e4c15226`. Tag that docker build with an arbitrary **low** version - `docker tag 7158e4c15226 confluent-docker.jfrog.io/confluentinc/cc-soak-clients:v0.0.0.1`
-4.  `cc-services/charts/cc-soak-clients/values.yaml` to use that new `0.0.0.1` version (`tag: 0.0.0.1`) 
+```
+make -C cc-services/soak_cluster build-docker push-docker
+make -C cc-services/trogdor build-docker push-docker
+```
+
+With the previous command, Trogdor would use the latest image  of `ce-kafka` built from the `ce-trunk` branch.
+
+If you need a custom kafka base image for trogdor from the local branch run from the root of the project. It will build all the containers, including ce-kafka and the cc-services.
+
+```
+make build-docker
+```

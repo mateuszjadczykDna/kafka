@@ -10,6 +10,7 @@ BUILD_TARGETS += helm-set-version helm-package
 TEST_TARGETS += helm-lint
 CLEAN_TARGETS += helm-clean
 RELEASE_PRECOMMIT += helm-set-bumped-version helm-add-requirements
+RELEASE_POSTCOMMIT += $(HELM_DOWNSTREAM_CHARTS)
 RELEASE_MAKE_TARGETS += helm-release
 
 CHART_VERSION := $(VERSION_NO_V)
@@ -22,6 +23,7 @@ show-helm:
 	@echo "IMAGE_VERSION: $(IMAGE_VERSION)"
 	@echo "CHART_VERSION: $(VERSION_NO_V)"
 	@echo "BUMPED_CHART_VERSION: $(BUMPED_CLEAN_VERSION)"
+	@echo "HELM_DOWNSTREAM_CHARTS: $(HELM_DOWNSTREAM_CHARTS)"
 
 .PHONY: helm-clean
 helm-clean:
@@ -46,14 +48,14 @@ helm-deploy-local:
 .PHONY: helm-set-bumped-version
 helm-set-bumped-version:
 	test -f charts/$(CHART_NAME)/Chart.yaml \
-		&& (cpd helm setver --chart charts/$(CHART_NAME)/Chart.yaml --version $(BUMPED_CHART_VERSION) &&\
+		&& ($(CPD_PATH) helm setver --chart charts/$(CHART_NAME)/Chart.yaml --version $(BUMPED_CHART_VERSION) &&\
 			git add charts/$(CHART_NAME)/Chart.yaml) \
 		|| true
 
 .PHONY: helm-set-version
 helm-set-version:
 	test -f charts/$(CHART_NAME)/Chart.yaml \
-		&& (cpd helm setver --chart charts/$(CHART_NAME)/Chart.yaml --version $(CHART_VERSION) &&\
+		&& ($(CPD_PATH) helm setver --chart charts/$(CHART_NAME)/Chart.yaml --version $(CHART_VERSION) &&\
 			git add charts/$(CHART_NAME)/Chart.yaml) \
 		|| true
 
@@ -100,14 +102,14 @@ helm-add-requirements: helm-update-deps
 
 .PHONY: helm-package
 ## Build helm package at the current version
-helm-package: helm-install-deps
+helm-package: helm-set-version helm-install-deps
 	mkdir -p charts/package
 	rm -rf charts/package/$(CHART_NAME)-$(CHART_VERSION).tgz
 	helm package charts/$(CHART_NAME) -d charts/package
 
 .PHONY: helm-release
 helm-release: helm-package
-	cpd helm upart --package charts/package/$(CHART_NAME)-$(CHART_VERSION).tgz --repo helm-cloud
+	$(CPD_PATH) helm upart --package charts/package/$(CHART_NAME)-$(CHART_VERSION).tgz --repo helm-cloud
 
 .PHONY: helm-install-ci
 helm-install-ci:
@@ -122,13 +124,24 @@ helm-init-ci:
 .PHONY: helm-setup-ci
 helm-setup-ci: helm-install-ci helm-init-ci
 
-.PHONY: helm-repo-update-downstream
-## Run helm repo update on downstream chart
-helm-repo-update-downstream:
-ifneq ($(DOWNSTREAM_CHART_REPO),)
-	git clone git@github.com:${DOWNSTREAM_CHART_REPO} downstream-chart
-	pushd downstream-chart && \
-		make helm-update-deps helm-add-requirements-lock
-	git -C downstream-chart commit -m 'Update chart dependencies'
-	git -C downstream-chart push origin master
+.PHONY: helm-commit-deps
+## Commit (and push) updated helm deps
+helm-commit-deps:
+	git diff --exit-code --name-status || \
+		(git add charts/$(CHART_NAME)/requirements.lock && \
+		git commit -m 'chore: $(UPSTREAM_CHART):$(UPSTREAM_VERSION) update chart deps' && \
+		git push $(GIT_REMOTE_NAME) $(GIT_BRANCH_NAME))
+
+.PHONY: $(HELM_DOWNSTREAM_CHARTS)
+$(HELM_DOWNSTREAM_CHARTS):
+ifeq ($(HOTFIX),true)
+	@echo "Skipping bumping downstream helm chart deps $@ on hotfix branch"
+else ifeq ($(BUMP),major)
+	@echo "Skipping bumping downstream helm chart deps $@ with major version bump"
+else
+	git clone git@github.com:confluentinc/$@.git $@
+	make -C $@ helm-update-deps helm-commit-deps \
+		UPSTREAM_CHART=$(CHART_NAME) \
+		UPSTREAM_VERSION=$(BUMPED_VERSION)
+	rm -rf $@
 endif
