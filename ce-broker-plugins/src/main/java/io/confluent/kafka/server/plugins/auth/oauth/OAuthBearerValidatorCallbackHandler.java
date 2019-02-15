@@ -157,13 +157,13 @@ public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallback
             .get(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY);
 
     if (logicalCluster == null || logicalCluster.isEmpty()) {
-      log.debug("The logical cluster extension is missing or is empty");
+      log.info("The logical cluster extension is missing or is empty");
       callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
       return;
     }
 
     if (!token.allowedClusters().contains(logicalCluster)) {
-      log.debug("The principal {}'s logical cluster {} is not part of the allowed clusters in his token ({}).",
+      log.info("The principal {}'s logical cluster {} is not part of the allowed clusters in this token ({}).",
               token.principalName(), logicalCluster, String.join(",", token.allowedClusters()));
       callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
       return;
@@ -174,7 +174,7 @@ public class OAuthBearerValidatorCallbackHandler implements AuthenticateCallback
         if (clusterMetadata.logicalClusterIdsIncludingStale().contains(logicalCluster))
           log.info("Failing OAuth authentication because the metadata for the logical cluster {} is stale.", logicalCluster);
 
-        log.debug("The principal {}'s logical cluster {} is not hosted on this broker.", token.principalName(), logicalCluster);
+        log.info("The principal {}'s logical cluster {} is not hosted on this broker.", token.principalName(), logicalCluster);
         callback.error(OAUTH_NEGOTIATED_LOGICAL_CLUSTER_PROPERTY_KEY, AUTH_ERROR_MESSAGE);
         return;
       }
