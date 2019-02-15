@@ -34,8 +34,7 @@ Then:
     * `cc-services/soak_cluster/charts/cc-soak-clients/templates/configMaps.yaml`
         - with the desired throughput/client count for every topic
 
-2. Optionally build and push your custom docker images, unless already pushed by CI. See the section [on building images](#building-new-docker-images) below.
-   > **Important**: You must do this if you are working on a branch or new commit.
+2. Build and push your custom docker images. See the section [on building images](#building-new-docker-images) below.
 
 3. Deploy the Trogdor agents
     * Optionally `make -C cc-services/trogdor helm-clean` to clean the state.
@@ -76,5 +75,5 @@ With the previous command, Trogdor would use the latest image  of `ce-kafka` bui
 If you need a custom kafka base image for trogdor from the local branch run from the root of the project. It will build all the containers, including ce-kafka and the cc-services.
 
 ```
-make build-docker
+make build-docker build-docker-cc-services push-docker-cc-services
 ```
