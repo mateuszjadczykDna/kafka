@@ -53,7 +53,7 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
 
   private static final String LOGICAL_CLUSTER_FILE_EXT_WITH_DOT = ".json";
   private static final Long CLOSE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(30);
-  private static final Long RETRY_INITIAL_BACKOFF_MS = TimeUnit.MINUTES.toMillis(5);
+  private static final Long RETRY_INITIAL_BACKOFF_MS = TimeUnit.MINUTES.toMillis(1);
   private static final Long RETRY_MAX_BACKOFF_MS = TimeUnit.MINUTES.toMillis(30);
 
   private String logicalClustersDir;
@@ -413,7 +413,7 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
    */
   private boolean loadLogicalClusterMetadata(Path lcFile) {
     String logicalClusterId = logicalClusterId(lcFile);
-    if (logicalClusterId == null || !Files.isRegularFile(lcFile)) {
+    if (logicalClusterId == null) {
       // ignore directories or files with a non-json extension
       LOG.warn("Ignoring create/update of a non-json file {}", lcFile);
       return false;
