@@ -3,7 +3,7 @@ namespace kafka.tier.serdes;
 // generate kafka.tier.serdes.ObjectMetadata and
 // kafka.tier.serdes.State.java
 // by running
-// flatc --java --gen-mutable tierpartitionstate.fbs
+// flatc --java --gen-mutable tier_partition_state_entry.fbs
 
 // These state entry files should be written with a builder.forceDefaults(true);
 
@@ -21,9 +21,10 @@ table ObjectMetadata {
   maxTimestamp: long (id: 4);
   lastModifiedTime: long (id: 5);
   size: int (id: 6);
-  hasAborts: bool (id: 7);
-  version: byte (id: 8);
-  state: State (id: 9);
+  hasEpochState: bool (id: 7);
+  hasAborts: bool (id: 8);
+  version: byte (id: 9);
+  state: State (id: 10);
 }
 
 root_type ObjectMetadata;

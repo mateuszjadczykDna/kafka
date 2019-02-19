@@ -9,7 +9,7 @@ import java.util
 
 import com.yammer.metrics.core.{Gauge, MetricName}
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.{FetchDataInfo, TierFetchDataInfo, LogDirFailureChannel, LogOffsetMetadata, BrokerTopicStats, AbstractFetchDataInfo}
+import kafka.server._
 import kafka.server.epoch.LeaderEpochFileCache
 import kafka.tier.TierMetadataManager
 import kafka.tier.domain.TierObjectMetadata
@@ -20,7 +20,7 @@ import org.apache.kafka.common.errors.{KafkaStorageException, OffsetOutOfRangeEx
 import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.record.{MemoryRecords, FileRecords}
 import org.apache.kafka.common.requests.FetchResponse.AbortedTransaction
-import org.apache.kafka.common.utils.{Time, Utils}
+import org.apache.kafka.common.utils.{Utils, Time}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConverters._
@@ -85,7 +85,7 @@ class MergedLog(private[log] val localLog: Log,
     // true log start offset could be greater than that after an unclean shutdown. Ensure both these states are truncated
     // up until the true log start offset.
     localLog.loadProducerState(logEndOffset, reloadFromCleanShutdown = localLog.hasCleanShutdownFile)
-    leaderEpochCache.truncateFromStart(logStartOffset)
+    leaderEpochCache.foreach(_.truncateFromStart(logStartOffset))
 
     info(s"Completed load of log with $numberOfSegments segments containing ${localLogSegments.size} local segments and " +
       s"${tieredOffsets.size} tiered segments, tier start offset $logStartOffset, first untiered offset $firstUntieredOffset, " +
@@ -433,7 +433,7 @@ class MergedLog(private[log] val localLog: Log,
 
   override def isFuture: Boolean = localLog.isFuture
 
-  override def leaderEpochCache: LeaderEpochFileCache = localLog.leaderEpochCache
+  override def leaderEpochCache: Option[LeaderEpochFileCache] = localLog.leaderEpochCache
 
   override def firstUnstableOffset: Option[LogOffsetMetadata] = {
     // We guarantee that we never tier past the first unstable offset (see MergedLog#tierableLogSegments), i.e. the first
@@ -449,6 +449,14 @@ class MergedLog(private[log] val localLog: Log,
 
   override def appendAsLeader(records: MemoryRecords, leaderEpoch: Int, isFromClient: Boolean): LogAppendInfo = {
     localLog.appendAsLeader(records, leaderEpoch, isFromClient)
+  }
+
+  def latestEpoch: Option[Int] = localLog.latestEpoch
+
+  def endOffsetForEpoch(leaderEpoch: Int): Option[OffsetAndEpoch] = localLog.endOffsetForEpoch(leaderEpoch)
+
+  def maybeAssignEpochStartOffset(leaderEpoch: Int, startOffset: Long): Unit = {
+    localLog.maybeAssignEpochStartOffset(leaderEpoch, startOffset)
   }
 
   override def appendAsFollower(records: MemoryRecords): LogAppendInfo = {
@@ -577,7 +585,7 @@ sealed trait AbstractLog {
   /**
     * @return The leader epoch cache file
     */
-  def leaderEpochCache: LeaderEpochFileCache
+  def leaderEpochCache: Option[LeaderEpochFileCache]
 
   /**
     * The earliest offset which is part of an incomplete transaction. This is used to compute the
@@ -662,6 +670,12 @@ sealed trait AbstractLog {
     * @return Information about the appended messages including the first and last offset.
     */
   def appendAsFollower(records: MemoryRecords): LogAppendInfo
+
+  def latestEpoch: Option[Int]
+
+  def endOffsetForEpoch(leaderEpoch: Int): Option[OffsetAndEpoch]
+
+  def maybeAssignEpochStartOffset(leaderEpoch: Int, startOffset: Long): Unit
 
   /**
     * The highwatermark puts an upper-bound on segment deletion and tiering. Messages in the log above the highwatermark

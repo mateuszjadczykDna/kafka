@@ -8,6 +8,7 @@ import kafka.tier.domain.TierObjectMetadata;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.util.Optional;
 
 public interface TierObjectStore {
     enum TierObjectStoreFileType {
@@ -50,6 +51,6 @@ public interface TierObjectStore {
                                   FileChannel timestampIndexData,
                                   FileChannel producerStateSnapshotData,
                                   FileChannel transactionIndexData,
-                                  FileChannel epochState)
+                                  Optional<FileChannel> epochState)
             throws IOException;
 }

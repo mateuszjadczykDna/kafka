@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseable {
@@ -71,7 +72,7 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
             TierObjectMetadata objectMetadata, FileChannel segmentData,
             FileChannel offsetIndexData, FileChannel timestampIndexData,
             FileChannel producerStateSnapshotData, FileChannel transactionIndexData,
-            FileChannel epochState) throws IOException {
+            Optional<FileChannel> epochState) throws IOException {
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.SEGMENT),
                 segmentData);
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.OFFSET_INDEX),
@@ -83,7 +84,7 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.TRANSACTION_INDEX),
                 transactionIndexData);
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.EPOCH_STATE),
-                epochState);
+                epochState.get());
         return objectMetadata;
     }
 

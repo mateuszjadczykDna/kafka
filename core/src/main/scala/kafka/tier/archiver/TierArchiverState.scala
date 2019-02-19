@@ -7,8 +7,8 @@ package kafka.tier.archiver
 import java.io.File
 import java.nio.channels.FileChannel
 import java.nio.file.Files
-import java.util.concurrent.{Callable, CompletableFuture, ScheduledExecutorService, TimeUnit}
-import java.util.function
+import java.util.concurrent.{TimeUnit, CompletableFuture, ScheduledExecutorService, Callable}
+import java.util.{function, Optional}
 import java.util.function.Supplier
 
 import kafka.log.{AbstractLog, LogSegment}
@@ -18,7 +18,7 @@ import kafka.tier.state.TierPartitionState.AppendResult
 import kafka.tier.archiver.CompletableFutureExtensions._
 import kafka.tier.archiver.JavaFunctionConversions._
 import kafka.tier.domain.TierObjectMetadata
-import kafka.tier.exceptions.{TierArchiverFatalException, TierArchiverFencedException, TierMetadataRetryableException}
+import kafka.tier.exceptions.{TierArchiverFencedException, TierMetadataRetryableException, TierArchiverFatalException}
 import kafka.tier.serdes.State
 import kafka.tier.state.TierPartitionState
 import kafka.tier.store.TierObjectStore
@@ -161,8 +161,9 @@ object TierArchiverState {
             val leaderEpochStateFile = uploadableLeaderEpochState(log, logSegment.readNextOffset)
             putSegment(logSegment, leaderEpochStateFile, blockingTaskExecutor)
               .thenApply[TierArchiverState] { objectMetadata: TierObjectMetadata =>
+
               // delete epoch state file
-              Files.deleteIfExists(leaderEpochStateFile.toPath)
+              leaderEpochStateFile.map(file => Files.deleteIfExists(file.toPath))
 
               // transition to AfterUpload
               AfterUpload(objectMetadata, logSegment, log, tierTopicManager, tierObjectStore,
@@ -177,28 +178,31 @@ object TierArchiverState {
     }
 
     // Get an uploadable leader epoch state file by cloning state from leader epoch cache and truncating it to the endOffset
-    private def uploadableLeaderEpochState(log: AbstractLog, endOffset: Long): File = {
+    private def uploadableLeaderEpochState(log: AbstractLog, endOffset: Long): Option[File] = {
       val leaderEpochCache = log.leaderEpochCache
-      val checkpointClone = new LeaderEpochCheckpointFile(new File(leaderEpochCache.file.getAbsolutePath + ".tier"))
-      val leaderEpochCacheClone = leaderEpochCache.clone(checkpointClone)
-      leaderEpochCacheClone.truncateFromEnd(endOffset)
-      leaderEpochCacheClone.file
+      leaderEpochCache.map(cache => {
+        val checkpointClone = new LeaderEpochCheckpointFile(new File(cache.file.getAbsolutePath + ".tier"))
+        val leaderEpochCacheClone = cache.clone(checkpointClone)
+        leaderEpochCacheClone.truncateFromEnd(endOffset)
+        leaderEpochCacheClone.file
+      })
     }
 
     private def archivedOffset: Long = tierPartitionState.endOffset.orElse(-1L)
 
     private def highWatermark: Long = log.getHighWatermark.getOrElse(0L)
 
-    private def putSegment(logSegment: LogSegment, leaderEpochCacheFile: File, blockingTaskExecutor: ScheduledExecutorService): CompletableFuture[TierObjectMetadata] = {
+    private def putSegment(logSegment: LogSegment, leaderEpochCacheFile: Option[File], blockingTaskExecutor: ScheduledExecutorService): CompletableFuture[TierObjectMetadata] = {
       CompletableFuture.supplyAsync(new Supplier[TierObjectMetadata] {
         override def get(): TierObjectMetadata = {
-          val metadata = createObjectMetadata(topicPartition, tierEpoch, logSegment)
           val segmentFileChannel = FileChannel.open(logSegment.log.file.toPath)
           val offsetIndexFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath)
           val timestampIndexFileChannel = FileChannel.open(logSegment.timeIndex.file.toPath)
-          val producerStateFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath) // FIXME producer statua
+          val producerStateFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath) // FIXME producer status
           val transactionIndexFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath) // FIXME transaction index
-          val leaderEpochCacheFileChannel = FileChannel.open(leaderEpochCacheFile.toPath)
+          val leaderEpochCacheFileChannel = Optional.ofNullable(leaderEpochCacheFile.map(f => FileChannel.open(f.toPath)).orNull)
+          def closeLeaderEpochCacheChannel() : Unit = if (leaderEpochCacheFileChannel.isPresent) leaderEpochCacheFileChannel.get.close()
+          val metadata = createObjectMetadata(topicPartition, tierEpoch, logSegment, leaderEpochCacheFileChannel.isPresent)
           try {
             tierObjectStore.putSegment(metadata,
               segmentFileChannel,
@@ -215,7 +219,7 @@ object TierArchiverState {
               timestampIndexFileChannel.close,
               producerStateFileChannel.close,
               transactionIndexFileChannel.close,
-              leaderEpochCacheFileChannel.close))
+              closeLeaderEpochCacheChannel))
           }
         }
       }, blockingTaskExecutor)
@@ -299,7 +303,7 @@ object TierArchiverState {
     }
   }
 
-  private[archiver] def createObjectMetadata(topicPartition: TopicPartition, tierEpoch: Int, logSegment: LogSegment): TierObjectMetadata = {
+  private[archiver] def createObjectMetadata(topicPartition: TopicPartition, tierEpoch: Int, logSegment: LogSegment, hasEpochState: Boolean): TierObjectMetadata = {
     val lastStableOffset = logSegment.readNextOffset - 1 // TODO: get from producer status snapshot
     val offsetDelta = lastStableOffset - logSegment.baseOffset
     new TierObjectMetadata(
@@ -311,6 +315,7 @@ object TierArchiverState {
       logSegment.largestTimestamp,
       logSegment.lastModified,
       logSegment.size,
+      hasEpochState,
       // TODO: compute whether any tx aborts occurred.
       false,
       State.AVAILABLE)

@@ -27,7 +27,7 @@ public class TierObjectMetadata extends AbstractTierMetadata {
     public TierObjectMetadata(TopicPartition topicPartition, int tierEpoch,
                               long startOffset, int endOffsetDelta,
                               long lastStableOffset, long maxTimestamp,
-                              long lastModifiedTime, int size,
+                              long lastModifiedTime, int size, boolean epochState,
                               boolean aborts, byte state) {
         if (tierEpoch < 0) {
             throw new IllegalArgumentException(String.format("Illegal tierEpoch supplied %d.", tierEpoch));
@@ -43,6 +43,7 @@ public class TierObjectMetadata extends AbstractTierMetadata {
                 maxTimestamp,
                 lastModifiedTime,
                 size,
+                epochState,
                 aborts,
                 CURRENT_VERSION,
                 state);
@@ -96,6 +97,10 @@ public class TierObjectMetadata extends AbstractTierMetadata {
 
     public TopicPartition topicPartition() {
         return topicPartition;
+    }
+
+    public boolean hasEpochState() {
+        return metadata.hasEpochState();
     }
 
     public boolean hasAborts() {

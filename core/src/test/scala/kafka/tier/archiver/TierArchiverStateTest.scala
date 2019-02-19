@@ -231,13 +231,13 @@ class TierArchiverStateTest {
 
     // verify size and contents of the segments we tiered
     expectedTierableSegments.foreach { segment =>
-      val segmentMetadata = TierArchiverState.createObjectMetadata(log.topicPartition, 0, segment)
+      val segmentMetadata = TierArchiverState.createObjectMetadata(log.topicPartition, 0, segment, true)
 
       // verify contents of segment, indices and state in tiered store
       assertTrue(isEqual(segment.log.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.SEGMENT))
       assertTrue(isEqual(segment.offsetIndex.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.OFFSET_INDEX))
       assertTrue(isEqual(segment.timeIndex.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.TIMESTAMP_INDEX))
-      assertTrue(isEqual(log.leaderEpochCache.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.EPOCH_STATE))
+      assertTrue(isEqual(log.leaderEpochCache.get.file, tierObjectStore, segmentMetadata, TierObjectStoreFileType.EPOCH_STATE))
     }
 
     log.close()
