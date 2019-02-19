@@ -53,6 +53,7 @@ versions += [
   apacheds: "2.0.0-M24",
   argparse4j: "0.7.0",
   bcpkix: "1.60",
+  httpclient: "4.5.7",
   easymock: "4.0.2",
   flatbuffers: "1.9.0",
   flatbuffersCompiler: "1.9.0.1",
@@ -71,7 +72,7 @@ versions += [
   jaxrs: "2.1.1",
   jfreechart: "1.0.0",
   jopt: "5.0.4",
-  junit: "4.12",
+  junit: "4.13-beta-2",
   scalacheck: "1.14.0",
   scalaJava8Compat: "0.9.0",
   kafka_0100: "0.10.0.1",
@@ -174,4 +175,5 @@ libs += [
   jfreechart: "jfreechart:jfreechart:$versions.jfreechart",
   mavenArtifact: "org.apache.maven:maven-artifact:$versions.mavenArtifact",
   zstd: "com.github.luben:zstd-jni:$versions.zstd",
+  httpclient: "org.apache.httpcomponents:httpclient:$versions.httpclient"
 ]

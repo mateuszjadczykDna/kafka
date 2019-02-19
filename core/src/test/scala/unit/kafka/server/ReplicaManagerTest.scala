@@ -18,12 +18,12 @@
 package kafka.server
 
 import java.io.File
-import java.util.{Optional, Properties}
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.{Properties, Optional}
+import java.util.concurrent.{TimeUnit, CountDownLatch}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kafka.log._
-import kafka.utils.{MockScheduler, MockTime, TestUtils}
+import kafka.utils.{MockScheduler, TestUtils, MockTime}
 import TestUtils.createBroker
 import kafka.cluster.BrokerEndPoint
 import kafka.server.epoch.LeaderEpochFileCache
@@ -34,19 +34,19 @@ import org.I0Itec.zkclient.ZkClient
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 import org.apache.kafka.common.record._
-import org.apache.kafka.common.requests.{EpochEndOffset, IsolationLevel, LeaderAndIsrRequest}
+import org.apache.kafka.common.requests.{IsolationLevel, EpochEndOffset, LeaderAndIsrRequest}
 import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
 import org.apache.kafka.common.requests.FetchRequest.PartitionData
 import org.apache.kafka.common.requests.FetchResponse.AbortedTransaction
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.common.{Node, TopicPartition}
+import org.apache.kafka.common.{TopicPartition, Node}
 import org.apache.zookeeper.data.Stat
 import org.easymock.EasyMock
 import org.junit.Assert._
-import org.junit.{After, Before, Test}
+import org.junit.{Before, After, Test}
 
 import scala.collection.JavaConverters._
-import scala.collection.{Map, Seq}
+import scala.collection.{Seq, Map}
 
 class ReplicaManagerTest {
 
@@ -603,14 +603,14 @@ class ReplicaManagerTest {
     val mockBrokerTopicStats = new BrokerTopicStats
     val mockLogDirFailureChannel = new LogDirFailureChannel(config.logDirs.size)
     val mockLeaderEpochCache: LeaderEpochFileCache = EasyMock.createMock(classOf[LeaderEpochFileCache])
-    EasyMock.expect(mockLeaderEpochCache.latestEpoch).andReturn(leaderEpochFromLeader)
+    EasyMock.expect(mockLeaderEpochCache.latestEpoch).andReturn(Some(leaderEpochFromLeader))
     EasyMock.expect(mockLeaderEpochCache.endOffsetFor(leaderEpochFromLeader))
       .andReturn((leaderEpochFromLeader, localLogOffset))
     EasyMock.expect(mockLeaderEpochCache.truncateFromStart(0))
     EasyMock.replay(mockLeaderEpochCache)
     val logDirs = config.logDirs.map(new File(_))
 
-    val localLog = new Log(
+    val mockLog = new Log(
       dir = new File(new File(config.logDirs.head), s"$topic-0"),
       config = LogConfig(),
       recoveryPoint = 0L,
@@ -632,7 +632,12 @@ class ReplicaManagerTest {
       tierPartitionState = tierPartitionState,
       tierMetadataManager = tierMetadataManager) {
 
-      override def leaderEpochCache: LeaderEpochFileCache = mockLeaderEpochCache
+      override def endOffsetForEpoch(leaderEpoch: Int): Option[OffsetAndEpoch] = {
+        assertEquals(leaderEpoch, leaderEpochFromLeader)
+        Some(OffsetAndEpoch(localLogOffset, leaderEpochFromLeader))
+      }
+
+      override def latestEpoch: Option[Int] = Some(leaderEpochFromLeader)
 
       override def logEndOffsetMetadata = LogOffsetMetadata(localLogOffset)
     }

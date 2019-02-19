@@ -34,7 +34,6 @@ import org.junit.{After, Before, Test}
 
 import scala.collection.mutable.{HashMap, Map}
 
-
 class IsrExpirationTest {
 
   var topicPartitionIsr: Map[(String, Int), Seq[Int]] = new HashMap[(String, Int), Seq[Int]]()
@@ -255,7 +254,6 @@ class IsrExpirationTest {
     val log: AbstractLog = EasyMock.createMock(classOf[AbstractLog])
     val cache: LeaderEpochFileCache = EasyMock.createNiceMock(classOf[LeaderEpochFileCache])
     EasyMock.expect(log.dir).andReturn(TestUtils.tempDir()).anyTimes()
-    EasyMock.expect(log.leaderEpochCache).andReturn(cache).anyTimes()
     EasyMock.expect(log.onHighWatermarkIncremented(0L))
     EasyMock.expect(log.logEndOffsetMetadata).andReturn(LogOffsetMetadata(leaderLogEndOffset)).anyTimes()
     EasyMock.replay(log)
