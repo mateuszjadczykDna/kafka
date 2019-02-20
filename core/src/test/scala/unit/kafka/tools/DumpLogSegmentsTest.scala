@@ -21,8 +21,9 @@ import java.io.{File, ByteArrayOutputStream}
 import java.util.Properties
 
 import scala.collection.mutable
-import kafka.log.{LogConfig, LogManager, Log, MergedLog}
+import kafka.log.{LogConfig, LogManager, MergedLog, Log}
 import kafka.server.{LogDirFailureChannel, BrokerTopicStats}
+import kafka.tools.DumpLogSegments.TimeIndexDumpErrors
 import kafka.utils.{TestUtils, MockTime}
 import org.apache.kafka.common.record.{MemoryRecords, CompressionType, SimpleRecord}
 import org.apache.kafka.common.utils.Utils

@@ -41,7 +41,7 @@ class TierPartitionStateEntryTest {
           0))
       var size = 0
       for (i <- 0 until n) {
-        state.append(new TierObjectMetadata(tp, epoch, i * 2, 1, 1, i, i, i, false, 0))
+        state.append(new TierObjectMetadata(tp, epoch, i * 2, 1, 1, i, i, i, true, false, 0))
         size += i
       }
 
@@ -97,7 +97,7 @@ class TierPartitionStateEntryTest {
 
       positions.put(0, 0)
       for (i <- 0 until n) {
-        state.append(new TierObjectMetadata(tp, epoch, i * 2, 1, 1, i, i, i, false, 0))
+        state.append(new TierObjectMetadata(tp, epoch, i * 2, 1, 1, i, i, i, true, false, 0))
         size += i
         positions.put(channel.size, size)
       }

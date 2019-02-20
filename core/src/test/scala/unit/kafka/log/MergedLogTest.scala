@@ -159,7 +159,7 @@ class MergedLogTest {
     val offsetToEpoch: ConcurrentNavigableMap[Long, Long] = new ConcurrentSkipListMap
 
     for ((offset, epoch) <- offsets zip epochs) {
-      log.leaderEpochCache.assign(epoch, offset)
+      log.leaderEpochCache.get.assign(epoch, offset)
       offsetToEpoch.put(offset, epoch)
     }
 
@@ -169,7 +169,7 @@ class MergedLogTest {
 
       // validate epoch cache truncation
       val expectedEpochs = offsetToEpoch.tailMap(offset)
-      val epochsInLog = log.leaderEpochCache.epochEntries
+      val epochsInLog = log.leaderEpochCache.get.epochEntries
       assertEquals(expectedEpochs.keySet.asScala.toList, epochsInLog.map(_.startOffset).toList)
       assertEquals(expectedEpochs.values.asScala.toList, epochsInLog.map(_.epoch).toList)
     }
@@ -196,6 +196,7 @@ class MergedLogTest {
         segment.largestTimestamp,
         segment.lastModified,
         segment.size,
+        true,
         false,
         0.toByte)
       val appendResult = tierPartitionState.append(tierObjectMetadata)
@@ -281,6 +282,7 @@ class MergedLogTest {
         segment.largestTimestamp,
         segment.lastModified,
         segment.size,
+        true,
         false,
         0.toByte)
       val appendResult = tierPartitionState.append(tierObjectMetadata)

@@ -626,8 +626,9 @@ class ReplicaManagerTest {
 
     val tierMetadataManager = TestUtils.createTierMetadataManager(logDirs)
     val tierPartitionState = tierMetadataManager.initState(new TopicPartition(topic, topicPartition),
-      logDirs.head, localLog.config)
-    val mockLog = new MergedLog(localLog,
+      logDirs.head, mockLog.config)
+
+    val mockMergedLog = new MergedLog(mockLog,
       logStartOffset = 0L,
       tierPartitionState = tierPartitionState,
       tierMetadataManager = tierMetadataManager) {
@@ -647,7 +648,7 @@ class ReplicaManagerTest {
     EasyMock.expect(mockLogMgr.liveLogDirs).andReturn(config.logDirs.map(new File(_).getAbsoluteFile)).anyTimes
     EasyMock.expect(mockLogMgr.currentDefaultConfig).andReturn(LogConfig())
     EasyMock.expect(mockLogMgr.getOrCreateLog(new TopicPartition(topic, topicPartition),
-      LogConfig(), isNew = false, isFuture = false)).andReturn(mockLog).anyTimes
+      LogConfig(), isNew = false, isFuture = false)).andReturn(mockMergedLog).anyTimes
     if (expectTruncation) {
       EasyMock.expect(mockLogMgr.truncateTo(Map(new TopicPartition(topic, topicPartition) -> offsetFromLeader),
         isFuture = false)).once

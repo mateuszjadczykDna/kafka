@@ -101,6 +101,7 @@ class TierArchiverStateTest {
       0,
       1,
       true,
+      true,
       1.asInstanceOf[Byte]
     )
     val tierObjectStore = new MockInMemoryTierObjectStore("bucket")

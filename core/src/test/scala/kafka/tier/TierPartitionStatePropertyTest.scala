@@ -30,6 +30,7 @@ class TierPartitionStatePropertyTest {
     startOffset <- Gen.posNum[Long]
     endOffsetDelta <- Gen.posNum[Int]
     lastStableOffset <- Gen.posNum[Long]
+    hasTierState <- Gen.oneOf(true, false)
     hasAborts <- Gen.oneOf(true, false)
     maxTimestamp <- Gen.posNum[Long]
     lastModifiedTime <- Gen.posNum[Long]
@@ -43,6 +44,7 @@ class TierPartitionStatePropertyTest {
                            maxTimestamp,
                            lastModifiedTime,
                            size,
+                           hasTierState,
                            hasAborts,
                            State.AVAILABLE)
 

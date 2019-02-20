@@ -2225,7 +2225,7 @@ class LogTest {
     assertEquals(Some(5), log.latestEpoch)
   }
 
-  private def assertLeaderEpochCacheEmpty(log: Log): Unit = {
+  private def assertLeaderEpochCacheEmpty(log: AbstractLog): Unit = {
     assertEquals(None, log.leaderEpochCache)
     assertEquals(None, log.latestEpoch)
     assertFalse(LeaderEpochCheckpointFile.newFile(log.dir).exists())
