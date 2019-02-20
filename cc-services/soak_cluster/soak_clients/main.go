@@ -70,10 +70,12 @@ func Run(topicConfigPath string) {
 	}()
 
 	var runningTaskNames []string
+	logutil.Info(logger, "Creating baseline tasks... (trogdor agents count: %d)", trogdorAgentsCount)
 	taskSpecs, err := baselineTasks(topicConfigPath, trogdorAgentsCount)
 	if err != nil {
 		panic(err)
 	}
+	logutil.Info(logger, "Creating %d Trogdor tasks", len(runningTaskNames))
 	for _, task := range taskSpecs {
 		resp, body, err := task.CreateTask(trogdorCoordinatorHost)
 		if err != nil {
@@ -88,7 +90,7 @@ func Run(topicConfigPath string) {
 		logutil.Debug(logger, "Created task %s", task.ID)
 		runningTaskNames = append(runningTaskNames, task.ID)
 	}
-	logutil.Info(logger, "Created %d tasks", len(runningTaskNames))
+	logutil.Info(logger, "Created %d Trogdor tasks", len(runningTaskNames))
 }
 
 // waits until all the existing tasks get cleaned up and panics

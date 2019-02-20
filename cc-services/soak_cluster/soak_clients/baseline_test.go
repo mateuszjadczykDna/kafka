@@ -20,14 +20,14 @@ var clientNodes = []string{"node1", "node2", "node3"}
 
 func TestBaselineTasks(t *testing.T) {
 	InitLogger()
-	topics := topicsConfig()
+	topics := soakTestConfig([]string{"a", "b", "c"})
 	produceCount, consumeCount := 0, 0
 	for _, topic := range topics.Topics {
 		consumeCount += topic.ConsumeCount
 		produceCount += topic.ProduceCount
 	}
 	expected := calculateExpectedTasksCount(produceCount, consumeCount, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs)
-	configPath := writeTopicsConfigFile(t, topics)
+	configPath := writeSoakTestConfigFile(t, topics)
 	tasks, err := baselineTasks(configPath, 10)
 	if err != nil {
 		fmt.Println(err)
@@ -102,16 +102,17 @@ func assertTaskCount(t *testing.T, tasks []trogdor.TaskSpec, expected expectedTa
 }
 
 func TestParseConfigParsesCorrectly(t *testing.T) {
-	originalTopics := topicsConfig()
-	topics := Topics{}
-	fileName := writeTopicsConfigFile(t, originalTopics)
+	originalTopics := soakTestConfig([]string{"a", "b", "c"})
+	fileName := writeSoakTestConfigFile(t, originalTopics)
+
+	topics := SoakTestConfig{}
 	err := topics.parseConfig(fileName)
 
 	assert.NoError(t, err)
 	assert.Equal(t, originalTopics, topics)
 }
 
-func writeTopicsConfigFile(t *testing.T, topics Topics) string {
+func writeSoakTestConfigFile(t *testing.T, topics SoakTestConfig) string {
 	file, err := ioutil.TempFile("/tmp", "config")
 	data, err := json.Marshal(topics)
 	if err != nil {
@@ -126,52 +127,6 @@ func writeTopicsConfigFile(t *testing.T, topics Topics) string {
 	return file.Name()
 }
 
-func TestParseConfigReturnsErrorIfTopicNameNotWhitelisted(t *testing.T) {
-	originalTopics := topicsConfig()
-	originalTopics.Topics[0].Name = "invaliDddD"
-	topics := Topics{}
-	file, err := ioutil.TempFile("/tmp", "config")
-	data, err := json.Marshal(originalTopics)
-	if err != nil {
-		assert.Fail(t, fmt.Sprintf("error while marshalling topics %s", err))
-	}
-	file.Write(data)
-
-	if err != nil {
-		assert.Fail(t, fmt.Sprintf("error while creating temporary file %s", err))
-	}
-	err = topics.parseConfig(file.Name())
-
-	assert.Error(t, err)
-}
-
-func TestParseConfigReturnsErrorIfExtraTopicAdded(t *testing.T) {
-	originalTopics := topicsConfig()
-	originalTopics.Topics = append(originalTopics.Topics,
-		TopicConfiguration{
-			Name:                 "testTest",
-			PartitionsCount:      1000,
-			ProduceMBsThroughput: 60,
-			ConsumeMBsThroughput: 60,
-			ProduceCount:         10,
-			ConsumeCount:         10,
-		})
-	topics := Topics{}
-	file, err := ioutil.TempFile("/tmp", "config")
-	data, err := json.Marshal(originalTopics)
-	if err != nil {
-		assert.Fail(t, fmt.Sprintf("error while marshalling topics %s", err))
-	}
-	file.Write(data)
-
-	if err != nil {
-		assert.Fail(t, fmt.Sprintf("error while creating temporary file %s", err))
-	}
-	err = topics.parseConfig(file.Name())
-
-	assert.Error(t, err)
-}
-
 func TestConsecutiveTasks(t *testing.T) {
 	mediumTopic := trogdor.TopicSpec{
 		NumPartitions:     16,
@@ -183,11 +138,11 @@ func TestConsecutiveTasks(t *testing.T) {
 		agentCount:         3,
 		topic:              mediumTopic,
 		throughputMbPerSec: 7.5,
-		consumerOptions:    trogdor.ConsumerOptions{
+		consumerOptions: trogdor.ConsumerOptions{
 			ConsumerGroup: "cg-1",
 		},
-		startMs:            10,
-		durationMs:         5,
+		startMs:    10,
+		durationMs: 5,
 	}
 	firstConfig := SoakScenarioConfig{}
 	copier.Copy(&firstConfig, &startConfig)
@@ -225,10 +180,10 @@ func TestConsecutiveTasksFailsIfStartMsIsZero(t *testing.T) {
 		agentCount:         3,
 		topic:              mediumTopic,
 		throughputMbPerSec: 7.5,
-		consumerOptions:    trogdor.ConsumerOptions{
+		consumerOptions: trogdor.ConsumerOptions{
 			ConsumerGroup: "cg-1",
 		},
-		durationMs:         5,
+		durationMs: 5,
 	}
 	_, err := consecutiveTasks(startConfig, 25, clientNodes)
 	assert.Error(t, err)
@@ -253,14 +208,14 @@ func TestCalculateClientCounts(t *testing.T) {
 	assert.Equal(t, expectedCounts, clientCounts)
 }
 
-func topicsConfig() Topics {
-	topics := Topics{
+func soakTestConfig(topicNames []string) SoakTestConfig {
+	topics := SoakTestConfig{
 		LongLivedTaskDurationMs:  oneWeekDurationMs,
 		ShortLivedTaskDurationMs: fifteenMinutesDurationMs,
 	}
-	for _, whitelistName := range topicNameWhitelist {
+	for _, topicName := range topicNames {
 		topics.Topics = append(topics.Topics, TopicConfiguration{
-			Name:                 whitelistName,
+			Name:                 topicName,
 			PartitionsCount:      1000,
 			ProduceMBsThroughput: 60,
 			ConsumeMBsThroughput: 60,

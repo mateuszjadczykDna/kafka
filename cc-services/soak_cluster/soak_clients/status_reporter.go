@@ -13,7 +13,7 @@ func Report(topicConfigPath string) {
 	logutil.Info(logger, "Querying for tasks...")
 	defer logutil.Info(logger, "Shutting down...")
 
-	configuration := Topics{}
+	configuration := SoakTestConfig{}
 	err := configuration.parseConfig(topicConfigPath)
 	if err != nil {
 		logutil.Error(logger, "error while parsing topic config - %s", err)

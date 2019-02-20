@@ -14,6 +14,7 @@ RUN rm ./mk-include
 COPY .mk-include.local-context-copy ./mk-include
 RUN make deps DEP_ARGS=-vendor-only VERSION=${version}
 
+RUN make lint-go test-go
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make build-go GO_OUTDIR= VERSION=${version}
 
 FROM confluent-docker.jfrog.io/confluentinc/cc-built-base:0.0.2

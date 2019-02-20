@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	logutil "github.com/confluentinc/cc-utils/log"
+	"strings"
 
 	"github.com/confluentinc/ce-kafka/cc-services/trogdor"
 	"github.com/dariubs/percent"
@@ -14,34 +15,28 @@ import (
 	"time"
 )
 
-type Topics struct {
+type SoakTestConfig struct {
 	Topics                   []TopicConfiguration `json:"topics"`
 	LongLivedTaskDurationMs  uint64               `json:"long_lived_task_duration_ms"`
 	ShortLivedTaskDurationMs uint64               `json:"short_lived_task_duration_ms"`
 }
 
-var topicNameWhitelist = []string{"big_topic", "medium_topic", "eos_topic"}
-
-func (t *Topics) parseConfig(configPath string) error {
+func (t *SoakTestConfig) parseConfig(configPath string) error {
 	raw, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed reading the topic configuration from %s", configPath))
+		return errors.Wrap(err, fmt.Sprintf("failed reading the soak test configuration from %s", configPath))
 	}
 
 	err = json.Unmarshal(raw, &t)
 	if err != nil {
 		return err
 	}
-	// validate topic names
-	for _, topic := range t.Topics {
-		if !contains(topicNameWhitelist, topic.Name) {
-			return errors.New(fmt.Sprintf("%s is not part of the topic name whitelist", topic.Name))
-		}
-	}
-	if len(topicNameWhitelist) != len(t.Topics) {
-		return errors.New("The number of topics supplied do not match the number of whitelisted topics")
-	}
 
+	topicNames := make([]string, len(t.Topics))
+	for _, topicConfig := range t.Topics {
+		topicNames = append(topicNames, topicConfig.Name)
+	}
+	logutil.Info(logger, fmt.Sprintf("Loaded configuration for topics %s", strings.Join(topicNames, ",")))
 	return nil
 }
 
@@ -67,7 +62,7 @@ var transactionalProducerOptions = trogdor.ProducerOptions{
 }
 
 // Returns all the baseline tasks that should be ran on the Soak Cluster at all times
-func baselineTasks(topicConfigPath string, trogdorAgentsCount int) ([]trogdor.TaskSpec, error) {
+func baselineTasks(soakConfigPath string, trogdorAgentsCount int) ([]trogdor.TaskSpec, error) {
 	var tasks []trogdor.TaskSpec
 	var clientNodes []string
 	for agentID := 0; agentID < trogdorAgentsCount; agentID++ {
@@ -75,8 +70,8 @@ func baselineTasks(topicConfigPath string, trogdorAgentsCount int) ([]trogdor.Ta
 		clientNodes = append(clientNodes, fmt.Sprintf("cc-trogdor-service-agent-%d", agentID))
 	}
 
-	configuration := Topics{}
-	err := configuration.parseConfig(topicConfigPath)
+	configuration := SoakTestConfig{}
+	err := configuration.parseConfig(soakConfigPath)
 	if err != nil {
 		return []trogdor.TaskSpec{}, err
 	}
@@ -144,8 +139,8 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		agentCount:         clientCounts.LongLivedConsumersCount,
 		topic:              topic,
 		throughputMbPerSec: topicConfig.ConsumeMBsThroughput * calculatePercentage(clientCounts.LongLivedConsumersCount, topicConfig.ConsumeCount),
-		consumerOptions: consumerOptions,
-		adminConfig: adminConfig,
+		consumerOptions:    consumerOptions,
+		adminConfig:        adminConfig,
 	}, shuffleSlice(clientNodes))
 	logutil.Debug(logger, "longLivingConsumersScenarioConfig: %+v", longLivingConsumersScenarioConfig)
 	longLivingConsumersScenario := &trogdor.ScenarioSpec{}
