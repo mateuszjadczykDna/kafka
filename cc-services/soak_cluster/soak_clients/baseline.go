@@ -77,14 +77,8 @@ func baselineTasks(soakConfigPath string, trogdorAgentsCount int) ([]trogdor.Tas
 	}
 	existingIDs := make(map[string]bool)
 	for _, topicConfig := range configuration.Topics {
-		newTasks := createTopicTasks(topicConfig, configuration.LongLivedTaskDurationMs, configuration.ShortLivedTaskDurationMs, clientNodes)
-		// validate against duplicate IDs
-		for _, newTask := range newTasks {
-			if existingIDs[newTask.ID] {
-				return tasks, errors.New(fmt.Sprintf("Duplicate task with ID %s", newTask.ID))
-			}
-			existingIDs[newTask.ID] = true
-		}
+		newTasks := createTopicTasks(topicConfig, configuration.LongLivedTaskDurationMs,
+			configuration.ShortLivedTaskDurationMs, clientNodes, existingIDs)
 		tasks = append(tasks, newTasks...)
 	}
 
@@ -94,7 +88,8 @@ func baselineTasks(soakConfigPath string, trogdorAgentsCount int) ([]trogdor.Tas
 // Creates Trogdor Produce and Consume Bench Tasks from a TopicConfiguration
 // 50% of the clients are made long-lived whereas
 // the rest are short-lived, scheduled to run until the long-lived tasks finish
-func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortLivedMs uint64, clientNodes []string) []trogdor.TaskSpec {
+func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortLivedMs uint64,
+	clientNodes []string, existingTaskIDs map[string]bool) []trogdor.TaskSpec {
 	var tasks []trogdor.TaskSpec
 	topic := trogdor.TopicSpec{
 		NumPartitions:     uint64(topicConfig.PartitionsCount),
@@ -118,9 +113,14 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 	consumerOptions := trogdor.ConsumerOptions{
 		ConsumerGroup: fmt.Sprintf("Consume%sTestGroup", topicConfig.Name),
 	}
+	nowMs := uint64(time.Now().UnixNano() / int64(time.Millisecond))
 
 	longLivingProducersScenarioConfig := scenarioConfig(&SoakScenarioConfig{
-		scenarioId:         fmt.Sprintf("LongLivedProduce-%s", topicConfig.Name),
+		scenarioId: trogdor.TaskId{
+			TaskType: "LongLivedProduce",
+			Desc:     topic.TopicName,
+			StartMs:  nowMs,
+		},
 		class:              trogdor.PRODUCE_BENCH_SPEC_CLASS,
 		durationMs:         longLivedMs,
 		agentCount:         clientCounts.LongLivedProducersCount,
@@ -130,10 +130,16 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		adminConfig:        producerAdminConfig,
 	}, shuffleSlice(clientNodes)) // shuffle the clientNodes order to ensure random distribution of tasks
 	logutil.Debug(logger, "longLivingProducersScenarioConfig: %+v", longLivingProducersScenarioConfig)
-	longLivingProducersScenario := &trogdor.ScenarioSpec{}
+	longLivingProducersScenario := &trogdor.ScenarioSpec{
+		UsedNames: existingTaskIDs,
+	}
 	longLivingProducersScenario.CreateScenario(longLivingProducersScenarioConfig)
 	longLivingConsumersScenarioConfig := scenarioConfig(&SoakScenarioConfig{
-		scenarioId:         fmt.Sprintf("LongLivedConsume-%s", topicConfig.Name),
+		scenarioId: trogdor.TaskId{
+			TaskType: "LongLivedConsume",
+			Desc:     topic.TopicName,
+			StartMs:  nowMs,
+		},
 		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
 		durationMs:         longLivedMs,
 		agentCount:         clientCounts.LongLivedConsumersCount,
@@ -143,15 +149,20 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		adminConfig:        adminConfig,
 	}, shuffleSlice(clientNodes))
 	logutil.Debug(logger, "longLivingConsumersScenarioConfig: %+v", longLivingConsumersScenarioConfig)
-	longLivingConsumersScenario := &trogdor.ScenarioSpec{}
+	longLivingConsumersScenario := &trogdor.ScenarioSpec{
+		UsedNames: existingTaskIDs,
+	}
 	longLivingConsumersScenario.CreateScenario(longLivingConsumersScenarioConfig)
 	tasks = append(tasks, longLivingProducersScenario.TaskSpecs...)
 	tasks = append(tasks, longLivingConsumersScenario.TaskSpecs...)
 
 	// schedule short-lived produce/consume tasks one week in advance
-	nowMs := uint64(time.Now().UnixNano() / int64(time.Millisecond))
 	shortLivedProducersSoakConfig := &SoakScenarioConfig{
-		scenarioId:         fmt.Sprintf("ShortLivedProduce-%s", topicConfig.Name),
+		scenarioId: trogdor.TaskId{
+			TaskType: "ShortLivedProduce",
+			Desc:     topic.TopicName,
+			StartMs:  nowMs,
+		},
 		class:              trogdor.PRODUCE_BENCH_SPEC_CLASS,
 		durationMs:         shortLivedMs,
 		agentCount:         clientCounts.ShortLivedProducersCount,
@@ -167,12 +178,18 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		panic(err)
 	}
 	for _, config := range producerTasks {
-		shortLivedProducersScenario := &trogdor.ScenarioSpec{}
+		shortLivedProducersScenario := &trogdor.ScenarioSpec{
+			UsedNames: existingTaskIDs,
+		}
 		shortLivedProducersScenario.CreateScenario(config)
 		tasks = append(tasks, shortLivedProducersScenario.TaskSpecs...)
 	}
 	shortLivedConsumersSoakConfig := &SoakScenarioConfig{
-		scenarioId:         fmt.Sprintf("ShortLivedConsume-%s", topicConfig.Name),
+		scenarioId: trogdor.TaskId{
+			TaskType: "ShortLivedConsume",
+			Desc:     topic.TopicName,
+			StartMs:  nowMs,
+		},
 		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
 		durationMs:         shortLivedMs,
 		agentCount:         clientCounts.ShortLivedConsumersCount,
@@ -188,7 +205,9 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		panic(err)
 	}
 	for _, config := range consumerTasks {
-		shortLivedProducersScenario := &trogdor.ScenarioSpec{}
+		shortLivedProducersScenario := &trogdor.ScenarioSpec{
+			UsedNames: existingTaskIDs,
+		}
 		shortLivedProducersScenario.CreateScenario(config)
 		tasks = append(tasks, shortLivedProducersScenario.TaskSpecs...)
 	}
@@ -207,15 +226,20 @@ func consecutiveTasks(soakConfig *SoakScenarioConfig, endMs uint64, clientNodes 
 			break
 		}
 		configs = append(configs, scenarioConfig(soakConfig, clientNodes))
+
 		newStartMs := soakConfig.startMs + soakConfig.durationMs
 		soakConfig.startMs = newStartMs
-		soakConfig.scenarioId = fmt.Sprintf("%s-%d", originalId, newStartMs)
+
+		taskId := trogdor.TaskId{}
+		copier.Copy(&taskId, &originalId)
+		taskId.StartMs = newStartMs
+		soakConfig.scenarioId = taskId
 	}
 	return configs, nil
 }
 
 type SoakScenarioConfig struct {
-	scenarioId         string
+	scenarioId         trogdor.TaskId
 	class              string
 	durationMs         uint64
 	agentCount         int

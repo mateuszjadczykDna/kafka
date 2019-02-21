@@ -79,7 +79,7 @@ func Run(topicConfigPath string) {
 	for _, task := range taskSpecs {
 		resp, body, err := task.CreateTask(trogdorCoordinatorHost)
 		if err != nil {
-			logutil.Error(logger, "Error while trying to create task %s. err: ", task.ID, err)
+			logutil.Error(logger, "Error while trying to create task %s. err: %s", task.ID, err)
 			abortAndCleanUp(abortError{err.Error(), runningTaskNames})
 		}
 		if code := resp.StatusCode; code > 299 {
@@ -118,7 +118,7 @@ func abortTasks() {
 	for _, taskId := range err.taskIds {
 		resp, body, err := trogdor.DeleteTask(trogdorCoordinatorHost, taskId)
 		if err != nil {
-			logutil.Debug(logger, "error while trying to DELETE task %s. err: ", taskId, err)
+			logutil.Debug(logger, "error while trying to DELETE task %s. err: %s", taskId, err)
 			continue
 		}
 		if code := resp.StatusCode; code > 299 {

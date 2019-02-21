@@ -10,12 +10,12 @@
   version = "v0.4.0"
 
 [[projects]]
-  branch = "ce-trunk"
-  digest = "1:ba65b75a184c22f164fca3d1de5b7cba2f52456f1807a7999f28cb73230e16c3"
+  branch = "CPKAFKA-2205-task-naming"
+  digest = "1:f4deb4e6b690634f1e5743d5036b7102e945d43fd3cba1e7ecce933895b636b5"
   name = "github.com/confluentinc/ce-kafka"
   packages = ["cc-services/trogdor"]
   pruneopts = "UT"
-  revision = "8560e6db6192c85c5510f95ba138e2b7942af1a1"
+  revision = "8bd4df481097a78f3ee099aad8a2601c07d0f607"
 
 [[projects]]
   branch = "master"
@@ -137,12 +137,12 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:40e195917a951a8bf867cd05de2a46aaf1806c50cf92eebf4c16f78cd196f747"
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
   name = "github.com/pkg/errors"
   packages = ["."]
   pruneopts = "UT"
-  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
-  version = "v0.8.0"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
@@ -153,15 +153,15 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:6a4a11ba764a56d2758899ec6f3848d24698d48442ebce85ee7a3f63284526cd"
+  digest = "1:3e39bafd6c2f4bf3c76c3bfd16a2e09e016510ad5db90dc02b88e2f565d6d595"
   name = "github.com/spf13/afero"
   packages = [
     ".",
     "mem",
   ]
   pruneopts = "UT"
-  revision = "d40851caa0d747393da1ffb28f7f9d8b4eeffebd"
-  version = "v1.1.2"
+  revision = "f4711e4db9e9a1d3887343acb72b2bbfc2f686f5"
+  version = "v1.2.1"
 
 [[projects]]
   digest = "1:08d65904057412fc0270fc4812a1c90c594186819243160dc779a402d4b6d0bc"
@@ -204,20 +204,20 @@
   version = "v1.3.1"
 
 [[projects]]
-  digest = "1:18752d0b95816a1b777505a97f71c7467a8445b8ffb55631a7bf779f6ba4fa83"
+  digest = "1:972c2427413d41a1e06ca4897e8528e5a1622894050e2f527b38ddf0f343f759"
   name = "github.com/stretchr/testify"
   packages = ["assert"]
   pruneopts = "UT"
-  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
-  version = "v1.2.2"
+  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
+  version = "v1.3.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:48a949ee15f5f03524b792547822221b07f828dd26522b5e08688f25a10d14c1"
+  digest = "1:8207c052fb873f83c61a5aa16f6add5feb9881eda2112b56f69fd3b9e7f55c3f"
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = "UT"
-  revision = "4d1cda033e0619309c606fc686de3adcf599539e"
+  revision = "153ac476189d567564fda94622d7a8c0fb338f6b"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"

@@ -34,6 +34,7 @@ func TestBaselineTasks(t *testing.T) {
 		assert.Fail(t, "error while getting baseline tasks")
 	}
 
+	assertTaskNamesUnique(t, tasks)
 	assertTaskCount(t, tasks, expected, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs)
 }
 
@@ -50,9 +51,20 @@ func TestCreateTopicTasks(t *testing.T) {
 		ProduceCount:         produceCount,
 		ConsumeCount:         consumeCount,
 	}
-	tasks := createTopicTasks(topicSpecification, oneWeekDurationMs, fifteenMinutesDurationMs/2, clientNodes)
+	tasks := createTopicTasks(topicSpecification, oneWeekDurationMs, fifteenMinutesDurationMs/2, clientNodes, make(map[string]bool))
 
 	assertTaskCount(t, tasks, expected, oneWeekDurationMs, fifteenMinutesDurationMs/2)
+}
+
+func assertTaskNamesUnique(t *testing.T, tasks []trogdor.TaskSpec) {
+	existingIDs := make(map[string]bool)
+	for _, newTask := range tasks {
+		if existingIDs[newTask.ID] {
+			assert.Fail(t, fmt.Sprintf("Task name %s is duplicate", newTask.ID))
+			return
+		}
+		existingIDs[newTask.ID] = true
+	}
 }
 
 func assertTaskCount(t *testing.T, tasks []trogdor.TaskSpec, expected expectedTasksCount,
@@ -133,7 +145,10 @@ func TestConsecutiveTasks(t *testing.T) {
 		ReplicationFactor: 3,
 	}
 	startConfig := &SoakScenarioConfig{
-		scenarioId:         "ShortLivedConsumeMediumTopicTest",
+		scenarioId: trogdor.TaskId{
+			TaskType: "ShortLivedConsume",
+			Desc:     "MediumTopic",
+		},
 		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
 		agentCount:         3,
 		topic:              mediumTopic,
@@ -149,11 +164,19 @@ func TestConsecutiveTasks(t *testing.T) {
 	secondConfig := SoakScenarioConfig{}
 	copier.Copy(&secondConfig, &startConfig)
 	secondConfig.startMs = 15
-	secondConfig.scenarioId = "ShortLivedConsumeMediumTopicTest-15"
+	secondConfig.scenarioId = trogdor.TaskId{
+		TaskType: "ShortLivedConsume",
+		Desc:     "MediumTopic",
+		StartMs:  15,
+	}
 	thirdConfig := SoakScenarioConfig{}
 	copier.Copy(&thirdConfig, &startConfig)
 	thirdConfig.startMs = 20
-	thirdConfig.scenarioId = "ShortLivedConsumeMediumTopicTest-20"
+	thirdConfig.scenarioId = trogdor.TaskId{
+		TaskType: "ShortLivedConsume",
+		Desc:     "MediumTopic",
+		StartMs:  20,
+	}
 
 	// should return 3 scenario configs
 	expectedConfigs := []trogdor.ScenarioConfig{
@@ -175,7 +198,10 @@ func TestConsecutiveTasksFailsIfStartMsIsZero(t *testing.T) {
 		ReplicationFactor: 3,
 	}
 	startConfig := &SoakScenarioConfig{
-		scenarioId:         "ShortLivedConsumeMediumTopicTest",
+		scenarioId: trogdor.TaskId{
+			TaskType: "ShortLivedConsume",
+			Desc:     "MediumTopic",
+		},
 		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
 		agentCount:         3,
 		topic:              mediumTopic,

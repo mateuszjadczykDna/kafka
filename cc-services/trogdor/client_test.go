@@ -134,6 +134,22 @@ var sampleProduceTaskStatus = `
 }
 `
 
+func TestTaskIdName(t *testing.T) {
+	taskId := TaskId{
+		TaskType: "test",
+		StartMs:  1405544146000,
+		agentId:  "agent-0",
+	}
+
+	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0", taskId.Name())
+	taskId.Desc = "topic-1"
+	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0.topic-1", taskId.Name())
+	taskId.duplicateId = 1
+	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0.topic-1.1", taskId.Name())
+	taskId.loadLoopIteration = 2
+	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0.topic-1.2L.1", taskId.Name())
+}
+
 func TestParseStatuses(t *testing.T) {
 	taskStatuses, err := parseStatuses(strings.NewReader(sampleTasksReport))
 	if err != nil {
