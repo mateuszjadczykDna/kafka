@@ -342,9 +342,9 @@ public class MultiTenantRequestContextTest {
 
   @Test
   public void testMetadataRequest() {
-    for (short ver = 1; ver <= ApiKeys.METADATA.latestVersion(); ver++) {
+    for (short ver = 0; ver <= ApiKeys.METADATA.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.METADATA, ver);
-      MetadataRequest inbound = new MetadataRequest.Builder(Arrays.asList("foo", "bar"), true).build(ver);
+      MetadataRequest inbound = new MetadataRequest(Arrays.asList("foo", "bar"), true, ver);
       MetadataRequest intercepted = (MetadataRequest) parseRequest(context, inbound);
       assertEquals(Arrays.asList("tenant_foo", "tenant_bar"), intercepted.topics());
       verifyRequestMetrics(ApiKeys.METADATA);
@@ -388,9 +388,10 @@ public class MultiTenantRequestContextTest {
 
   @Test
   public void testMetadataFetchAllTopics() throws IOException {
-    for (short ver = 1; ver <= ApiKeys.METADATA.latestVersion(); ver++) {
+    for (short ver = 0; ver <= ApiKeys.METADATA.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.METADATA, ver);
-      MetadataRequest inbound = MetadataRequest.Builder.allTopics().build(ver);
+      List<String> allTopicsQuery = ver == 0 ? Collections.emptyList() : null;
+      MetadataRequest inbound = new MetadataRequest(allTopicsQuery, true, ver);
       MetadataRequest interceptedInbound = (MetadataRequest) parseRequest(context, inbound);
       assertTrue(interceptedInbound.isAllTopics());
 
