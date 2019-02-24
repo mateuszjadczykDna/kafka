@@ -86,7 +86,8 @@ public class ActiveDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
     return activeDirectoryService.user(name, principal, serviceName);
   }
 
-  @Parameterized.Parameters(name = "kafkaSaslMechanism={0}")
+  @Parameterized.Parameters(name = "saslMechanism={0}, secUser={1}, searchMode={2}, "
+          + "refreshInterval={3}")
   public static Collection<Object[]> data() {
     List<Object[]> values = new ArrayList<>();
     values.add(new Object[]{"SCRAM-SHA-256", LDAP_USER, SearchMode.GROUPS, 10});
