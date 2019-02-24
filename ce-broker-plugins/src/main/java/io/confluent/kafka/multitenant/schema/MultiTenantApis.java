@@ -293,6 +293,14 @@ public class MultiTenantApis {
           }
           break;
 
+        case CREATE_TOPICS:
+          if (field != null) {
+            if (field.name.equals("error_message")) {
+              return Optional.some(new ErrorMessageSanitizer(type));
+            }
+          }
+          break;
+
         default:
           // fall through
       }

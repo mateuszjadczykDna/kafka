@@ -15,6 +15,14 @@ import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.ApiException;
 import org.apache.kafka.common.errors.InvalidRequestException;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopic;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicSet;
+import org.apache.kafka.common.message.CreateTopicsRequestData;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfig;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfigSet;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignmentSet;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignment;
+import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.network.NetworkSend;
@@ -27,6 +35,7 @@ import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.AbstractResponse;
 import org.apache.kafka.common.requests.AlterConfigsRequest;
 import org.apache.kafka.common.requests.CreateAclsRequest;
+import org.apache.kafka.common.requests.CreateTopicsResponse;
 import org.apache.kafka.common.requests.DeleteAclsRequest;
 import org.apache.kafka.common.requests.DeleteAclsResponse;
 import org.apache.kafka.common.requests.DescribeAclsRequest;
@@ -215,6 +224,8 @@ public class MultiTenantRequestContext extends RequestContext {
         filteredResponse = filteredMetadataResponse((MetadataResponse) body);
       } else if (body instanceof ListGroupsResponse) {
         filteredResponse = filteredListGroupsResponse((ListGroupsResponse) body);
+      } else if (body instanceof CreateTopicsResponse) {
+        filteredResponse = transformCreateTopicsResponse((CreateTopicsResponse) body);
       } else if (body instanceof DescribeConfigsResponse
               && !tenantContext.principal.tenantMetadata().allowDescribeBrokerConfigs) {
         filteredResponse = filteredDescribeConfigsResponse((DescribeConfigsResponse) body);
@@ -241,74 +252,76 @@ public class MultiTenantRequestContext extends RequestContext {
 
   private AbstractRequest transformCreateTopicsRequest(CreateTopicsRequest topicsRequest,
                                                        short version) {
-    Map<String, CreateTopicsRequest.TopicDetails> topics = topicsRequest.topics();
+    final CreatableTopicSet topics = topicsRequest.data().topics();
+    final CreatableTopicSet updatedTopicSet = new CreatableTopicSet();
 
-    Map<String, CreateTopicsRequest.TopicDetails> transformedTopics = new HashMap<>();
-
-    Map<String, List<List<Integer>>> assignments;
-    if (partitionAssignor != null) {
-      // override assignments
-      Map<String, TenantPartitionAssignor.TopicInfo> topicInfos = new HashMap<>();
-      for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
-        CreateTopicsRequest.TopicDetails topicDetails = entry.getValue();
-        int partitions = topicDetails.numPartitions;
-        short replication = topicDetails.replicationFactor;
-        if (!topicDetails.replicasAssignments.isEmpty()) {
-          log.debug("Overriding replica assignments provided in CreateTopicsRequest");
-          partitions = topicDetails.replicasAssignments.size();
-          replication = (short) topicDetails.replicasAssignments.get(0).size();
-        }
-        if (partitions <= 0) {
-          throw new InvalidRequestException("Invalid partition count " + partitions);
-        }
-        if (replication <= 0) {
-          throw new InvalidRequestException("Invalid replication factor " + replication);
-        }
-        String topic = entry.getKey();
-        topicInfos.put(topic, new TenantPartitionAssignor.TopicInfo(partitions, replication, 0));
-      }
-
-      String tenant = tenantContext.principal.tenantMetadata().tenantName;
-      assignments = partitionAssignor.assignPartitionsForNewTopics(tenant, topicInfos);
-    } else {
-      assignments = new HashMap<>();
+    for (CreateTopicsRequestData.CreatableTopic topicDetails : topics) {
+      removeFilteredConfigs(topicDetails);
+      topicDetails.setName(tenantContext.addTenantPrefix(topicDetails.name()));
+      updatedTopicSet.add(topicDetails);
     }
 
-    for (Map.Entry<String, CreateTopicsRequest.TopicDetails> entry : topics.entrySet()) {
-      String topic = entry.getKey();
-      CreateTopicsRequest.TopicDetails originalTopicDetails = entry.getValue();
+    final boolean overrideAssignments = partitionAssignor != null;
+    if (overrideAssignments) {
+      final Map<String, List<List<Integer>>> assignments = newAssignments(updatedTopicSet);
 
-      // validate configs
-      Map<String, String> configs = new HashMap<>();
-      for (Map.Entry<String, String> configEntry : originalTopicDetails.configs.entrySet()) {
-        if (allowConfigInRequest(configEntry.getKey())) {
-          configs.put(configEntry.getKey(), configEntry.getValue());
-        } else {
-          handleNonUpdateableConfig(configEntry.getKey());
-        }
-      }
-
-      CreateTopicsRequest.TopicDetails topicDetails;
-      List<List<Integer>> assignment = assignments.getOrDefault(topic, Collections.emptyList());
-      // If the TenantPartitionAssignor ran, use its assignments
-      if (!assignment.isEmpty()) {
-        Map<Integer, List<Integer>> tenantTopicAssignment = new HashMap<>(assignment.size());
+      for (CreatableTopic topicDetails : updatedTopicSet) {
+        List<List<Integer>> assignment = assignments.getOrDefault(topicDetails.name(),
+                Collections.emptyList());
+        final CreatableReplicaAssignmentSet newAssignments = new CreatableReplicaAssignmentSet();
         for (int i = 0; i < assignment.size(); i++) {
-          tenantTopicAssignment.put(i, assignment.get(i));
+          newAssignments.add(new CreatableReplicaAssignment()
+                  .setPartitionIndex(i)
+                  .setBrokerIds(assignment.get(i)));
         }
-        topicDetails = new CreateTopicsRequest.TopicDetails(tenantTopicAssignment, configs);
-      } else if (originalTopicDetails.replicasAssignments.isEmpty()) {
-        topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.numPartitions,
-                originalTopicDetails.replicationFactor, configs);
-      } else {
-        topicDetails = new CreateTopicsRequest.TopicDetails(originalTopicDetails.replicasAssignments, configs);
+        topicDetails.setAssignments(newAssignments);
       }
-
-      transformedTopics.put(topic, topicDetails);
     }
 
-    return new CreateTopicsRequest.Builder(transformedTopics, topicsRequest.timeout(),
-        topicsRequest.validateOnly()).build(version);
+    return new CreateTopicsRequest.Builder(
+            new CreateTopicsRequestData()
+                    .setTopics(updatedTopicSet)
+                    .setTimeoutMs(topicsRequest.data().timeoutMs())
+                    .setValidateOnly(topicsRequest.data().validateOnly()))
+            .build(version);
+  }
+
+  private void removeFilteredConfigs(CreatableTopic topicDetails) {
+    // validate configs
+    CreateableTopicConfigSet filteredConfigs = new CreateableTopicConfigSet();
+    for (CreateableTopicConfig config: topicDetails.configs()) {
+      if (allowConfigInRequest(config.name())) {
+        filteredConfigs.add(config);
+      } else {
+        handleNonUpdateableConfig(config.name());
+      }
+    }
+    topicDetails.setConfigs(filteredConfigs);
+  }
+
+  private Map<String, List<List<Integer>>> newAssignments(CreateTopicsRequestData.CreatableTopicSet topics) {
+    Map<String, TenantPartitionAssignor.TopicInfo> topicInfos = new HashMap<>();
+
+    for (CreateTopicsRequestData.CreatableTopic topicDetails : topics) {
+      int partitions = topicDetails.numPartitions();
+      short replication = topicDetails.replicationFactor();
+      if (!topicDetails.assignments().isEmpty()) {
+        log.debug("Overriding replica assignments provided in CreateTopicsRequest");
+        partitions = topicDetails.assignments().size();
+        replication = (short) topicDetails.assignments().iterator().next().brokerIds().size();
+      }
+      if (partitions <= 0) {
+        throw new InvalidRequestException("Invalid partition count " + partitions);
+      }
+      if (replication <= 0) {
+        throw new InvalidRequestException("Invalid replication factor " + replication);
+      }
+      topicInfos.put(topicDetails.name(),
+              new TenantPartitionAssignor.TopicInfo(partitions, replication, 0));
+    }
+
+    return partitionAssignor.assignPartitionsForNewTopics(tenantContext.principal.tenantMetadata().tenantName,
+            topicInfos);
   }
 
   private AlterConfigsRequest transformAlterConfigsRequest(AlterConfigsRequest alterConfigsRequest,
@@ -416,6 +429,13 @@ public class MultiTenantRequestContext extends RequestContext {
     }
     return new MetadataResponse(response.throttleTimeMs(), brokersList, response.clusterId(),
         response.controller().id(), filteredTopics);
+  }
+
+  private CreateTopicsResponse transformCreateTopicsResponse(CreateTopicsResponse response) {
+    for (CreatableTopicResult topicResult: response.data().topics()) {
+        topicResult.setName(tenantContext.removeTenantPrefix(topicResult.name()));
+    }
+    return response;
   }
 
   private ListGroupsResponse filteredListGroupsResponse(ListGroupsResponse response) {

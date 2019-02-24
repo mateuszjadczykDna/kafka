@@ -21,9 +21,13 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
+import org.apache.kafka.common.message.CreateTopicsRequestData;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfig;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfigSet;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicSet;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignment;
+import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignmentSet;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
-import org.apache.kafka.common.errors.InvalidGroupIdException;
-import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.MetricConfig;
@@ -56,6 +60,9 @@ import org.apache.kafka.common.requests.CreatePartitionsRequest;
 import org.apache.kafka.common.requests.CreatePartitionsRequest.PartitionDetails;
 import org.apache.kafka.common.requests.CreatePartitionsResponse;
 import org.apache.kafka.common.requests.CreateTopicsRequest;
+import org.apache.kafka.common.message.CreateTopicsResponseData;
+import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult;
+import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResultSet;
 import org.apache.kafka.common.requests.CreateTopicsResponse;
 import org.apache.kafka.common.requests.DeleteAclsRequest;
 import org.apache.kafka.common.requests.DeleteAclsResponse;
@@ -76,7 +83,6 @@ import org.apache.kafka.common.requests.EndTxnRequest;
 import org.apache.kafka.common.requests.FetchRequest;
 import org.apache.kafka.common.requests.FetchResponse;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
-import org.apache.kafka.common.requests.FindCoordinatorResponse;
 import org.apache.kafka.common.requests.HeartbeatRequest;
 import org.apache.kafka.common.requests.InitProducerIdRequest;
 import org.apache.kafka.common.requests.IsolationLevel;
@@ -635,37 +641,73 @@ public class MultiTenantRequestContextTest {
     }
   }
 
+  CreateTopicsRequestData.CreatableTopic creatableTopic(String topicName, int numPartitions,
+                                                        short replicationFactor,
+                                                        CreateableTopicConfigSet configs) {
+      return new CreateTopicsRequestData.CreatableTopic()
+              .setName(topicName)
+              .setNumPartitions(numPartitions)
+              .setReplicationFactor(replicationFactor)
+              .setConfigs(configs);
+  }
+
+  CreateTopicsRequestData.CreatableTopic creatableTopic(String topicName, int numPartitions, short replicationFactor) {
+      return new CreateTopicsRequestData.CreatableTopic()
+              .setName(topicName)
+              .setNumPartitions(numPartitions)
+              .setReplicationFactor(replicationFactor);
+  }
+
   @Test
   public void testCreateTopicsRequest() {
     for (short ver = ApiKeys.CREATE_TOPICS.oldestVersion(); ver <= ApiKeys.CREATE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
-      Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
+      CreatableTopicSet requestTopics =
+              new CreateTopicsRequestData.CreatableTopicSet();
 
-      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, testConfigs()));
+      requestTopics.add(creatableTopic("foo", 4, (short) 1, testConfigs()));
 
-      Map<Integer, List<Integer>> unbalancedAssignment = new HashMap<>();
-      unbalancedAssignment.put(0, Arrays.asList(0, 1));
-      unbalancedAssignment.put(1, Arrays.asList(0, 1));
-      requestTopics.put("bar", new CreateTopicsRequest.TopicDetails(unbalancedAssignment));
+      CreatableReplicaAssignmentSet unbalancedAssignments =
+              new CreateTopicsRequestData.CreatableReplicaAssignmentSet();
+      unbalancedAssignments.add(new CreatableReplicaAssignment()
+              .setPartitionIndex(0)
+              .setBrokerIds(Arrays.asList(0, 1)));
+      unbalancedAssignments.add(new CreatableReplicaAssignment()
+              .setPartitionIndex(1)
+              .setBrokerIds(Arrays.asList(0, 1)));
 
-      requestTopics.put("invalid", new CreateTopicsRequest.TopicDetails(3, (short) 5));
+      requestTopics.add(new CreateTopicsRequestData.CreatableTopic()
+              .setName("bar")
+              .setNumPartitions(3)
+              .setAssignments(unbalancedAssignments)
+              .setReplicationFactor((short) 5));
 
-      CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(requestTopics, 30000, false).build(ver);
+      requestTopics.add(creatableTopic("invalid", 3, (short) 5));
+
+      CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(
+              new CreateTopicsRequestData()
+                      .setTopics(requestTopics)
+                      .setTimeoutMs(30000)
+                      .setValidateOnly(false))
+              .build(ver);
+
       CreateTopicsRequest intercepted = (CreateTopicsRequest) parseRequest(context, inbound);
 
-      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
+      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"),
+              intercepted.data().topics().stream().map(t -> t.name()).collect(Collectors.toSet()));
 
-      assertEquals(4, intercepted.topics().get("tenant_foo").replicasAssignments.size());
-
+      assertEquals(4, intercepted.data().topics().find("tenant_foo").assignments().size());
       // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
-      assertEquals(transformedTestConfigs(), intercepted.topics().get("tenant_foo").configs);
+      assertEquals(transformedTestConfigs(),
+              intercepted.data().topics().find("tenant_foo").configs());
 
-      assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
-      assertNotEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
+      assertEquals(2, intercepted.data().topics().find("tenant_bar").assignments().size());
+      assertNotEquals(unbalancedAssignments,
+              intercepted.data().topics().find("tenant_invalid").assignments());
 
-      assertTrue(intercepted.topics().get("tenant_invalid").replicasAssignments.isEmpty());
-      assertEquals(3, intercepted.topics().get("tenant_invalid").numPartitions);
-      assertEquals(5, intercepted.topics().get("tenant_invalid").replicationFactor);
+      assertTrue(intercepted.data().topics().find("tenant_invalid").assignments().isEmpty());
+      assertEquals(3, intercepted.data().topics().find("tenant_invalid").numPartitions());
+      assertEquals(5, intercepted.data().topics().find("tenant_invalid").replicationFactor());
 
       verifyRequestMetrics(ApiKeys.CREATE_TOPICS);
     }
@@ -676,35 +718,57 @@ public class MultiTenantRequestContextTest {
     partitionAssignor = null;
     for (short ver = ApiKeys.CREATE_TOPICS.oldestVersion(); ver <= ApiKeys.CREATE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
-      Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
 
-      requestTopics.put("foo", new CreateTopicsRequest.TopicDetails(4, (short) 1, testConfigs()));
+       CreateTopicsRequestData.CreatableTopicSet requestTopics =
+              new CreateTopicsRequestData.CreatableTopicSet();
+      requestTopics.add(creatableTopic("foo", 4, (short) 1, testConfigs()));
 
-      Map<Integer, List<Integer>> unbalancedAssignment = new HashMap<>();
-      unbalancedAssignment.put(0, Arrays.asList(0, 1));
-      unbalancedAssignment.put(1, Arrays.asList(0, 1));
-      requestTopics.put("bar", new CreateTopicsRequest.TopicDetails(unbalancedAssignment));
+       CreateTopicsRequestData.CreatableReplicaAssignmentSet unbalancedAssignments =
+              new CreateTopicsRequestData.CreatableReplicaAssignmentSet();
+      unbalancedAssignments.add(new CreateTopicsRequestData.CreatableReplicaAssignment()
+              .setPartitionIndex(0)
+              .setBrokerIds(Arrays.asList(0, 1)));
+      unbalancedAssignments.add(new CreateTopicsRequestData.CreatableReplicaAssignment()
+              .setPartitionIndex(1)
+              .setBrokerIds(Arrays.asList(0, 1)));
 
-      requestTopics.put("invalid", new CreateTopicsRequest.TopicDetails(3, (short) 5));
+      requestTopics.add(new CreateTopicsRequestData.CreatableTopic()
+              .setName("bar")
+              .setNumPartitions(3)
+              .setAssignments(unbalancedAssignments)
+              .setReplicationFactor((short) 5));
 
-      CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(requestTopics, 30000, false).build(ver);
+      CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(
+              new CreateTopicsRequestData()
+                      .setTopics(requestTopics)
+                      .setTimeoutMs(30000)
+                      .setValidateOnly(false))
+              .build(ver);
+
+      requestTopics.add(creatableTopic("foo", 3, (short) 5, testConfigs()));
+
+      requestTopics.add(creatableTopic("invalid", 3, (short) 5));
+
       CreateTopicsRequest intercepted = (CreateTopicsRequest) parseRequest(context, inbound);
 
-      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"), intercepted.topics().keySet());
+      assertEquals(mkSet("tenant_foo", "tenant_bar", "tenant_invalid"),
+              intercepted.data().topics().stream().map(t -> t.name()).collect(Collectors.toSet()));
 
-      assertTrue(intercepted.topics().get("tenant_foo").replicasAssignments.isEmpty());
-      assertEquals(4, intercepted.topics().get("tenant_foo").numPartitions);
-      assertEquals(1, intercepted.topics().get("tenant_foo").replicationFactor);
+      assertEquals(4, intercepted.data().topics().find("tenant_foo").numPartitions());
+      assertEquals(1, intercepted.data().topics().find("tenant_foo").replicationFactor());
+      assertTrue(intercepted.data().topics().find("tenant_foo").assignments().isEmpty());
 
       // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
-      assertEquals(transformedTestConfigs(),  intercepted.topics().get("tenant_foo").configs);
+      assertEquals(transformedTestConfigs(),
+              intercepted.data().topics().find("tenant_foo").configs());
 
-      assertEquals(2, intercepted.topics().get("tenant_bar").replicasAssignments.size());
-      assertEquals(unbalancedAssignment, intercepted.topics().get("tenant_bar").replicasAssignments);
+      assertEquals(2, intercepted.data().topics().find("tenant_bar").assignments().size());
+      assertNotEquals(unbalancedAssignments,
+              intercepted.data().topics().find("tenant_invalid").assignments());
 
-      assertTrue(intercepted.topics().get("tenant_invalid").replicasAssignments.isEmpty());
-      assertEquals(3, intercepted.topics().get("tenant_invalid").numPartitions);
-      assertEquals(5, intercepted.topics().get("tenant_invalid").replicationFactor);
+      assertTrue(intercepted.data().topics().find("tenant_invalid").assignments().isEmpty());
+      assertEquals(3, intercepted.data().topics().find("tenant_invalid").numPartitions());
+      assertEquals(5, intercepted.data().topics().find("tenant_invalid").replicationFactor());
 
       verifyRequestMetrics(ApiKeys.CREATE_TOPICS);
     }
@@ -714,13 +778,21 @@ public class MultiTenantRequestContextTest {
   public void testCreateTopicsResponse() throws IOException {
     for (short ver = ApiKeys.CREATE_TOPICS.oldestVersion(); ver <= ApiKeys.CREATE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
-      Map<String, ApiError> partitionErrors = new HashMap<>();
-      partitionErrors.put("tenant_foo", new ApiError(Errors.NONE, ""));
-      partitionErrors.put("tenant_bar", new ApiError(Errors.NONE, ""));
-      CreateTopicsResponse outbound = new CreateTopicsResponse(partitionErrors);
+      Collection<CreatableTopicResult> results = Arrays.asList(
+              new CreatableTopicResult()
+                      .setErrorCode(Errors.NONE.code())
+                      .setErrorMessage("")
+                      .setName("tenant_foo"),
+              new CreatableTopicResult()
+                      .setErrorCode(Errors.NONE.code())
+                      .setErrorMessage("")
+                      .setName("tenant_bar"));
+      CreateTopicsResponse outbound = new CreateTopicsResponse(new CreateTopicsResponseData()
+              .setTopics(new CreatableTopicResultSet(results.iterator())));
       Struct struct = parseResponse(ApiKeys.CREATE_TOPICS, ver, context.buildResponse(outbound));
-      CreateTopicsResponse intercepted = new CreateTopicsResponse(struct);
-      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
+      CreateTopicsResponse intercepted = new CreateTopicsResponse(struct, ver);
+      assertEquals(new HashSet<>(Arrays.asList("foo", "bar")), intercepted.data().topics()
+              .stream().map(CreatableTopicResult::name).collect(Collectors.toSet()));
       verifyResponseMetrics(ApiKeys.CREATE_TOPICS, Errors.NONE);
     }
   }
@@ -729,19 +801,26 @@ public class MultiTenantRequestContextTest {
   public void testCreateTopicsResponsePolicyFailure() throws IOException {
     for (short ver = ApiKeys.CREATE_TOPICS.oldestVersion(); ver <= ApiKeys.CREATE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
-      Map<String, ApiError> partitionErrors = new HashMap<>();
-      partitionErrors.put("tenant_foo", new ApiError(Errors.POLICY_VIOLATION, "Topic tenant_foo is not permitted"));
-      partitionErrors.put("tenant_bar", new ApiError(Errors.NONE, ""));
-      CreateTopicsResponse outbound = new CreateTopicsResponse(partitionErrors);
+      Collection<CreatableTopicResult> results = Arrays.asList(
+              new CreatableTopicResult()
+                      .setErrorCode(Errors.POLICY_VIOLATION.code())
+                      .setErrorMessage("Topic tenant_foo is not permitted")
+                      .setName("tenant_foo"),
+              new CreatableTopicResult()
+                      .setErrorCode(Errors.NONE.code())
+                      .setErrorMessage("")
+                      .setName("tenant_bar"));
+      CreateTopicsResponse outbound = new CreateTopicsResponse(new CreateTopicsResponseData()
+              .setTopics(new CreatableTopicResultSet(results.iterator())));
       Struct struct = parseResponse(ApiKeys.CREATE_TOPICS, ver, context.buildResponse(outbound));
-      CreateTopicsResponse intercepted = new CreateTopicsResponse(struct);
-      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
-      assertEquals(Errors.NONE, intercepted.errors().get("bar").error());
-
-      ApiError apiError = intercepted.errors().get("foo");
-      assertEquals(Errors.POLICY_VIOLATION, apiError.error());
-      if (apiError.message() != null) {
-        assertFalse(apiError.message().contains("tenant_"));
+      CreateTopicsResponse intercepted = new CreateTopicsResponse(struct, ver);
+      assertEquals(new HashSet<>(Arrays.asList("foo", "bar")), intercepted.data().topics()
+              .stream().map(CreatableTopicResult::name).collect(Collectors.toSet()));
+      assertEquals(Errors.NONE.code(), intercepted.data().topics().find("bar").errorCode());
+      assertEquals(Errors.POLICY_VIOLATION.code(), intercepted.data().topics().find("foo").errorCode());
+      if (ver >= 1) {
+        assertEquals("Topic foo is not permitted",
+                intercepted.data().topics().find("foo").errorMessage());
       }
     }
   }
@@ -1548,11 +1627,12 @@ public class MultiTenantRequestContextTest {
     for (short ver = ApiKeys.ALTER_CONFIGS.oldestVersion(); ver <= ApiKeys.ALTER_CONFIGS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.ALTER_CONFIGS, ver);
       Map<ConfigResource, AlterConfigsRequest.Config> resourceConfigs = new HashMap<>();
+
+      HashSet<AlterConfigsRequest.ConfigEntry> configEntries = new HashSet<>();
+      testConfigs().forEach(c -> configEntries.add(new AlterConfigsRequest.ConfigEntry(c.name(), c.value())));
+
       resourceConfigs.put(new ConfigResource(ConfigResource.Type.TOPIC, "foo"),
-          new AlterConfigsRequest.Config(testConfigs().entrySet()
-              .stream()
-              .map(entry -> new AlterConfigsRequest.ConfigEntry(entry.getKey(), entry.getValue()))
-              .collect(Collectors.toSet())));
+          new AlterConfigsRequest.Config(configEntries));
       resourceConfigs.put(new ConfigResource(ConfigResource.Type.BROKER, "blah"), new AlterConfigsRequest.Config(
           Collections.<AlterConfigsRequest.ConfigEntry>emptyList()));
       resourceConfigs.put(new ConfigResource(ConfigResource.Type.TOPIC, "bar"), new AlterConfigsRequest.Config(
@@ -1563,15 +1643,17 @@ public class MultiTenantRequestContextTest {
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "tenant_bar")), intercepted.configs().keySet());
 
-      Map<String, String> resultsMap = new HashMap<>();
-      Collection<AlterConfigsRequest.ConfigEntry> configEntries =
-              intercepted.configs().get(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo")).entries();
-      for (AlterConfigsRequest.ConfigEntry configEntry : configEntries) {
-        resultsMap.put(configEntry.name(), configEntry.value());
-      }
+      HashMap<String, String> expected = new HashMap<>();
+      transformedTestConfigs().forEach(c -> expected.put(c.name(), c.value()));
+
+      HashMap<String, String> actual = new HashMap<>();
+      intercepted.configs()
+              .get(new ConfigResource(ConfigResource.Type.TOPIC, "tenant_foo")).entries()
+              .forEach(c -> actual.put(c.name(), c.value()));
 
       // Configs should be transformed by removing non-updateable configs, except for min.insync.replicas
-      assertEquals(transformedTestConfigs(), resultsMap);
+      assertEquals(expected, actual);
+
       verifyRequestMetrics(ApiKeys.ALTER_CONFIGS);
     }
   }
@@ -1737,27 +1819,29 @@ public class MultiTenantRequestContextTest {
   }
 
   // Returns the test config map with compression.type stripped out
-  private Map<String, String> transformedTestConfigs() {
-    Map<String, String> transformedConfig = testConfigs();
-    transformedConfig.remove(TopicConfig.COMPRESSION_TYPE_CONFIG);
-    return transformedConfig;
+  private CreateableTopicConfigSet transformedTestConfigs() {
+    CreateableTopicConfigSet transformedConfigs = testConfigs();
+    transformedConfigs.remove(new CreateableTopicConfig().setName(TopicConfig.COMPRESSION_TYPE_CONFIG).setValue("lz4"));
+    return transformedConfigs;
   }
 
   // Gets a map of configs containing all modifiable configs, plus min.insync.replicas, plus
   // an unmodifiable config (compression.type)
-  private Map<String, String> testConfigs() {
-    return mkMap(
-            mkEntry(TopicConfig.CLEANUP_POLICY_CONFIG, "compact"),
-            mkEntry(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, "16777216"),
-            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG, "31536000000"),
-            mkEntry(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG, "LogAppendTime"),
-            mkEntry(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "0"),
-            mkEntry(TopicConfig.RETENTION_BYTES_CONFIG, "107374182400"),
-            mkEntry(TopicConfig.RETENTION_MS_CONFIG, "86400000"),
-            mkEntry(TopicConfig.DELETE_RETENTION_MS_CONFIG, "31536000000"),
-            mkEntry(TopicConfig.SEGMENT_BYTES_CONFIG, "1024"),
-            mkEntry(TopicConfig.SEGMENT_MS_CONFIG, "100"),
-            mkEntry(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3"),
-            mkEntry(TopicConfig.COMPRESSION_TYPE_CONFIG, "lz4"));
+  private CreateableTopicConfigSet testConfigs() {
+    CreateableTopicConfigSet configs = new CreateableTopicConfigSet();
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.CLEANUP_POLICY_CONFIG).setValue("compact"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.MAX_MESSAGE_BYTES_CONFIG).setValue("16777216"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG).setValue("31536000000"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.MESSAGE_TIMESTAMP_TYPE_CONFIG).setValue("LogAppendTime"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG).setValue("0"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.RETENTION_BYTES_CONFIG).setValue("107374182400"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.RETENTION_MS_CONFIG).setValue("86400000"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.DELETE_RETENTION_MS_CONFIG).setValue("31536000000"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.SEGMENT_BYTES_CONFIG).setValue("1024"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.SEGMENT_MS_CONFIG).setValue("100"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG).setValue("3"));
+    configs.add(new CreateableTopicConfig().setName(TopicConfig.COMPRESSION_TYPE_CONFIG).setValue("lz4"));
+
+    return configs;
   }
 }
