@@ -21,7 +21,7 @@ import java.io.{File, ByteArrayOutputStream}
 import java.util.Properties
 
 import scala.collection.mutable
-import kafka.log.{LogConfig, LogManager, MergedLog, Log}
+import kafka.log._
 import kafka.server.{LogDirFailureChannel, BrokerTopicStats}
 import kafka.tools.DumpLogSegments.TimeIndexDumpErrors
 import kafka.utils.{TestUtils, MockTime}
@@ -44,13 +44,13 @@ class DumpLogSegmentsTest {
   val time = new MockTime(0, 0)
 
   val batches = new ArrayBuffer[Seq[SimpleRecord]]
-  var log: Log = _
+  var log: AbstractLog = _
 
   @Before
   def setUp(): Unit = {
     val props = new Properties
     props.setProperty(LogConfig.IndexIntervalBytesProp, "128")
-    val log = MergedLog(logDir, LogConfig(props), logStartOffset = 0L, recoveryPoint = 0L, scheduler = time.scheduler,
+    log = MergedLog(logDir, LogConfig(props), logStartOffset = 0L, recoveryPoint = 0L, scheduler = time.scheduler,
       brokerTopicStats = new BrokerTopicStats, time = time, maxProducerIdExpirationMs = 60 * 60 * 1000,
       producerIdExpirationCheckIntervalMs = LogManager.ProducerIdExpirationCheckIntervalMs,
       logDirFailureChannel = new LogDirFailureChannel(10),
