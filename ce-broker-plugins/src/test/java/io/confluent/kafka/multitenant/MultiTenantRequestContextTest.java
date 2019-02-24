@@ -517,24 +517,6 @@ public class MultiTenantRequestContextTest {
   }
 
   @Test
-  public void testFindCoordinatorInvalidGroupId() throws IOException {
-    for (short ver = ApiKeys.FIND_COORDINATOR.oldestVersion(); ver <= ApiKeys.FIND_COORDINATOR.latestVersion(); ver++) {
-      MultiTenantRequestContext context = newRequestContext(ApiKeys.FIND_COORDINATOR, ver);
-      FindCoordinatorRequest inbound = new FindCoordinatorRequest.Builder(FindCoordinatorRequest.CoordinatorType.GROUP,
-          "group#@").build(ver);
-
-      try {
-        parseRequest(context, inbound);
-      } catch (InvalidGroupIdException e) {
-        AbstractResponse outbound = inbound.getErrorResponse(e);
-        Struct struct = parseResponse(ApiKeys.FIND_COORDINATOR, ver, context.buildResponse(outbound));
-        FindCoordinatorResponse intercepted = new FindCoordinatorResponse(struct);
-        assertEquals(Errors.INVALID_GROUP_ID, intercepted.error());
-      }
-    }
-  }
-
-  @Test
   public void testJoinGroupRequest() {
     for (short ver = ApiKeys.JOIN_GROUP.oldestVersion(); ver <= ApiKeys.JOIN_GROUP.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.JOIN_GROUP, ver);
@@ -725,30 +707,6 @@ public class MultiTenantRequestContextTest {
       assertEquals(5, intercepted.topics().get("tenant_invalid").replicationFactor);
 
       verifyRequestMetrics(ApiKeys.CREATE_TOPICS);
-    }
-  }
-
-  @Test
-  public void testCreateInvalidTopic() throws IOException {
-    for (short ver = ApiKeys.CREATE_TOPICS.oldestVersion(); ver <= ApiKeys.CREATE_TOPICS.latestVersion(); ver++) {
-      MultiTenantRequestContext context = newRequestContext(ApiKeys.CREATE_TOPICS, ver);
-      Map<String, CreateTopicsRequest.TopicDetails> requestTopics = new HashMap<>();
-      String invalidTopic = "F$oo#";
-      requestTopics.put(invalidTopic, new CreateTopicsRequest.TopicDetails(4, (short) 1));
-      CreateTopicsRequest inbound = new CreateTopicsRequest.Builder(requestTopics, 30000, false).build(ver);
-
-      try {
-        parseRequest(context, inbound);
-      } catch (InvalidTopicException e) {
-        AbstractResponse outbound = inbound.getErrorResponse(e);
-        Struct struct = parseResponse(ApiKeys.CREATE_TOPICS, ver, context.buildResponse(outbound));
-        CreateTopicsResponse intercepted = new CreateTopicsResponse(struct);
-        ApiError apiError = intercepted.errors().get(invalidTopic);
-        assertEquals(Errors.INVALID_TOPIC_EXCEPTION, apiError.error());
-        if (apiError.message() != null) {
-          assertFalse(apiError.message().contains("tenant_"));
-        }
-      }
     }
   }
 
@@ -1503,31 +1461,6 @@ public class MultiTenantRequestContextTest {
           new ConfigResource(ConfigResource.Type.BROKER, "blah"),
           new ConfigResource(ConfigResource.Type.TOPIC, "tenant_bar")), new HashSet<>(intercepted.resources()));
       verifyRequestMetrics(ApiKeys.DESCRIBE_CONFIGS);
-    }
-  }
-
-  @Test
-  public void testDescribeConfigsInvalidTopic() throws Exception {
-    for (short ver = ApiKeys.DESCRIBE_CONFIGS.oldestVersion(); ver <= ApiKeys.DESCRIBE_CONFIGS.latestVersion(); ver++) {
-      MultiTenantRequestContext context = newRequestContext(ApiKeys.DESCRIBE_CONFIGS, ver);
-      Map<ConfigResource, Collection<String>> requestedResources = new HashMap<>();
-      ConfigResource invalidTopicResource = new ConfigResource(ConfigResource.Type.TOPIC, "fo^o");
-      requestedResources.put(invalidTopicResource, Collections.<String>emptyList());
-      DescribeConfigsRequest inbound = new DescribeConfigsRequest.Builder(requestedResources).build(ver);
-      try {
-        parseRequest(context, inbound);
-      } catch (InvalidTopicException e) {
-        AbstractResponse outbound = inbound.getErrorResponse(e);
-        Struct struct = parseResponse(ApiKeys.DESCRIBE_CONFIGS, ver, context.buildResponse(outbound));
-        DescribeConfigsResponse intercepted = new DescribeConfigsResponse(struct);
-        DescribeConfigsResponse.Config config = intercepted.config(invalidTopicResource);
-        assertNotNull(config);
-        ApiError apiError = config.error();
-        assertEquals(Errors.INVALID_TOPIC_EXCEPTION, apiError.error());
-        if (apiError.message() != null) {
-          assertFalse(apiError.message().contains("tenant_"));
-        }
-      }
     }
   }
 
