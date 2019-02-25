@@ -3,6 +3,8 @@
 package io.confluent.kafka.security.authorizer;
 
 import java.util.Objects;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.kafka.common.resource.PatternType;
 
 /**
@@ -15,28 +17,32 @@ public class Action {
   private final String resourceName;
   private final Operation operation;
 
-  public Action(String scope,
-                ResourceType resourceType,
-                String resourceName,
-                Operation operation) {
+  public Action(@JsonProperty("scope") String scope,
+                @JsonProperty("resourceType") ResourceType resourceType,
+                @JsonProperty("resourceName") String resourceName,
+                @JsonProperty("operation") Operation operation) {
     this.scope = scope;
     this.resourceType = resourceType;
     this.resourceName = resourceName;
     this.operation = operation;
   }
 
+  @JsonProperty
   public String scope() {
     return scope;
   }
 
+  @JsonProperty
   public ResourceType resourceType() {
     return resourceType;
   }
 
+  @JsonProperty
   public String resourceName() {
     return resourceName;
   }
 
+  @JsonProperty
   public Operation operation() {
     return operation;
   }
@@ -56,9 +62,9 @@ public class Action {
 
     Action that = (Action) o;
     return Objects.equals(this.scope, that.scope) &&
-        Objects.equals(this.resourceType, that.resourceType) &&
-        Objects.equals(this.resourceName, that.resourceName) &&
-        Objects.equals(this.operation, that.operation);
+            Objects.equals(this.resourceType, that.resourceType) &&
+            Objects.equals(this.resourceName, that.resourceName) &&
+            Objects.equals(this.operation, that.operation);
 
   }
 
@@ -70,10 +76,10 @@ public class Action {
   @Override
   public String toString() {
     return "Action(" +
-        "scope='" + scope + '\'' +
-        ", resourceType='" + resourceType + '\'' +
-        ", resourceName='" + resourceName + '\'' +
-        ", operation='" + operation + '\'' +
-        ')';
+            "scope='" + scope + '\'' +
+            ", resourceType='" + resourceType + '\'' +
+            ", resourceName='" + resourceName + '\'' +
+            ", operation='" + operation + '\'' +
+            ')';
   }
 }

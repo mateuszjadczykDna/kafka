@@ -1898,6 +1898,7 @@ project(':ce-client-plugins') {
 
   dependencies {
     compile project(':clients')
+    compile libs.jacksonDatabind
     testCompile libs.junit
     testCompile project(':clients').sourceSets.test.output
   }
@@ -1989,6 +1990,8 @@ project(':ce-rbac-clients') {
     compile libs.jacksonJDK8Datatypes
     compile libs.jaxrsApi
     testCompile libs.junit
+    testCompile libs.powermockEasymock
+    testCompile libs.powermockJunit4
     testCompile project(':clients').sourceSets.test.output
     testCompile project(':ce-client-plugins').sourceSets.test.output
   }
