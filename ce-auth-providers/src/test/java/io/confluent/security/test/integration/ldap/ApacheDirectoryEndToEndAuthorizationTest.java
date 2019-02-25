@@ -140,7 +140,7 @@ public class ApacheDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
     return User.gssapiUser(name, principal + "@EXAMPLE.COM", keytabFile, serviceName);
   }
 
-  @Parameterized.Parameters(name = "saslMechanisnm={0}, secProtocol={1}, secAuth={2},"
+  @Parameterized.Parameters(name = "saslMechanism={0}, secProtocol={1}, secAuth={2},"
           + "secUser={3}, refreshInterval={4}")
   public static Collection<Object[]> data() {
     List<Object[]> values = new ArrayList<>();
