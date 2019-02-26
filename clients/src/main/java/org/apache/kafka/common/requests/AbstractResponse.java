@@ -160,6 +160,20 @@ public abstract class AbstractResponse extends AbstractRequestResponse {
                 return new ElectPreferredLeadersResponse(struct, version);
             case TIER_LIST_OFFSET:
                 return new TierListOffsetResponse(struct, version);
+
+            // Quorum APIs
+            case VOTE:
+                return new VoteResponse(struct, version);
+            case BEGIN_EPOCH:
+                return new BeginEpochResponse(struct, version);
+            case END_EPOCH:
+                return new EndEpochResponse(struct, version);
+            case FETCH_RECORDS:
+                return new FetchRecordsResponse(struct, version);
+            case FETCH_END_OFFSET:
+                return new FetchEndOffsetResponse(struct, version);
+            case FIND_LEADER:
+                return new FindLeaderResponse(struct, version);
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `parseResponse`, the " +
                         "code should be updated to do so.", apiKey));

@@ -1,0 +1,11 @@
+{
+  "apiKey": 901,
+  "type": "response",
+  "name": "BeginEpochResponse",
+  "validVersions": "0",
+  "fields": [
+      {"name": "errorCode", "type": "int16", "versions": "0+"},
+      {"name": "leaderId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"}
+  ]
+}

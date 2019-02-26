@@ -1,0 +1,11 @@
+{
+  "apiKey": 906,
+  "type": "request",
+  "name": "AppendRecordsRequest",
+  "validVersions": "0",
+  "fields": [
+      {"name": "quorumId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"},
+      {"name": "records", "type": "bytes", "versions": "0+"}
+  ]
+}

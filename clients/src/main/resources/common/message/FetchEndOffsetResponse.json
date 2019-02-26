@@ -1,0 +1,13 @@
+{
+  "apiKey": 904,
+  "type": "response",
+  "name": "FetchEndOffsetResponse",
+  "validVersions": "0",
+  "fields": [
+      {"name": "errorCode", "type": "int16", "versions": "0+"},
+      {"name": "leaderId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"},
+      {"name": "endOffset", "type": "int64", "versions": "0+"},
+      {"name": "endOffsetEpoch", "type": "int32", "versions": "0+"}
+  ]
+}

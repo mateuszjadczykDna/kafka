@@ -184,6 +184,14 @@ class KafkaApis(val requestChannel: RequestChannel,
   private def handleInternalRequest(request: RequestChannel.Request) {
     request.header.apiKey match {
       case ApiKeys.TIER_LIST_OFFSET => handleTierListOffsetRequest(request)
+      case ApiKeys.VOTE => handleVote(request)
+      case ApiKeys.BEGIN_EPOCH => handleBeginEpoch(request)
+      case ApiKeys.END_EPOCH => handleEndEpoch(request)
+      case ApiKeys.FETCH_RECORDS => handleFetchRecords(request)
+      case ApiKeys.FETCH_END_OFFSET => handleFetchEndOffset(request)
+      case ApiKeys.FIND_LEADER => handleFindLeader(request)
+      case ApiKeys.APPEND_RECORDS => handleAppendRecords(request)
+
       case _ => throw new IllegalArgumentException(s"Unsupported API key ${request.header.apiKey.id}")
     }
   }
@@ -2390,6 +2398,20 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     }
   }
+
+  def handleVote(request: RequestChannel.Request): Unit = ???
+
+  def handleBeginEpoch(request: RequestChannel.Request): Unit = ???
+
+  def handleEndEpoch(request: RequestChannel.Request): Unit = ???
+
+  def handleFetchRecords(request: RequestChannel.Request): Unit = ???
+
+  def handleFetchEndOffset(request: RequestChannel.Request): Unit = ???
+
+  def handleFindLeader(request: RequestChannel.Request): Unit = ???
+
+  def handleAppendRecords(request: RequestChannel.Request): Unit = ???
 
   def allowTokenRequests(request: RequestChannel.Request): Boolean = {
     val protocol = request.context.securityProtocol

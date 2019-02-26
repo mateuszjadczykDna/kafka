@@ -1,0 +1,12 @@
+{
+  "apiKey": 903,
+  "type": "request",
+  "name": "FetchRecordsRequest",
+  "validVersions": "0",
+  "fields": [
+      {"name": "quorumId", "type": "int32", "versions": "0+"},
+      {"name": "replicaId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"},
+      {"name": "fetchOffset", "type": "int64", "versions": "0+"}
+  ]
+}

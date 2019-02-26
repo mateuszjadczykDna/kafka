@@ -16,8 +16,10 @@
  */
 package org.apache.kafka.common.protocol;
 
-import org.apache.kafka.common.message.TierListOffsetRequestData;
-import org.apache.kafka.common.message.TierListOffsetResponseData;
+import org.apache.kafka.common.message.AppendRecordsRequestData;
+import org.apache.kafka.common.message.AppendRecordsResponseData;
+import org.apache.kafka.common.message.BeginEpochRequestData;
+import org.apache.kafka.common.message.BeginEpochResponseData;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.message.DeleteTopicsRequestData;
@@ -26,6 +28,14 @@ import org.apache.kafka.common.message.DescribeGroupsRequestData;
 import org.apache.kafka.common.message.DescribeGroupsResponseData;
 import org.apache.kafka.common.message.ElectPreferredLeadersRequestData;
 import org.apache.kafka.common.message.ElectPreferredLeadersResponseData;
+import org.apache.kafka.common.message.EndEpochRequestData;
+import org.apache.kafka.common.message.EndEpochResponseData;
+import org.apache.kafka.common.message.FetchEndOffsetRequestData;
+import org.apache.kafka.common.message.FetchEndOffsetResponseData;
+import org.apache.kafka.common.message.FetchRecordsRequestData;
+import org.apache.kafka.common.message.FetchRecordsResponseData;
+import org.apache.kafka.common.message.FindLeaderRequestData;
+import org.apache.kafka.common.message.FindLeaderResponseData;
 import org.apache.kafka.common.message.JoinGroupRequestData;
 import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
@@ -36,6 +46,10 @@ import org.apache.kafka.common.message.SaslAuthenticateRequestData;
 import org.apache.kafka.common.message.SaslAuthenticateResponseData;
 import org.apache.kafka.common.message.SaslHandshakeRequestData;
 import org.apache.kafka.common.message.SaslHandshakeResponseData;
+import org.apache.kafka.common.message.TierListOffsetRequestData;
+import org.apache.kafka.common.message.TierListOffsetResponseData;
+import org.apache.kafka.common.message.VoteRequestData;
+import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.SchemaException;
 import org.apache.kafka.common.protocol.types.Struct;
@@ -197,6 +211,15 @@ public enum ApiKeys {
             ElectPreferredLeadersResponseData.SCHEMAS),
 
     /* ----- Begin internal APIs: API ids decrement sequentially starting from Short.MAX_VALUE with `isInternal` set to true ----- */
+
+    // Quorum APIs
+    VOTE(900, "Vote",VoteRequestData.SCHEMAS, VoteResponseData.SCHEMAS),
+    BEGIN_EPOCH(901, "BeginEpoch", BeginEpochRequestData.SCHEMAS, BeginEpochResponseData.SCHEMAS),
+    END_EPOCH(902, "EndEpoch", EndEpochRequestData.SCHEMAS, EndEpochResponseData.SCHEMAS),
+    FETCH_RECORDS(903, "FetchRecords", FetchRecordsRequestData.SCHEMAS, FetchRecordsResponseData.SCHEMAS),
+    FETCH_END_OFFSET(904, "FetchEndOffset", FetchEndOffsetRequestData.SCHEMAS, FetchEndOffsetResponseData.SCHEMAS),
+    FIND_LEADER(905, "FindLeader", FindLeaderRequestData.SCHEMAS, FindLeaderResponseData.SCHEMAS),
+    APPEND_RECORDS(906, "AppendRecords", AppendRecordsRequestData.SCHEMAS, AppendRecordsResponseData.SCHEMAS),
 
     TIER_LIST_OFFSET(32767, "TierListOffsets", true, TierListOffsetRequestData.SCHEMAS, TierListOffsetResponseData.SCHEMAS, true);
 

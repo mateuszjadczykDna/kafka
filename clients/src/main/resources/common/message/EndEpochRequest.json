@@ -1,0 +1,12 @@
+{
+  "apiKey": 902,
+  "type": "request",
+  "name": "EndEpochRequest",
+  "validVersions": "0",
+  "fields": [
+    {"name": "quorumId", "type": "int32", "versions": "0+"},
+    {"name": "replicaId", "type": "int32", "versions": "0+"},
+    {"name": "leaderId", "type": "int32", "versions": "0+"},
+    {"name": "leaderEpoch", "type": "int32", "versions": "0+"}
+  ]
+}

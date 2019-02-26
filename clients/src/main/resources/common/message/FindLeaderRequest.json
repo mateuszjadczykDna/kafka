@@ -1,0 +1,10 @@
+{
+  "apiKey": 905,
+  "type": "request",
+  "name": "FindLeaderRequest",
+  "validVersions": "0",
+  "fields": [
+      {"name": "quorumId", "type": "int32", "versions": "0+"},
+      {"name": "replicaId", "type": "int32", "versions": "0+"}
+  ]
+}

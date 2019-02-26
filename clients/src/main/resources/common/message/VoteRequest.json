@@ -1,0 +1,13 @@
+{
+  "apiKey": 900,
+  "type": "request",
+  "name": "VoteRequest",
+  "validVersions": "0",
+  "fields": [
+      {"name": "quorumId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"},
+      {"name": "candidateId", "type": "int32", "versions": "0+"},
+      {"name": "lastEpoch", "type": "int32", "versions": "0+"},
+      {"name": "lastEpochEndOffset", "type": "int64", "versions": "0+"}
+  ]
+}

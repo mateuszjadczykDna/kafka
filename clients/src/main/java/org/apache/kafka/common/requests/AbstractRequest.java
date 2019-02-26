@@ -229,6 +229,20 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
                 return new DeleteGroupsRequest(struct, apiVersion);
             case ELECT_PREFERRED_LEADERS:
                 return new ElectPreferredLeadersRequest(struct, apiVersion);
+
+            // Quorum APIs
+            case VOTE:
+                return new VoteRequest(struct, apiVersion);
+            case BEGIN_EPOCH:
+                return new BeginEpochRequest(struct, apiVersion);
+            case END_EPOCH:
+                return new EndEpochRequest(struct, apiVersion);
+            case FETCH_RECORDS:
+                return new FetchRecordsRequest(struct, apiVersion);
+            case FETCH_END_OFFSET:
+                return new FetchEndOffsetRequest(struct, apiVersion);
+            case FIND_LEADER:
+                return new FindLeaderRequest(struct, apiVersion);
             default:
                 return maybeParseInternalRequest(apiKey, apiVersion, struct);
         }

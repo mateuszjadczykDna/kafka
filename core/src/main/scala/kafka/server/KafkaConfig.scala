@@ -935,6 +935,9 @@ object KafkaConfig {
 
     new ConfigDef()
 
+      /*********** Cluster Metadata Configuration *************/
+      .define("cluster.metadata.replicas", LIST, HIGH, "The replicas that host the cluster metadata topic")
+
       /** ********* Zookeeper Configuration ***********/
       .define(ZkConnectProp, STRING, HIGH, ZkConnectDoc)
       .define(ZkSessionTimeoutMsProp, INT, Defaults.ZkSessionTimeoutMs, HIGH, ZkSessionTimeoutMsDoc)
@@ -1270,6 +1273,9 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   private[server] def valuesFromThisConfig: util.Map[String, _] = super.values
   private[server] def valuesFromThisConfigWithPrefixOverride(prefix: String): util.Map[String, AnyRef] =
     super.valuesWithPrefixOverride(prefix)
+
+  /******** Cluster Metadata Configuration *********/
+  val clusterMetadataReplicas: List[Int] = getList("cluster.metadata.replicas").asScala.map(_.toInt).toList
 
   /** ********* Zookeeper Configuration ***********/
   val zkConnect: String = getString(KafkaConfig.ZkConnectProp)

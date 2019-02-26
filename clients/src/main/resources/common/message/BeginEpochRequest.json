@@ -1,0 +1,13 @@
+{
+  "apiKey": 901,
+  "type": "request",
+  "name": "BeginEpochRequest",
+  "validVersions": "0",
+  "fields": [
+      {"name": "quorumId", "type": "int32", "versions": "0+"},
+      {"name": "leaderId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"},
+      {"name": "previousEpoch", "type": "int32", "versions": "0+"},
+      {"name": "previousEpochEndOffset", "type": "int64", "versions": "0+"}
+  ]
+}

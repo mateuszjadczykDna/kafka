@@ -166,6 +166,10 @@ class MetadataCache(brokerId: Int) extends Logging {
     metadataSnapshot.aliveBrokers.values.toBuffer
   }
 
+  def brokerIfAlive(brokerId: Int): Option[Broker] = {
+    metadataSnapshot.aliveBrokers.get(brokerId)
+  }
+
   private def addOrUpdatePartitionInfo(partitionStates: mutable.AnyRefMap[String, mutable.LongMap[UpdateMetadataRequest.PartitionState]],
                                        topic: String,
                                        partitionId: Int,

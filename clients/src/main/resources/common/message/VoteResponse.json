@@ -1,0 +1,12 @@
+{
+  "apiKey": 900,
+  "type": "response",
+  "name": "VoteResponse",
+  "validVersions": "0",
+  "fields": [
+      {"name": "errorCode", "type": "int16", "versions": "0+"},
+      {"name": "leaderId", "type": "int32", "versions": "0+"},
+      {"name": "leaderEpoch", "type": "int32", "versions": "0+"},
+      {"name": "voteGranted", "type": "bool", "versions": "0+"}
+  ]
+}
