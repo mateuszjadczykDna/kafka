@@ -18,6 +18,7 @@
 package kafka.utils
 
 import java.io._
+import java.lang.management.{ManagementFactory, OperatingSystemMXBean}
 import java.nio._
 import java.nio.channels._
 import java.nio.charset.{Charset, StandardCharsets}
@@ -26,8 +27,8 @@ import java.security.cert.X509Certificate
 import java.time.Duration
 import java.util.{Collections, Properties}
 import java.util.concurrent.{Callable, ExecutionException, Executors, TimeUnit}
-import javax.net.ssl.X509TrustManager
 
+import javax.net.ssl.X509TrustManager
 import kafka.api._
 import kafka.cluster.{Broker, EndPoint}
 import kafka.log._
@@ -35,6 +36,7 @@ import kafka.security.auth.{Acl, Authorizer, Resource}
 import kafka.server._
 import kafka.server.checkpoints.OffsetCheckpointFile
 import Implicits._
+import com.sun.management.UnixOperatingSystemMXBean
 import kafka.controller.LeaderIsrAndControllerEpoch
 import kafka.tier.TierMetadataManager
 import kafka.tier.state.MemoryTierPartitionStateFactory
@@ -1451,5 +1453,14 @@ object TestUtils extends Logging {
     val total = allMetrics.values().asScala.filter(_.metricName().name() == metricName)
       .foldLeft(0.0)((total, metric) => total + metric.metricValue.asInstanceOf[Double])
     total.toLong
+  }
+
+  def getCurrentOpenFDCount(): Option[Long] = {
+    val os: OperatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean
+    if (os.isInstanceOf[UnixOperatingSystemMXBean]) {
+      Some(os.asInstanceOf[UnixOperatingSystemMXBean].getOpenFileDescriptorCount())
+    } else {
+      None
+    }
   }
 }

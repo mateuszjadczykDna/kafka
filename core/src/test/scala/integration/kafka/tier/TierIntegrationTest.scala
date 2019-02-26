@@ -7,22 +7,22 @@ package kafka.tier
 import java.io.File
 import java.nio.ByteBuffer
 import java.util
-import java.util.Collections
-import java.util.function.Consumer
+import java.util.{Collections, OptionalLong}
 
-import kafka.log.{MergedLog, AbstractLog, LogConfig, LogManager, LogTest}
-import kafka.server.{LogDirFailureChannel, ReplicaManager, BrokerTopicStats}
-import kafka.tier.archiver.{TierArchiverConfig, TierArchiverState, TierArchiver}
+import kafka.log._
+import kafka.server.{BrokerTopicStats, LogDirFailureChannel, ReplicaManager}
+import kafka.tier.archiver.TierArchiverState.BeforeUpload
+import kafka.tier.archiver._
 import kafka.tier.client.{MockConsumerBuilder, MockProducerBuilder}
-import kafka.tier.state.MemoryTierPartitionStateFactory
+import kafka.tier.state.{MemoryTierPartitionStateFactory, TierPartitionStatus}
 import kafka.tier.store.MockInMemoryTierObjectStore
 import kafka.tier.store.TierObjectStore.TierObjectStoreFileType
-import kafka.utils.{TestUtils, MockTime}
+import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.MemoryRecords.RecordFilter
 import org.apache.kafka.common.record._
 import org.junit.Assert._
-import org.junit.Test
+import org.junit.{After, Test}
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
@@ -45,49 +45,52 @@ class TierIntegrationTest {
     500,
     logDirs
   )
+  var tierMetadataManager: TierMetadataManager = _
+  var tempDir: File = _
+  var tierArchiver: TierArchiver = _
+  var replicaManager: ReplicaManager = _
+  var tierObjectStore: MockInMemoryTierObjectStore = _
+  var logs: Seq[AbstractLog] = _
+  var tierTopicManager: TierTopicManager = _
+  var consumerBuilder: MockConsumerBuilder = _
+  val maxWaitTimeMs = 2000L
 
-  val tierMetadataManager = new TierMetadataManager(new MemoryTierPartitionStateFactory(),
-    Some(new MockInMemoryTierObjectStore("bucket")),
-    new LogDirFailureChannel(1),
-    true)
+  def setup(numLogs: Integer = 2, maxConcurrentUploads: Integer = 10): Unit = {
+    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
+    val tierMetadataManager = new TierMetadataManager(new MemoryTierPartitionStateFactory(),
+      Some(tierObjectStore), new LogDirFailureChannel(1), true)
+    val (tierTopicManager, consumerBuilder) = setupTierTopicManager(tierMetadataManager)
+    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
+    val tempDir = TestUtils.tempDir()
+    val logs = createLogs(numLogs, logConfig, tempDir, tierMetadataManager)
+    val replicaManager = mockReplicaManager(logs)
+    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = maxConcurrentUploads), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
+
+    this.tierArchiver = tierArchiver
+    this.replicaManager = replicaManager
+    this.tierObjectStore = tierObjectStore
+    this.tierMetadataManager = tierMetadataManager
+    this.logs = logs
+    this.tierTopicManager = tierTopicManager
+    this.consumerBuilder = consumerBuilder
+    this.tempDir = tempDir
+  }
+
+  @After
+  def teardown(): Unit = {
+    tierArchiver.shutdown()
+    replicaManager.shutdown()
+    tierObjectStore.close()
+    tierTopicManager.shutdown()
+    tierMetadataManager.close()
+    logs.foreach(l => l.close())
+  }
 
   @Test
   def testArchiverEmigrate(): Unit = {
-    val (tierTopicManager, consumerBuilder) = setupTierTopicManager
+    setup()
 
-    // Create replica manager and test logs
-    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
-    val tempDir = TestUtils.tempDir()
-    val logs = createLogs(2, logConfig, tempDir)
-    val replicaManager = mockReplicaManager(logs)
-
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
-
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
-
-    // Immigrate all test logs
-    logs.foreach { log =>
-      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
-      tierMetadataManager.becomeLeader(log.topicPartition, 1)
-    }
-
-    while (tierTopicManager.doWork()) {
-    }
-
-    assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
-    assertEquals("No transitions should be in progress.", 0, tierArchiver.stateTransitionsInProgress.size)
-
-    TestUtils.waitUntilTrue(() => tierArchiver.processTransitions(), "Archiver should process pending immigrations", 2000L)
-
-    assertEquals("No topic partitions should be queued.", 0, tierArchiver.immigrationEmigrationQueue.size())
-    assertEquals("Topic partitions should be transitioning to the next status.", logs.size, tierArchiver.stateTransitionsInProgress.size)
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "Topic manager should process init entries", 2000L)
-
-    TestUtils.waitUntilTrue(() => tierArchiver.processTransitions(), "Archiver should advance both partitions to BeforeUpload status", 2000L)
+    waitForImmigration(logs, 1, tierArchiver, tierTopicManager, consumerBuilder)
 
     // Emigrate one partition
     tierArchiver.handleEmigration(logs.head.topicPartition)
@@ -116,27 +119,10 @@ class TierIntegrationTest {
 
   @Test
   def testArchiverFencing(): Unit = {
-    val (tierTopicManager, consumerBuilder) = setupTierTopicManager
-
-    // Create replica manager and test logs
-    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
-    val tempDir = TestUtils.tempDir()
-    val logs = createLogs(1, logConfig, tempDir)
-    val replicaManager = mockReplicaManager(logs)
-
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
-
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
-
-    tierTopicManager.becomeArchiver(logs.head.topicPartition, 2)
-
+    setup()
     // Immigrate all test logs
     logs.foreach { log =>
-      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
       tierMetadataManager.becomeLeader(log.topicPartition, 1)
-    }
-
-    while(tierTopicManager.doWork()) {
     }
 
     assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
@@ -149,102 +135,38 @@ class TierIntegrationTest {
     }, "Topic manager should process init entries", 2000L)
 
     TestUtils.waitUntilTrue(() => tierArchiver.processTransitions(), "Archiver should handle fenced exception", 2000L)
+
+    assertEquals("Topic partitions should be queued for immigration.", 0, tierArchiver.immigrationEmigrationQueue.size())
   }
 
   @Test
   def testArchiverUploadAndMaterialize(): Unit = {
-    val (tierTopicManager, consumerBuilder) = setupTierTopicManager
-
+    setup(numLogs = 10)
     val numBatches = 6
 
     // Create replica manager and test logs
-    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
-    val tempDir = TestUtils.tempDir()
-    val logs = createLogs(10, logConfig, tempDir)
-    val replicaManager = mockReplicaManager(logs)
-
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
-
-    val tierArchiver = new TierArchiver(TierArchiverConfig(), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
 
     val leaderEpoch = 1
-
-    // Immigrate all test logs
-    logs.foreach { log =>
-      tierMetadataManager.becomeLeader(log.topicPartition, 1)
-    }
-
-    while(tierTopicManager.doWork()) {
-    }
-
-    assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
-    assertEquals("No transitions should be in progress.", 0, tierArchiver.stateTransitionsInProgress.size)
-
-    TestUtils.waitUntilTrue(() => tierArchiver.processTransitions(), "Archiver should process pending immigrations", 2000L)
-
-    assertEquals("No topic partitions should be queued.", 0, tierArchiver.immigrationEmigrationQueue.size())
-    assertEquals("Topic partitions should be transitioning to the next status.", logs.size, tierArchiver.stateTransitionsInProgress.size)
-
 
     // Write batches
     logs.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, numBatches, 4) }
 
-    // Become leader
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize init entries", 2000L)
+    waitForImmigration(logs, leaderEpoch, tierArchiver, tierTopicManager, consumerBuilder)
+
 
     logs.foreach { log =>
       assertEquals(s"topic manager should materialize entry for ${log.topicPartition}",
         tierTopicManager.partitionState(log.topicPartition).tierEpoch, leaderEpoch)
     }
 
-    assertEquals(0, tierObjectStore.getStored.keySet().size())
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: could not run all pending states",
-      1000L
-    )
-    // Archive batch 1
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should transition to BeforeUpload status for each topic partition",
-      1000L)
-
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should run pending BeforeUpload states",
-      1000L
-    )
-    // Archive batch 1
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause resulting AfterUpload states",
-      1000L)
-
-    assertEquals(60, tierObjectStore.getStored.keySet().size())
-
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
 
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should transition states through AfterUpload back to BeforeUpload",
-      1000L
-    )
-    // Archive batch 1
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "batch 1: topic manager should process the object metadata entries", 2000L)
-
+    // Materialize the first segment for each
+    archiveAndMaterializeUntilTrue(() => {
+      logs.forall { log =>
+        tierTopicManager.partitionState(log.topicPartition).numSegments() == 1
+      }
+    }, "Should materialize segments", tierArchiver, tierTopicManager, consumerBuilder)
 
     logs.foreach { log =>
       assertEquals("batch 1: segment should be materialized with correct offset relationship",
@@ -255,46 +177,15 @@ class TierIntegrationTest {
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
 
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning BeforeUpload to AfterUpload",
-      1000L
-    )
-    // Archive batch 1
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on AfterUpload",
-      1000L)
+    // Materialize the second segment for each
+    archiveAndMaterializeUntilTrue(() => {
+      logs.forall { log =>
+        tierTopicManager.partitionState(log.topicPartition).numSegments() == 2
+      }
+    }, "Should materialize segments", tierArchiver, tierTopicManager, consumerBuilder)
 
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning AfterUpload to BeforeUpload",
-      1000L
-    )
-    // Archive batch 1
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
-    assertEquals(120, tierObjectStore.getStored.keySet().size())
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning BeforeUpload to AfterUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on AfterUpload",
-      1000L)
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "batch 1: topic manager should process the object metadata entries", 2000L)
 
     logs.foreach { log =>
       assertEquals("batch 2: segment should be materialized with correct offset relationship",
@@ -303,51 +194,14 @@ class TierIntegrationTest {
         7, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
     }
 
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning states from AfterUpload to BeforeUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
-
-
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
 
-    assertEquals(120, tierObjectStore.getStored.keySet().size())
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning BeforeUpload to AfterUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on AfterUpload",
-      1000L)
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning states from AfterUpload to BeforeUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
-
-
-    assertEquals(180, tierObjectStore.getStored.keySet().size())
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "batch 3: topic manager should process the object metadata entry", 2000L)
+    // Materialize the third segment for each
+    archiveAndMaterializeUntilTrue(() => {
+      logs.forall { log =>
+        tierTopicManager.partitionState(log.topicPartition).numSegments() == 3
+      }
+    }, "Should materialize segments", tierArchiver, tierTopicManager, consumerBuilder)
 
     logs.foreach { log =>
       assertEquals("batch 3: segment should be materialized with correct offset relationship",
@@ -357,312 +211,203 @@ class TierIntegrationTest {
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
-
   }
 
   @Test
   def testArchiverUploadAndMaterializeWhenWriteHappensAfterBecomeLeader(): Unit = {
-    val (tierTopicManager, consumerBuilder) = setupTierTopicManager
-
-    // Create replica manager and test logs
-    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
-    val tempDir = TestUtils.tempDir()
-    val logs = createLogs(10, logConfig, tempDir)
-    val replicaManager = mockReplicaManager(logs)
-
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
-
-    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 10), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
+    setup(numLogs = 10)
 
     val leaderEpoch = 1
 
     // Immigrate all test logs
-    logs.foreach { log =>
-      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
-      tierMetadataManager.becomeLeader(log.topicPartition, 1)
-    }
-
-    while(tierTopicManager.doWork()) {
-    }
-
-    assertEquals("Topic partitions should be queued for immigration.", logs.size, tierArchiver.immigrationEmigrationQueue.size())
-    assertEquals("No transitions should be in progress.", 0, tierArchiver.stateTransitionsInProgress.size)
-
-    TestUtils.waitUntilTrue(() => tierArchiver.processTransitions(), "Archiver should process pending immigrations", 2000L)
-
-    assertEquals("No topic partitions should be queued.", 0, tierArchiver.immigrationEmigrationQueue.size())
-    assertEquals("Topic partitions should be transitioning to the next status.", logs.size, tierArchiver.stateTransitionsInProgress.size)
-
-    // Become leader
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize init entries", 2000L)
-
-    logs.foreach { log =>
-      assertEquals(s"topic manager should materialize entry for ${log.topicPartition}",
-        leaderEpoch, tierTopicManager.partitionState(log.topicPartition).tierEpoch)
-    }
+    waitForImmigration(logs, leaderEpoch, tierArchiver, tierTopicManager, consumerBuilder)
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
 
     // Write batches
     logs.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, 6, 4) }
 
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning BeforeUpload to AfterUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on AfterUpload",
-      1000L)
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning states from AfterUpload to BeforeUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning states from BeforeUpload to BeforeUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "batch 1: topic manager should process the object metadata entries", 2000L)
+    // Wait for the first segments to materialize
+    archiveAndMaterializeUntilTrue(() => {
+      logs.forall { log =>
+        tierTopicManager.partitionState(log.topicPartition).numSegments() > 0
+      }
+    }, "Should materialize segments", tierArchiver, tierTopicManager, consumerBuilder)
 
     logs.foreach { log =>
-      assertEquals("batch 1: segment should be materialized with correct offset relationship",
+      assertEquals("Segment should be materialized with correct offset relationship",
         0, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
-      assertEquals("batch 1: segment should be materialized with correct end offset",
+      assertEquals("Segment should be materialized with correct end offset",
         3, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
-
-      validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
     }
+    validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
   }
-
 
   @Test
   def testArchiverUploadWithLimitedUploadConcurrency(): Unit = {
-    val (tierTopicManager, consumerBuilder) = setupTierTopicManager
+    val maxConcurrentUploads = 2
+    val nLogs = 3
+    setup(nLogs, maxConcurrentUploads)
 
-    // Create replica manager and test logs
-    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
-    val tempDir = TestUtils.tempDir()
-    val logs = createLogs(3, logConfig, tempDir)
-    val replicaManager = mockReplicaManager(logs)
-
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
-
-    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 2), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
-
+    val batches = 3
+    val recordsPerBatch = 4
     val leaderEpoch = 1
 
-    // Immigrate all test logs
-    logs.foreach { log =>
-      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
-      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    waitForImmigration(logs, leaderEpoch, tierArchiver, tierTopicManager, consumerBuilder)
+
+    // The partitions have immigrated, but so far the logs are empty.
+    snapshotArchiver(tierArchiver) { s =>
+      assertEquals(s"$maxConcurrentUploads state(s) should be in progress (BeforeUpload)",
+        maxConcurrentUploads, s.transitioning.size)
+      assertEquals(s"${nLogs - maxConcurrentUploads} state(s) should be paused at BeforeUpload, awaiting room on the executor",
+        nLogs - maxConcurrentUploads,
+        s.pausedStates.collect { case x: BeforeUpload => x }.size)
     }
 
-    while(tierTopicManager.doWork()) {
+    // Write two batches to all partitions
+    logs.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, batches, recordsPerBatch) }
+
+    var materializedFirstCycle = Seq.empty[TopicPartition]
+
+    // Wait for the partitions that happened to be at the front of the priority queue to each upload their first segment and store metadata.
+    val lastOffsetOfInitialSegment = OptionalLong.of(recordsPerBatch - 1)
+    archiveAndMaterializeUntilTrue(() => {
+      materializedFirstCycle = logs.collect {
+        case log if tierTopicManager.partitionState(log.topicPartition).endOffset()
+          .equals(lastOffsetOfInitialSegment) => log.topicPartition
+      }
+      maxConcurrentUploads == materializedFirstCycle.size
+    }, s"Do work until the initial segment for each of the first $maxConcurrentUploads states is materialized",
+      tierArchiver, tierTopicManager, consumerBuilder)
+
+    // Just before the end of the above cycle, the highest priority paused state(s) had yet to start uploading any segments.
+    // Now, of those, we expect at least one (up to the max states-in-progress ceiling) to be transitioning from BeforeUpload to AfterUpload.
+    val expectedInProgressNotMaterialized = Math.min(nLogs - maxConcurrentUploads, maxConcurrentUploads)
+    snapshotArchiver(tierArchiver) { s =>
+      assertEquals(s"$expectedInProgressNotMaterialized not yet materialized partition(s) should correspond to an in-progress BeforeUpload state",
+        expectedInProgressNotMaterialized,
+        logs.count { log =>
+          s.transitioning.contains(log.topicPartition) &&
+            !materializedFirstCycle.contains(log.topicPartition)
+        })
     }
-
-    // Write batches to all partitions
-    logs.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, 2, 4) }
-
-    TestUtils.waitUntilTrue(() => tierArchiver.processTransitions(), "Archiver should process immigrations", 2000L)
-
-    // Become leader for all partitions
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize first two init entries", 2000L)
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start transitioning states to BeforeUpload",
-      1000L
-    )
-    assertEquals("2 status transitions should be in progress at a time", 2, tierArchiver.stateTransitionsInProgress.size)
-    assertEquals("One status transition should be paused", 1, tierArchiver.pausedStates.size())
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states on BeforeUpload",
-      1000L)
-
-    assertEquals("All 3 status transitions should be paused, 2 in BeforeUpload and 1 in BeforeLeader", 3, tierArchiver.pausedStates.size())
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should start to advance the one remaining BeforeLeader status to BeforeUpload, and one BeforeUpload status to AfterUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize second init entry", 2000L)
-
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states, we should have 2 states in BeforeUpload, and 1 status in AfterUpload",
-      1000L)
-
-    var afterUploadCount = 0
-    var beforeUploadCount = 0
-    tierArchiver.pausedStates.forEach(new Consumer[TierArchiverState] {
-      override def accept(t: TierArchiverState): Unit = {
-        t match {
-          case _: TierArchiverState.BeforeUpload =>
-            beforeUploadCount += 1
-          case _: TierArchiverState.AfterUpload =>
-            afterUploadCount += 1
-          case _ =>
-            assertTrue("No other states expected", false)
-        }
+    // The previous assertions cover priority fairness in practice.
+    // Now ensure the archiver can exhaust all tierable segs.
+    val lastOffsetOfFinalTierableSegment = OptionalLong.of(recordsPerBatch * (batches - 1) - 1)
+    archiveAndMaterializeUntilTrue(() => {
+      logs.forall { log =>
+        lastOffsetOfFinalTierableSegment == tierTopicManager.partitionState(log.topicPartition).endOffset()
       }
-    })
-    assertEquals("", afterUploadCount, 1)
-    assertEquals("", beforeUploadCount, 2)
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.tryRunPendingStates(),
-      "batch 1: archiver should advance the 1 AfterUpload status to BeforeUpload and 1 of the 2 BeforeUpload states to AfterUpload",
-      1000L
-    )
-
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize second init entry", 2000L)
-
-    TestUtils.waitUntilTrue(
-      () => !tierArchiver.pauseDoneStates(),
-      "batch 1: archiver should pause all states, resulting in 1 AfterUpload status and 2 BeforeUpload states",
-      1000L)
-
-    afterUploadCount = 0
-    beforeUploadCount = 0
-    tierArchiver.pausedStates.forEach(new Consumer[TierArchiverState] {
-      override def accept(t: TierArchiverState): Unit = {
-        t match {
-          case _: TierArchiverState.BeforeUpload =>
-            beforeUploadCount += 1
-          case _: TierArchiverState.AfterUpload =>
-            afterUploadCount += 1
-          case _ =>
-            assertTrue("No other states expected", false)
-        }
-      }
-    })
-    assertEquals("unexpected AfterUpload count", 1, afterUploadCount)
-    assertEquals("unexpected BeforeUpload count", 2, beforeUploadCount)
+    }, s"Eventually, all tierable segments should be materialized.",
+      tierArchiver, tierTopicManager, consumerBuilder)
   }
 
   @Test
   def testArchiverUploadWithAsymmetricalWrites(): Unit = {
-    val (tierTopicManager, consumerBuilder) = setupTierTopicManager
-
-    // Create replica manager and test logs
-    val logConfig = LogTest.createLogConfig(segmentBytes = 150, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
-    val tempDir = TestUtils.tempDir()
-    val logs = createLogs(3, logConfig, tempDir)
-    val replicaManager = mockReplicaManager(logs)
-
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
-
-    val tierArchiver = new TierArchiver(TierArchiverConfig(maxConcurrentUploads = 2), replicaManager, tierMetadataManager, tierTopicManager, tierObjectStore, mockTime)
+    setup(numLogs = 3, maxConcurrentUploads = 2)
 
     val leaderEpoch = 1
+    val firstTopicPartition = logs.head.topicPartition
 
     // Write a batch only to the second two logs
     logs.tail.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, 1, 4) }
 
-    // Immigrate all test logs
-    logs.foreach { log =>
-      tierMetadataManager.initState(log.topicPartition, log.dir, log.config)
-      tierMetadataManager.becomeLeader(log.topicPartition, 1)
+    // Immigrate all test logs.
+    // Given maxConcurrentUploads < logs, this will also transition states for second two logs.
+    waitForImmigration(logs, leaderEpoch, tierArchiver, tierTopicManager, consumerBuilder)
+
+    snapshotArchiver(tierArchiver) { s =>
+      assertTrue("Second two partitions should have state transitions in progress",
+        logs.tail.forall { log => s.transitioning.contains(log.topicPartition) })
+      assertFalse(s"$firstTopicPartition should not have a state transition in progress.",
+        s.transitioning.contains(firstTopicPartition))
+      assertTrue(s"$firstTopicPartition should be in BeforeUpload state",
+        s.pausedStates.exists { case x: BeforeUpload if x.topicPartition == firstTopicPartition => true })
     }
 
-    while(tierTopicManager.doWork()) {
+    // Write ten batches to first log.
+    writeRecordBatches(logs.head, leaderEpoch, 0L, 10, 4)
+
+    // The first log's state should be transitioned in the next cycle.
+    TestUtils.waitUntilTrue(
+      () => tierArchiver.processTransitions(),
+      "Archiver should un-pause the first topic partition's state",
+      maxWaitTimeMs)
+
+    snapshotArchiver(tierArchiver) { s =>
+      assertTrue(s"$firstTopicPartition should be transitioning state.",
+        s.transitioning.contains(firstTopicPartition))
     }
-
-    // process immigration
-    TestUtils.waitUntilTrue(() => !tierArchiver.processImmigrationEmigrationQueue() && !tierArchiver.tryRunPendingStates(), "archiver should process immigrations", 2000L)
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize first two init entries", 2000L)
-
-    TestUtils.waitUntilTrue(() => tierArchiver.pauseDoneStates(), "archiver should pause 2 states in BeforeUpload, 1 in BeforeLeader")
-    var beforeLeaderCount = 0
-    var beforeUploadCount = 0
-    tierArchiver.pausedStates.forEach(new Consumer[TierArchiverState] {
-      override def accept(t: TierArchiverState): Unit = {
-        t match {
-          case _: TierArchiverState.BeforeUpload =>
-            beforeUploadCount += 1
-          case _: TierArchiverState.AfterUpload =>
-            assertTrue("should not have uploded anything", false)
-          case _: TierArchiverState.BeforeLeader =>
-            beforeLeaderCount += 1
-        }
-      }
-    })
-    assertEquals("unexpected AfterUpload count", 1, beforeLeaderCount)
-    assertEquals("unexpected BeforeUpload count", 2, beforeUploadCount)
-
-    TestUtils.waitUntilTrue(() => !tierArchiver.tryRunPendingStates(), "Archiver should process next BeforeLeader entry", 2000L)
-    TestUtils.waitUntilTrue(() => {
-      consumerBuilder.moveRecordsFromProducer()
-      tierTopicManager.doWork()
-    }, "topic manager should materialize second init entry", 2000L)
-    TestUtils.waitUntilTrue(() => tierArchiver.pauseDoneStates(), "archiver should see no more BeforeLeader entries")
-    tierArchiver.pausedStates.forEach(new Consumer[TierArchiverState] {
-      override def accept(t: TierArchiverState): Unit = {
-        t match {
-          case _: TierArchiverState.BeforeLeader =>
-            assertTrue("should not see any more BeforeLeader states", false)
-          case _ =>
-        }
-      }
-    })
-
-    TestUtils.waitUntilTrue(
-      () => tierArchiver.processTransitions(),
-      "Archiver should advance remaining partition to BeforeUpload",
-      1000L)
-
-    // Write ten batches to first log
-    logs.headOption.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, 10, 4) }
-
-    TestUtils.waitUntilTrue(
-      () => tierArchiver.processTransitions(),
-      "Archiver should do work",
-      1000L)
-
-    assertTrue("First log should be uploading",
-      tierArchiver.stateTransitionsInProgress.contains(logs.head.topicPartition))
   }
 
+  /**
+    *  For a sequence of logs, do the following:
+    *  1. Ensure the archiver is the leader for each log TopicPartition.
+    *  2. Ensure that the TierPartitionState becomes ONLINE for all topic partitions.
+    *  3. Issue an archiver state transition to move from BeforeLeader => BeforeUpload.
+    *  4. Ensure there are no outstanding BeforeLeader states.
+    */
+  private def waitForImmigration(logs: Seq[AbstractLog],
+                                 leaderEpoch: Int,
+                                 tierArchiver: TierArchiver,
+                                 tierTopicManager: TierTopicManager,
+                                 consumerBuilder: MockConsumerBuilder): Unit = {
+    // Immigrate all test logs
+    logs.foreach { log =>
+
+      tierMetadataManager.becomeLeader(log.topicPartition, leaderEpoch)
+    }
+
+    archiveAndMaterializeUntilTrue(() => {
+      logs.forall { log =>
+        Option(tierTopicManager.partitionState(log.topicPartition)).exists { tps =>
+          tps.status() == TierPartitionStatus.ONLINE
+        }
+      }
+    }, "Expect leadership to materialize", tierArchiver, tierTopicManager, consumerBuilder)
+
+    // resolve BeforeLeader transitions in progress
+    tierArchiver.processTransitions()
+
+    snapshotArchiver(tierArchiver) { s =>
+      s.pausedStates.foreach {
+        case _: TierArchiverState.BeforeLeader =>
+          fail("Expect zero BeforeLeader.")
+        case _ =>
+      }
+    }
+  }
+
+  private def archiveAndMaterializeUntilTrue(pred: () => Boolean,
+                                             msg: String,
+                                             tierArchiver: TierArchiver,
+                                             tierTopicManager: TierTopicManager,
+                                             consumerBuilder: MockConsumerBuilder): Unit = {
+    TestUtils.waitUntilTrue(() => {
+      tierArchiver.processTransitions()
+      consumerBuilder.moveRecordsFromProducer()
+      tierTopicManager.doWork()
+
+      pred()
+    }, msg, maxWaitTimeMs)
+  }
+
+  private case class Snapshot(immigrating: Seq[(Int, TopicPartition)],
+                              emigrating: Seq[TopicPartition],
+                              transitioning: Seq[TopicPartition],
+                              pausedStates: Seq[TierArchiverState])
+
+  private def snapshotArchiver[T](archiver: TierArchiver)(f: Snapshot => T): T = {
+    val migrations = archiver.immigrationEmigrationQueue.toArray(Array.empty[ImmigratingOrEmigratingTopicPartitions])
+    val immigrating = migrations.collect { case x: ImmigratingTopicPartition => (x.leaderEpoch.intValue(), x.topicPartition) }
+    val emigrating = migrations.collect { case x: EmigratingTopicPartition => x.topicPartition }
+    val transitioning = archiver.stateTransitionsInProgress.keys.toList
+    val pausedStates = archiver.pausedStates.toArray(Array.empty[TierArchiverState])
+    // PriorityQueue toArray/iteration order is not guaranteed
+
+    pausedStates.sortWith((a, b) => TierArchiverStateComparator.compare(a, b) < 0)
+    f(Snapshot(immigrating, emigrating, transitioning, pausedStates))
+  }
 
   private def validatePartitionStateContainedInObjectStore(tierTopicManager: TierTopicManager,
                                                            tierObjectStore: MockInMemoryTierObjectStore,
@@ -678,7 +423,7 @@ class TierIntegrationTest {
   }
 
 
-  private def setupTierTopicManager: (TierTopicManager, MockConsumerBuilder) = {
+  private def setupTierTopicManager(tierMetadataManager: TierMetadataManager): (TierTopicManager, MockConsumerBuilder) = {
     val producerBuilder = new MockProducerBuilder()
     val consumerBuilder = new MockConsumerBuilder(tierTopicManagerConfig, producerBuilder.producer())
     val tierTopicManager = new TierTopicManager(
@@ -690,7 +435,7 @@ class TierIntegrationTest {
     (tierTopicManager, consumerBuilder)
   }
 
-  private def createLogs(n: Int, logConfig: LogConfig, tempDir: File): IndexedSeq[AbstractLog] = {
+  private def createLogs(n: Int, logConfig: LogConfig, tempDir: File, tierMetadataManager: TierMetadataManager): IndexedSeq[AbstractLog] = {
     val logDirFailureChannel = new LogDirFailureChannel(n)
     (0 until n).map { i =>
       val logDir = tempDir.toPath.resolve(s"tierlogtest-$i").toFile

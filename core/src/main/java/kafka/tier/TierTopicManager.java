@@ -165,7 +165,10 @@ public class TierTopicManager implements Runnable {
         }
         producer.close();
         try {
-            shutdownInitiated.await();
+            if (managerThread != null && managerThread.isAlive()) { // if the manager thread never
+                // started, there's nothing
+                shutdownInitiated.await(); // to await.
+            }
         } catch (InterruptedException ie) {
             log.debug("shutdownInitiated latch count reached zero. Shutdown called.");
         }

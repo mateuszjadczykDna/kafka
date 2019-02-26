@@ -27,10 +27,6 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
 
     }
 
-    public ConcurrentHashMap<String, byte[]> getStored() {
-         return keyToBlob;
-    }
-
     @Override
     public TierObjectStoreResponse getObject(
             TierObjectMetadata objectMetadata, TierObjectStoreFileType objectFileType,
@@ -103,9 +99,9 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
                 fileType.getSuffix());
     }
 
-    private void writeFileToArray(String filePath, FileChannel sourceChan) throws IOException {
-        ByteBuffer buf = ByteBuffer.allocate((int) sourceChan.size());
-        sourceChan.read(buf);
+    private void writeFileToArray(String filePath, FileChannel fileChannel) throws IOException {
+        ByteBuffer buf = ByteBuffer.allocate((int) fileChannel.size());
+        fileChannel.read(buf);
         keyToBlob.put(filePath, buf.array());
     }
 

@@ -9,10 +9,10 @@ import java.util.concurrent._
 import java.util.function.Predicate
 
 import kafka.server.ReplicaManager
-import kafka.tier.{TierMetadataManager, TierTopicManager}
 import kafka.tier.archiver.TierArchiverState.BeforeLeader
 import kafka.tier.exceptions.{TierArchiverFatalException, TierArchiverFencedException}
 import kafka.tier.store.TierObjectStore
+import kafka.tier.{TierMetadataManager, TierTopicManager}
 import kafka.utils.ShutdownableThread
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Time
@@ -165,23 +165,25 @@ class TierArchiver(config: TierArchiverConfig,
     }
   }
 
-  sealed trait ImmigratingOrEmigratingTopicPartitions
-
-  private case class ImmigratingTopicPartition(topicPartition: TopicPartition, leaderEpoch: Integer)
-    extends ImmigratingOrEmigratingTopicPartitions
-
-  private case class EmigratingTopicPartition(topicPartition: TopicPartition)
-    extends ImmigratingOrEmigratingTopicPartitions
-
-  private object TierArchiverStateComparator extends Comparator[TierArchiverState] with Serializable {
-    override def compare(a: TierArchiverState, b: TierArchiverState): Int = {
-      a.relativePriority(b)
-    }
-  }
-
   override def shutdown(): Unit = {
     blockingTaskExecutor.shutdown()
     blockingTaskExecutor.awaitTermination(30, TimeUnit.SECONDS)
     super.shutdown()
+  }
+}
+
+private[tier] sealed trait ImmigratingOrEmigratingTopicPartitions {
+  val topicPartition: TopicPartition
+}
+
+private[tier] case class ImmigratingTopicPartition(topicPartition: TopicPartition, leaderEpoch: Integer)
+  extends ImmigratingOrEmigratingTopicPartitions
+
+private[tier] case class EmigratingTopicPartition(topicPartition: TopicPartition)
+  extends ImmigratingOrEmigratingTopicPartitions
+
+private[tier] object TierArchiverStateComparator extends Comparator[TierArchiverState] with Serializable {
+  override def compare(a: TierArchiverState, b: TierArchiverState): Int = {
+    a.relativePriority(b)
   }
 }

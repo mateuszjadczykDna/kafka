@@ -22,6 +22,7 @@ import kafka.tier.exceptions.{TierArchiverFatalException, TierArchiverFencedExce
 import kafka.tier.serdes.State
 import kafka.tier.state.TierPartitionState
 import kafka.tier.store.TierObjectStore
+import kafka.utils.CoreUtils
 import org.apache.kafka.common.TopicPartition
 
 import scala.util.Random
@@ -192,14 +193,30 @@ object TierArchiverState {
       CompletableFuture.supplyAsync(new Supplier[TierObjectMetadata] {
         override def get(): TierObjectMetadata = {
           val metadata = createObjectMetadata(topicPartition, tierEpoch, logSegment)
-          tierObjectStore.putSegment(metadata,
-            FileChannel.open(logSegment.log.file.toPath),
-            FileChannel.open(logSegment.offsetIndex.file.toPath),
-            FileChannel.open(logSegment.timeIndex.file.toPath),
-            FileChannel.open(logSegment.timeIndex.file.toPath), // FIXME producer status
-            FileChannel.open(logSegment.timeIndex.file.toPath), // FIXME transaction index
-            FileChannel.open(leaderEpochCacheFile.toPath)
-          )
+          val segmentFileChannel = FileChannel.open(logSegment.log.file.toPath)
+          val offsetIndexFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath)
+          val timestampIndexFileChannel = FileChannel.open(logSegment.timeIndex.file.toPath)
+          val producerStateFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath) // FIXME producer statua
+          val transactionIndexFileChannel = FileChannel.open(logSegment.offsetIndex.file.toPath) // FIXME transaction index
+          val leaderEpochCacheFileChannel = FileChannel.open(leaderEpochCacheFile.toPath)
+          try {
+            tierObjectStore.putSegment(metadata,
+              segmentFileChannel,
+              offsetIndexFileChannel,
+              timestampIndexFileChannel,
+              producerStateFileChannel,
+              transactionIndexFileChannel,
+              leaderEpochCacheFileChannel
+            )
+          } finally {
+            CoreUtils.tryAll(List(
+              segmentFileChannel.close,
+              offsetIndexFileChannel.close,
+              timestampIndexFileChannel.close,
+              producerStateFileChannel.close,
+              transactionIndexFileChannel.close,
+              leaderEpochCacheFileChannel.close))
+          }
         }
       }, blockingTaskExecutor)
     }
