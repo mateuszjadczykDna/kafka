@@ -10,16 +10,22 @@ def config = jobConfig {
 
 
 def job = {
-    def gradlewParameters = "--no-daemon -Dorg.gradle.project.maxParallelForks=4 -Dorg.gradle.project.testLoggingEvents=started,passed,skipped,failed --stacktrace -Dorg.gradle.project.skipSigning=true"
-
     // Per KAFKA-7524, Scala 2.12 is the default, yet we currently support the previous minor version.
     stage("Check compilation compatibility with Scala 2.11") {
         sh "gradle"
-        sh "./gradlew -PscalaVersion=2.11 ${gradlewParameters} clean assemble"
+        sh "./gradlew clean compileJava compileScala compileTestJava compileTestScala " +
+                "--no-daemon --stacktrace -PscalaVersion=2.11"
     }
 
-    stage("Run Gradle tests") {
-        sh "./gradlew ${gradlewParameters} clean test"
+    stage("Compile and validate") {
+        sh "./gradlew clean compileJava compileScala compileTestJava compileTestScala " +
+                "spotlessScalaCheck checkstyleMain checkstyleTest spotbugsMain " +
+                "--no-daemon --stacktrace --continue -PxmlSpotBugsReport=true"
+    }
+
+    stage("Test") {
+        sh "./gradlew unitTest integrationTest " +
+                "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4"
     }
 
     // The Muckrake branch for running the downstream tests.
