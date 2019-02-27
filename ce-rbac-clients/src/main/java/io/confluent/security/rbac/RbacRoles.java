@@ -39,7 +39,7 @@ public class RbacRoles {
     return role != null && role.accessPolicy().isSuperUser();
   }
 
-  Collection<Role> roles() {
+  public Collection<Role> roles() {
     return roles.values();
   }
 

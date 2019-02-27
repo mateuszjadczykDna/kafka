@@ -26,8 +26,12 @@ public class RoleAssignment {
                         @JsonProperty("role") String role,
                         @JsonProperty("scope") String scope,
                         @JsonProperty("resources") Collection<RbacResource> resources) {
-    this.principal = principal;
+    this.principal = Objects.requireNonNull(principal, "principal must not be null");
+    if (role == null || role.isEmpty())
+      throw new IllegalArgumentException("Role must be non-empty for role assignment");
     this.role = role;
+    if (scope == null || scope.isEmpty())
+      throw new IllegalArgumentException("Scope must be non-empty for role assignment");
     this.scope = scope;
     this.resources = resources == null ? Collections.emptySet() :
         Collections.unmodifiableList(new ArrayList<>(resources));

@@ -16,8 +16,10 @@ public class Role {
 
   @JsonCreator
   public Role(@JsonProperty("name") String name, @JsonProperty("policy") AccessPolicy accessPolicy) {
+    if (name == null || name.isEmpty())
+      throw new IllegalArgumentException("Role name must be non-empty");
     this.name = name;
-    this.accessPolicy = accessPolicy;
+    this.accessPolicy = Objects.requireNonNull(accessPolicy, "access policy must not be null");
   }
 
   public String name() {
