@@ -21,6 +21,7 @@ import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.StandardWatchEventKinds;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,12 +36,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.confluent.kafka.multitenant.quota.QuotaConfig;
 import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
-import io.confluent.kafka.common.utils.RetryBackoff;
 import kafka.server.KafkaConfig$;
 
 /**
@@ -51,10 +50,10 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   private static final Map<String, PhysicalClusterMetadata> INSTANCES = new HashMap<>();
   private static final Logger LOG = LoggerFactory.getLogger(PhysicalClusterMetadata.class);
 
+  static final String DATA_DIR_NAME = "..data";
   private static final String LOGICAL_CLUSTER_FILE_EXT_WITH_DOT = ".json";
   private static final Long CLOSE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(30);
-  private static final Long RETRY_INITIAL_BACKOFF_MS = TimeUnit.MINUTES.toMillis(1);
-  private static final Long RETRY_MAX_BACKOFF_MS = TimeUnit.MINUTES.toMillis(30);
+  private static final Long DEFAULT_RELOAD_DELAY_MS = TimeUnit.MINUTES.toMillis(10);
 
   private String logicalClustersDir;
   // logical cluster ID --> LogicalClusterMetadata
@@ -63,9 +62,8 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   final LogicalClustersChangeListener dirWatcher;
   private final Thread dirListenerThread;
   private final ScheduledExecutorService executorService;
-  private final RetryBackoff retryBackoff;
+  private final long reloadDelaysMs;
   private volatile Future<?> reloadFuture = null;
-  private int retryCount;
   private final ReadWriteLock cacheLock;
 
   public enum State {
@@ -81,11 +79,11 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
 
 
   public PhysicalClusterMetadata() {
-    this(RETRY_INITIAL_BACKOFF_MS, RETRY_MAX_BACKOFF_MS);
+    this(DEFAULT_RELOAD_DELAY_MS);
   }
 
-  // used by unit test
-  PhysicalClusterMetadata(Long initialBackoffMs, Long maxBackoffMs) {
+  PhysicalClusterMetadata(Long reloadDelaysMs) {
+    this.reloadDelaysMs = reloadDelaysMs;
     this.state = new AtomicReference<>(State.NOT_READY);
     this.cacheLock = new ReentrantReadWriteLock();
     this.logicalClusterMap = new ConcurrentHashMap<>();
@@ -97,8 +95,6 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       thread.setDaemon(true);
       return thread;
     });
-    this.retryCount = 0;
-    this.retryBackoff = new RetryBackoff(initialBackoffMs.intValue(), maxBackoffMs.intValue());
   }
 
   /**
@@ -192,10 +188,10 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
         LOG.error("Failed to register watcher for dir={}", logicalClustersDir, ioe);
         throw ioe;
       }
-      if (!loadAllFiles()) {
-        scheduleReloadCache();
-      }
+      loadAllFiles();
       maybeSetNotStale();
+      reloadFuture = executorService.scheduleWithFixedDelay(
+          this::reloadCache, reloadDelaysMs, reloadDelaysMs, TimeUnit.MILLISECONDS);
       LOG.info("Loaded logical cluster metadata from files in dir={} state={}",
                logicalClustersDir, state.get());
       dirListenerThread.start();
@@ -300,21 +296,41 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   }
 
   /**
-   * Loads every file from the logical clusters directory and updates the cache
-   * @return true if successfully loaded the files (excluding files with bad content or
-   *         extension); otherwise false which means need to retry
+   * Loads every file from the logical clusters directory and updates the cache. This includes
+   * removing logical clusters from the cache that don't have corresponding json files anymore.
    */
-  private boolean loadAllFiles() {
-    try (Stream<Path> fileStream = Files.list(Paths.get(logicalClustersDir))) {
-      long numFilesNeedRetry = fileStream
-              .map(this::loadLogicalClusterMetadata)
-              .filter(retry -> retry)
-              .count();
-      return numFilesNeedRetry == 0;
-    } catch (IOException ioe) {
-      LOG.warn("Failed to read metadata files from dir={}", logicalClustersDir);
+  private void loadAllFiles() {
+    Path logicalClustersDataDir = logicalClustersDataDir();
+    if (!Files.exists(logicalClustersDataDir)) {
+      LOG.info("{} does not exist.", logicalClustersDataDir);
+      return;
     }
-    return false;
+
+    try (Stream<Path> fileStream = Files.list(logicalClustersDataDir)) {
+      final Set<String> logicalClustersInDir = new HashSet<String>();
+      fileStream.forEach(filePath -> {
+        String logicalClusterId = loadLogicalClusterMetadata(filePath);
+        if (logicalClusterId != null) {
+          logicalClustersInDir.add(logicalClusterId);
+        }
+      });
+
+      // since above does not remove any entries from the cache, logicalClusterIdsIncludingStale()
+      // returns all logical clusters that existed before this load/update
+      Set<String> removedLogicalClusters = Sets.difference(logicalClusterIdsIncludingStale(),
+                                                           logicalClustersInDir).immutableCopy();
+      for (String removedLogicalCluster : removedLogicalClusters) {
+        logicalClusterMap.remove(removedLogicalCluster);
+        markUpToDate(removedLogicalCluster);
+        LOG.info("Removed logical cluster {}", removedLogicalCluster);
+      }
+    } catch (IOException ioe) {
+      LOG.warn("Failed to read metadata files from dir={}", logicalClustersDataDir(), ioe);
+    } finally {
+      // even if we fail in the middle of updating metadata, worthwhile to update quotas based on
+      // current state
+      updateQuotas();
+    }
   }
 
   /**
@@ -330,33 +346,15 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
     cacheLock.writeLock().lock();
     try {
       if (!State.CLOSED.equals(state.get())) {
-        LOG.info(
-            "Re-loading cache (attempt={}, current state={}, (known) stale logical clusters={})",
-            retryCount, state.get(), staleLogicalClusters);
-        staleLogicalClusters.clear();
-        if (!loadAllFiles()) {
-          LOG.warn("Failed to recover cache after {} attempts. Will retry again.", retryCount);
-          if (reloadFuture != null) {
-            reloadFuture.cancel(false);
-          }
-          scheduleReloadCache();
-        } else {
-          maybeSetNotStale();
+        if (isStale()) {
+          LOG.info(
+              "Re-loading cache: current state={}, (known) stale logical clusters={}",
+              state.get(), staleLogicalClusters);
         }
+        loadAllFiles();
       }
     } finally {
       cacheLock.writeLock().unlock();
-    }
-  }
-
-  /**
-   * Schedules retry to load the cache, if it has not been scheduled yet.
-   */
-  private void scheduleReloadCache() {
-    if (reloadFuture == null || reloadFuture.isDone()) {
-      int backoffMs = retryBackoff.backoffMs(retryCount++);
-      LOG.info("Scheduling re-loading logical clusters cache in {} ms", backoffMs);
-      reloadFuture = executorService.schedule(this::reloadCache, backoffMs, TimeUnit.MILLISECONDS);
     }
   }
 
@@ -384,23 +382,20 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
     if (staleLogicalClusters.isEmpty() &&
         state.compareAndSet(State.STALE, State.UP_TO_DATE)) {
       LOG.info("Cache is up to date");
-      retryCount = 0;
     }
   }
 
   /**
-   * Called by directory watcher thread when given file is created or updated. Updates metadata
-   * of the corresponding logical cluster.
-   * @param lcFile file to load
+   * Called by directory watcher thread when ..data dir is created or updated. This means that at
+   * last one logical cluster metadata file was added or updated. This method reloads all files
+   * from the ..data dir.
    */
-  private void updateLogicalClusterMetadata(Path lcFile) {
+  private void updateLogicalClusterMetadata() {
     // big cache lock to make sure that this update does not happen in the middle of the whole
     // cache re-load
     cacheLock.readLock().lock();
     try {
-      if (loadLogicalClusterMetadata(lcFile)) {
-        scheduleReloadCache();
-      }
+      loadAllFiles();
     } finally {
       cacheLock.readLock().unlock();
     }
@@ -409,58 +404,37 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   /**
    * Updates logical cluster metadata from given file
    * @param lcFile file to load
-   * @return true if need to re-load the cache; otherwise false
+   * @return logical cluster Id corresponding to this file, or null if this is not a logical
+   * cluster file
    */
-  private boolean loadLogicalClusterMetadata(Path lcFile) {
+  private String loadLogicalClusterMetadata(Path lcFile) {
     String logicalClusterId = logicalClusterId(lcFile);
     if (logicalClusterId == null) {
       // ignore directories or files with a non-json extension
       LOG.warn("Ignoring create/update of a non-json file {}", lcFile);
-      return false;
+      return null;
     }
 
     try {
       ObjectMapper objectMapper = new ObjectMapper();
       LogicalClusterMetadata lcMeta = objectMapper.readValue(
           lcFile.toFile(), LogicalClusterMetadata.class);
-      if (lcMeta.logicalClusterId() == null) {
-        // currently, few other .json files get synced to the same dir (which we are going to
-        // consolidate into tenant metadata files later): apikeys.json and healthcheck apikeys
-        // With @JsonIgnoreProperties(ignoreUnknown = true), we will be able to load
-        // apikeys and healthcheck files, but they will not have "logical_cluster_id" field
-        LOG.info("Ignoring create/update of {}", lcFile.getFileName());
-        return false;
-      } else if (!logicalClusterId.equals(lcMeta.logicalClusterId()) || !lcMeta.isValid()) {
+      if (!logicalClusterId.equals(lcMeta.logicalClusterId()) || !lcMeta.isValid()) {
         LOG.warn("Logical cluster file {} has invalid metadata {}.", lcFile, lcMeta);
         markStale(logicalClusterId);
-        return false;
+        return logicalClusterId;
       }
-      logicalClusterMap.put(lcMeta.logicalClusterId(), lcMeta);
+      LogicalClusterMetadata oldMeta = logicalClusterMap.put(lcMeta.logicalClusterId(), lcMeta);
       markUpToDate(logicalClusterId);
-      LOG.info("Added/Updated logical cluster {}", lcMeta);
 
-      // for now updating all the quotas
-      updateQuotas();
-    } catch (JsonParseException jse) {
-      LOG.error("Error parsing metadata file for logical cluster {}", logicalClusterId, jse);
-      // not going to retry, because fixing the content will cause an UPDATE event
-      markStale(logicalClusterId);
-    } catch (Exception e) {
-      // ObjectMapper behavior of loading json files that do not exactly match the format of
-      // LogicalClusterMetadata is inconsistent, even in the same environment. So, we need to filter
-      // apikeys and healthcheck file with apikeys here as well, but by filename
-      String filename = lcFile.getFileName().toString();
-      if ((filename.contains("apikeys") || filename.contains("healthcheck")) &&
-          !filename.contains("lkc")) {
-        LOG.info("Ignoring create/update of {}", lcFile.getFileName());
-        return false;
+      if (!lcMeta.equals(oldMeta)) {
+        LOG.info("Added/Updated logical cluster {}", lcMeta);
       }
-
+    } catch (Exception e) {
       LOG.error("Failed to load metadata file for logical cluster {}", logicalClusterId, e);
       markStale(logicalClusterId);
-      return true;
     }
-    return false;
+    return logicalClusterId;
   }
 
   private static QuotaConfig quotaConfig(LogicalClusterMetadata lcMeta) {
@@ -477,28 +451,6 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
     TenantQuotaCallback.updateQuotas(tenantQuotas, QuotaConfig.UNLIMITED_QUOTA);
   }
 
-  private void removeLogicalClusterMetadata(Path lcFile) {
-    String logicalClusterId = logicalClusterId(lcFile);
-    if (logicalClusterId == null) {
-      LOG.warn("Ignoring deletion of a non-json file {}", lcFile);
-      return;
-    }
-
-    cacheLock.readLock().lock();
-    try {
-      LogicalClusterMetadata deletedMeta = logicalClusterMap.remove(logicalClusterId);
-      markUpToDate(logicalClusterId);
-      if (deletedMeta != null) {
-        LOG.info("Removed logical cluster {}", logicalClusterId);
-        updateQuotas();
-      } else {
-        LOG.warn("Got delete event for unknown or invalid logical cluster {}", logicalClusterId);
-      }
-    } finally {
-      cacheLock.readLock().unlock();
-    }
-  }
-
   /**
    * Returns logical cluster ID from the given file path, which is a name of the file denoted by
    * given path without logical cluster file extension. If the name of the file does not end with
@@ -508,6 +460,10 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
     String fileName = lcFile.getFileName().toString();
     int indexOfDot = fileName.lastIndexOf(LOGICAL_CLUSTER_FILE_EXT_WITH_DOT);
     return indexOfDot < 0 ? null : fileName.substring(0, indexOfDot);
+  }
+
+  private Path logicalClustersDataDir() {
+    return Paths.get(logicalClustersDir, DATA_DIR_NAME);
   }
 
   class LogicalClustersChangeListener implements Runnable {
@@ -524,7 +480,8 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       logicalClustersDirPath.register(watchService,
                                       StandardWatchEventKinds.ENTRY_CREATE,
                                       StandardWatchEventKinds.ENTRY_MODIFY,
-                                      StandardWatchEventKinds.ENTRY_DELETE);
+                                      StandardWatchEventKinds.ENTRY_DELETE,
+                                      StandardWatchEventKinds.OVERFLOW);
     }
 
     public void close() {
@@ -561,14 +518,36 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       while (valid) {
         WatchKey watchKey = watchService.take();
         for (WatchEvent<?> event: watchKey.pollEvents()) {
-          LOG.trace("Got event: {} {}", event.kind(), event.context());
+          LOG.debug("Got event: {} {}", event.kind(), event.context());
           @SuppressWarnings("unchecked")
           Path filename = watchDir.resolve(((WatchEvent<Path>) event).context());
-          if (event.kind() == StandardWatchEventKinds.ENTRY_DELETE) {
-            removeLogicalClusterMetadata(filename);
-          } else {
-            // create or update
-            updateLogicalClusterMetadata(filename);
+          // Logical metadata files in 'watchDir' that are visible to users are symbolic links into
+          // the internal data directory 'watchDir/DATA_DIR_NAME'. For example,
+          //     watchDir/lkc-abc.json         -> ..data/lkc-abc.json
+          //     watchDir/lkc-abc.json         -> ..data/lkc-abc.json
+          // The internal data directory itself is a link to a timestamped directory with actual
+          // files:
+          //    watchDir/DATA_DIR_NAME          -> ..2019_02_01_15_04_05.12345678/
+          // When logical cluster files get synced, a new timestamped dir is created, payload is
+          // written to this new directory, a temporary symlink is created to the new dir,
+          // the new symlink is renamed (atomically in most cases) to DATA_DIR_NAME
+          //
+          // We are watching create/update events for DATA_DIR_NAME, because this is the last
+          // change in the above sequence. Also, since we are watching the directory update, we
+          // are reloading all metadata files on every metadata sync (even if the sync
+          // updates/creates one json file).
+          if (DATA_DIR_NAME.equals(filename.getFileName().toString())) {
+            if (event.kind() == StandardWatchEventKinds.ENTRY_DELETE) {
+              // The rename from ..data_tmp to ..data is atomic on most env, but on windows it is
+              // delete ..data, create new symlink, and then delete ..data_tmp. We don't run on
+              // windows, but still seems safer not to handle ..data dir delete case. The whole
+              // dir delete should normally be handled by removing physical cluster. When empty
+              // secrets are synced, we still get an empty ..data directory.
+              LOG.warn("Directory with logical cluster metadata is removed. Ignoring.");
+            } else {
+              // create or update
+              updateLogicalClusterMetadata();
+            }
           }
         }
         valid = watchKey.reset();

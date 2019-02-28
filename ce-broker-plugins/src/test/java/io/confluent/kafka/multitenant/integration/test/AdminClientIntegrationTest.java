@@ -88,7 +88,7 @@ public class AdminClientIntegrationTest {
 
     metadata = initiatePhysicalClusterMetadata(configs);
 
-    Utils.createLogicalClusterFile(LC_META_ABC, true, tempFolder);
+    Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
     TestUtils.waitForCondition(
             () -> metadata.metadata(LC_META_ABC.logicalClusterId()) != null,
             "Expected metadata of new logical cluster to be present in metadata cache");

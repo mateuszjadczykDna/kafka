@@ -22,8 +22,6 @@ import org.junit.rules.TemporaryFolder;
 
 import javax.security.auth.callback.Callback;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -47,7 +45,6 @@ public class OAuthBearerValidatorCallbackHandlerTest {
   private PhysicalClusterMetadata metadata;
   private Map<String, Object> configs;
   private String brokerUUID;
-  private Path logicalClusterFile;
   private String[] defaultAllowedClusters = new String[] {LC_META_ABC.logicalClusterId()};
 
   @Rule
@@ -63,7 +60,7 @@ public class OAuthBearerValidatorCallbackHandlerTest {
 
     metadata = initiatePhysicalClusterMetadata(configs);
 
-    logicalClusterFile = Utils.createLogicalClusterFile(LC_META_ABC, true, tempFolder);
+    Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
     TestUtils.waitForCondition(
             () -> metadata.metadata(LC_META_ABC.logicalClusterId()) != null,
             "Expected metadata of new logical cluster to be present in metadata cache");
@@ -209,7 +206,7 @@ public class OAuthBearerValidatorCallbackHandlerTest {
   }
 
   private void deleteLogicalClusterMetadata() throws IOException, InterruptedException {
-    Files.delete(logicalClusterFile);
+    Utils.deleteLogicalClusterFile(LC_META_ABC, tempFolder);
     TestUtils.waitForCondition(
             () -> metadata.metadata(LC_META_ABC.logicalClusterId()) == null,
             "Expected metadata of new logical cluster to be removed from metadata cache");

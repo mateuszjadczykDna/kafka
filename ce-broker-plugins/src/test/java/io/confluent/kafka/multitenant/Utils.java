@@ -7,7 +7,10 @@ import org.junit.rules.TemporaryFolder;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Map;
+import java.util.stream.Stream;
 
 public class Utils {
   static final LogicalClusterMetadata LC_META_XYZ =
@@ -34,15 +37,100 @@ public class Utils {
     return metadata;
   }
 
-  static Path createLogicalClusterFile(LogicalClusterMetadata lcMeta, TemporaryFolder tempFolder) throws IOException {
-    return createLogicalClusterFile(lcMeta, true, tempFolder);
+  public static void createLogicalClusterFile(LogicalClusterMetadata lcMeta, TemporaryFolder
+      tempFolder)
+      throws IOException {
+    updateLogicalClusterFile(lcMeta, false, true, tempFolder);
   }
 
-  public static Path createLogicalClusterFile(LogicalClusterMetadata lcMeta, boolean valid, TemporaryFolder tempFolder)
+  public static void createInvalidLogicalClusterFile(LogicalClusterMetadata lcMeta, TemporaryFolder
+      tempFolder)
       throws IOException {
+    updateLogicalClusterFile(lcMeta, false, false, tempFolder);
+  }
+
+  /**
+   * This currently has the same implementation as createLogicalClusterFile, since the underlying
+   * method is the same for both, but having a separate method is useful if we need to make
+   * changes to the behavior.
+   */
+  public static void updateLogicalClusterFile(LogicalClusterMetadata lcMeta, TemporaryFolder
+      tempFolder)
+      throws IOException {
+    updateLogicalClusterFile(lcMeta, false, true, tempFolder);
+  }
+
+  public static void updateInvalidLogicalClusterFile(LogicalClusterMetadata lcMeta, TemporaryFolder
+      tempFolder)
+      throws IOException {
+    updateLogicalClusterFile(lcMeta, false, false, tempFolder);
+  }
+
+
+  public static void deleteLogicalClusterFile(LogicalClusterMetadata lcMeta, TemporaryFolder tempFolder)
+      throws IOException {
+    updateLogicalClusterFile(lcMeta, true, true, tempFolder);
+  }
+
+  public static void setPosixFilePermissions(LogicalClusterMetadata lcMeta,
+                                             String posixFilePermissionsStr,
+                                             TemporaryFolder tempFolder) throws IOException {
     final String lcFilename = lcMeta.logicalClusterId() + ".json";
-    final Path lcFile = tempFolder.newFile(lcFilename).toPath();
-    Files.write(lcFile, logicalClusterJsonString(lcMeta, valid).getBytes());
+    final Path metaPath = Paths.get(
+        tempFolder.getRoot().toString(), PhysicalClusterMetadata.DATA_DIR_NAME, lcFilename);
+    Files.setPosixFilePermissions(metaPath, PosixFilePermissions.fromString(posixFilePermissionsStr));
+  }
+
+  private static void updateLogicalClusterFile(LogicalClusterMetadata lcMeta,
+                                               boolean remove,
+                                               boolean valid,
+                                               TemporaryFolder tempFolder) throws IOException {
+    final String lcFilename = lcMeta.logicalClusterId() + ".json";
+    updateJsonFile(lcFilename, logicalClusterJsonString(lcMeta, valid), remove, tempFolder);
+  }
+
+  public static Path updateJsonFile(String jsonFilename,
+                                    String jsonString,
+                                    boolean remove,
+                                    TemporaryFolder tempFolder)
+      throws IOException {
+    // create logical cluster file in tempFolder/<newDir>
+    final Path newDir = tempFolder.newFolder().toPath();
+    Path lcFile = null;
+    if (!remove) {
+      lcFile = Paths.get(newDir.toString(), jsonFilename);
+      Files.write(lcFile, jsonString.getBytes());
+    }
+
+    // this is ..data symbolic link
+    final Path dataDir = Paths.get(
+        tempFolder.getRoot().toString(), PhysicalClusterMetadata.DATA_DIR_NAME);
+
+    // if ..data dir already exists, move all files from old dir (target of ..data) to new dir
+    if (Files.exists(dataDir)) {
+      Path oldDir = Files.readSymbolicLink(dataDir);
+      // move all existing files to newDir, except the file that represents the same logical
+      // cluster, so that we can use the same method for updating files)
+      try (Stream<Path> fileStream = Files.list(oldDir)) {
+        fileStream.forEach(filePath -> {
+          try {
+            if (!filePath.getFileName().toString().equals(jsonFilename)) {
+              Files.move(filePath, Paths.get(newDir.toString(), filePath.getFileName().toString()));
+            } else {
+              Files.delete(filePath);
+            }
+          } catch (IOException ioe) {
+            throw new RuntimeException("Test failed to simulate logical cluster file creation.", ioe);
+          }
+        });
+      }
+
+      Files.delete(dataDir);   // symbolic link
+      Files.delete(oldDir);    // target dir (which is already empty)
+    }
+
+    // point ..data to new dir
+    Files.createSymbolicLink(dataDir, newDir);
     return lcFile;
   }
 
