@@ -4,6 +4,8 @@ package io.confluent.kafka.server.plugins.auth;
 import io.confluent.kafka.multitenant.MultiTenantPrincipal;
 import io.confluent.kafka.multitenant.TenantMetadata;
 import io.confluent.kafka.server.plugins.auth.stats.AuthenticationStats;
+import java.nio.charset.StandardCharsets;
+import org.apache.kafka.common.errors.SaslAuthenticationException;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -27,6 +29,7 @@ import java.util.Set;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -53,8 +56,8 @@ public class PlainSaslServerTest {
     try {
       saslServer.evaluateResponse(authString.getBytes());
       fail();
-    } catch (SaslException e) {
-      assertTrue(e.getMessage().contains("Impersonation is not allowed"));
+    } catch (SaslAuthenticationException e) {
+      assertTrue(e.getMessage().contains("Client requested an authorization id that is different from username"));
     }
   }
 
@@ -108,7 +111,7 @@ public class PlainSaslServerTest {
     try {
       saslServer.evaluateResponse("garbage".getBytes());
       fail();
-    } catch (SaslException e) { }
+    } catch (SaslAuthenticationException e) { }
     assertEquals(0L, stats.getSucceeded());
     assertEquals(1L, stats.getFailed());
     assertEquals(1L, stats.getTotal());
@@ -141,6 +144,46 @@ public class PlainSaslServerTest {
     assertEquals(successes, attrMap.get("Total"));
   }
 
+  @Test
+  public void emptyTokens() {
+    Exception e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(saslMessage("", "", "")));
+    assertEquals("Authentication failed: username not specified", e.getMessage());
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(saslMessage("", "", "p")));
+    assertEquals("Authentication failed: username not specified", e.getMessage());
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(saslMessage("", "u", "")));
+    assertEquals("Authentication failed: password not specified", e.getMessage());
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(saslMessage("a", "", "")));
+    assertEquals("Authentication failed: username not specified", e.getMessage());
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(saslMessage("a", "", "p")));
+    assertEquals("Authentication failed: username not specified", e.getMessage());
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(saslMessage("a", "u", "")));
+    assertEquals("Authentication failed: password not specified", e.getMessage());
+
+    String nul = "\u0000";
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(
+            String.format("%s%s%s%s%s%s", "a", nul, "u", nul, "p", nul).getBytes(
+                StandardCharsets.UTF_8)));
+    assertEquals("Invalid SASL/PLAIN response: expected 3 tokens, got 4", e.getMessage());
+
+    e = assertThrows(SaslAuthenticationException.class, () ->
+        saslServer.evaluateResponse(
+            String.format("%s%s%s", "", nul, "u").getBytes(StandardCharsets.UTF_8)));
+    assertEquals("Invalid SASL/PLAIN response: expected 3 tokens, got 2", e.getMessage());
+  }
+
   private void configureUser(final String username,
                              final String password,
                              final String tenant) throws SaslException {
@@ -151,5 +194,11 @@ public class PlainSaslServerTest {
         return new MultiTenantPrincipal(username, tenantMetadata);
       }
      }).when(mockSaslAuth).authenticate(username, password);
+  }
+
+  private byte[] saslMessage(String authorizationId, String userName, String password) {
+    String nul = "\u0000";
+    String message = String.format("%s%s%s%s%s", authorizationId, nul, userName, nul, password);
+    return message.getBytes(StandardCharsets.UTF_8);
   }
 }
