@@ -70,7 +70,7 @@ make -C cc-services/soak_cluster build-docker push-docker
 make -C cc-services/trogdor build-docker push-docker
 ```
 
-With the previous command, Trogdor would use the latest image  of `ce-kafka` built from the `ce-trunk` branch.
+With the previous command, Trogdor would use the latest image  of `ce-kafka` built from the `master` branch.
 
 If you need a custom kafka base image for trogdor from the local branch run from the root of the project. It will build all the containers, including ce-kafka and the cc-services.
 

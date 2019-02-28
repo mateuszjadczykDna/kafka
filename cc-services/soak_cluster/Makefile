@@ -8,7 +8,7 @@ GO_TEST_TARGET = test-go
 GO_TEST_ARGS = -race -v -cover -p=1
 GO_CODECOV_TEST_ARGS = -race -v -cover -p=1
 
-MASTER_BRANCH := ce-trunk
+MASTER_BRANCH := master
 
 SOAK_TEST_NAMESPACE ?= soak-tests
 

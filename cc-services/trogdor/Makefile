@@ -1,12 +1,12 @@
 SERVICE_NAME := trogdor
 IMAGE_NAME := cc-$(SERVICE_NAME)
 CHART_NAME := cc-$(SERVICE_NAME)-service
-RELEASE_BRANCH := ce-trunk
+RELEASE_BRANCH := master
 DEFAULT_BUMP := minor
 
 BASE_IMAGE ?= confluent-docker.jfrog.io/confluentinc/ce-kafka
-# Use ce-truck clean version as docker base verson unless specified
-BASE_VERSION ?= $(shell git rev-parse --is-inside-work-tree > /dev/null && git describe --tags --always ce-trunk)
+# Use master clean version as docker base verson unless specified
+BASE_VERSION ?= $(shell git rev-parse --is-inside-work-tree > /dev/null && git describe --tags --always master)
 
 SOAK_TEST_NAMESPACE ?= soak-tests
 

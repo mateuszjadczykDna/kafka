@@ -28,13 +28,9 @@ def job = {
                 "--no-daemon --stacktrace --continue -PtestLoggingEvents=started,passed,skipped,failed -PmaxParallelForks=4"
     }
 
-    // The Muckrake branch for running the downstream tests.
-    def kafkaMuckrakeVersionMap = [
-            "ce-trunk": "master"
-    ];
     def kafkaRepo = sh(script: 'git config --get remote.origin.url', returnStdout: true).substring('https://github.com/'.size()).trim();
     def kafkaBranch = env.BRANCH_NAME;
-    def muckrakeBranch = kafkaMuckrakeVersionMap[kafkaBranch] ?: "master";
+    def muckrakeBranch = "master";
     // Start the downstream job.
     stage("Trigger test-cp-downstream-builds-cekafka") {
         echo "Schedule test-cp-downstream-builds-cekafka with muckrake branch ${muckrakeBranch} and Apache Kafka branch ${kafkaRepo}:${kafkaBranch}."
