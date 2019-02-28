@@ -34,7 +34,7 @@ import kafka.log.{LogConfig, LogManager}
 import kafka.metrics.{KafkaMetricsGroup, KafkaMetricsReporter}
 import kafka.network.SocketServer
 import kafka.security.CredentialProvider
-import kafka.security.auth.Authorizer
+import kafka.security.auth.{Authorizer, AuthorizerWithKafkaStore}
 import kafka.tier.archiver.{TierArchiver, TierArchiverConfig}
 import kafka.tier.state.FileTierPartitionStateFactory
 import kafka.tier.store.MockInMemoryTierObjectStore
@@ -53,7 +53,6 @@ import org.apache.kafka.common.security.{JaasContext, JaasUtils}
 import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time}
 import org.apache.kafka.common.{ClusterResource, Node}
 import org.apache.kafka.common.config.internals.ConfluentConfigs
-
 import org.apache.kafka.server.multitenant.MultiTenantMetadata
 
 import scala.collection.JavaConverters._
@@ -361,8 +360,11 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         dynamicConfigManager = new DynamicConfigManager(zkClient, dynamicConfigHandlers)
         dynamicConfigManager.startup()
 
-        socketServer.startDataPlaneProcessors()
         socketServer.startControlPlaneProcessor()
+        val authorizerFuture = authorizer.collect {
+          case a : AuthorizerWithKafkaStore => a.readyFuture()
+        }
+        socketServer.startDataPlaneProcessors(authorizerFuture)
         brokerState.newState(RunningAsBroker)
         shutdownLatch = new CountDownLatch(1)
 

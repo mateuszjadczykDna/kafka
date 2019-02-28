@@ -190,8 +190,29 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
    * This method is used for delayed starting of data-plane processors if [[kafka.network.SocketServer#startup]]
    * was invoked with `startupProcessors=false`.
    */
-  def startDataPlaneProcessors(): Unit = synchronized {
-    dataPlaneAcceptors.values.asScala.foreach { _.startProcessors(DataPlaneThreadPrefix) }
+  def startDataPlaneProcessors(readyFuture: Option[CompletableFuture[Void]] = None): Unit = synchronized {
+    if (readyFuture.forall(_.isDone))
+      dataPlaneAcceptors.values.asScala.foreach { _.startProcessors(DataPlaneThreadPrefix) }
+    else {
+      // The configured authorizer for the broker requires metadata from Kafka topic(s) in this cluster.
+      //   1) Start inter-broker listener
+      //   2) Wait for `readyFuture` to complete. This indicates that the authorizer has loaded its metadata
+      //      and is ready. See [[kafka.security.auth.AuthorizerWithKafkaStore#readyFuture]] for details.
+      //   3) Start remaining listeners
+      // Any constraints on number of listeners will be validated by AuthorizerWithKafkaStore if required.
+
+      val interBrokerListener = dataPlaneAcceptors.asScala.keySet
+        .find(_.listenerName == config.interBrokerListenerName)
+        .getOrElse(throw new IllegalStateException(s"Inter-broker listener ${config.interBrokerListenerName} not found, endpoints=${dataPlaneAcceptors.keySet}"))
+      dataPlaneAcceptors.get(interBrokerListener).startProcessors(DataPlaneThreadPrefix)
+      debug(s"Started data-plane processor for inter-broker listener ${interBrokerListener}")
+
+      readyFuture.foreach(_.get)
+
+      val remainingListeners = dataPlaneAcceptors.asScala.filterKeys(_ != interBrokerListener)
+      debug(s"Starting data-plane processor for remaining listeners ${remainingListeners.keySet}")
+      remainingListeners.values.foreach { _.startProcessors(DataPlaneThreadPrefix) }
+    }
     info(s"Started data-plane processors for ${dataPlaneAcceptors.size} acceptors")
   }
 
