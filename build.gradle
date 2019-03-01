@@ -639,7 +639,7 @@ def connectPkgs = ['connect:api', 'connect:runtime', 'connect:transforms', 'conn
 def pkgs = ['clients', 'examples', 'log4j-appender', 'tools',
             'streams', 'streams:streams-scala', 'streams:test-utils', 'streams:examples',
             'ce-security', 'ce-serializers', 'ce-licensing', 'ce-client-plugins', 'ce-broker-plugins',
-            'ce-rbac-clients', 'ce-auth-providers', 'ce-metrics', 'ce-aegis'] + connectPkgs
+            'ce-auth-clients', 'ce-auth-providers', 'ce-metrics', 'ce-aegis'] + connectPkgs
 
 /** Create one task per default Scala version */
 def withDefScalaVersions(taskName) {
@@ -933,8 +933,8 @@ project(':core') {
     from(project(':ce-client-plugins').configurations.runtime) { into("libs/") }
     from(project(':ce-broker-plugins').jar) { into("libs/") }
     from(project(':ce-broker-plugins').configurations.runtime) { into("libs/") }
-    from(project(':ce-rbac-clients').jar) { into("libs/") }
-    from(project(':ce-rbac-clients').configurations.runtime) { into("libs/") }
+    from(project(':ce-auth-clients').jar) { into("libs/") }
+    from(project(':ce-auth-clients').configurations.runtime) { into("libs/") }
     from(project(':ce-auth-providers').jar) { into("libs/") }
     from(project(':ce-auth-providers').configurations.runtime) { into("libs/") }
     duplicatesStrategy 'exclude'
@@ -2044,9 +2044,9 @@ project(':ce-broker-plugins') {
 
 }
 
-project(':ce-rbac-clients') {
+project(':ce-auth-clients') {
   apply plugin: 'com.github.johnrengelman.shadow'
-  archivesBaseName = "ce-rbac-clients"
+  archivesBaseName = "ce-auth-clients"
 
   dependencies {
     compile project(':clients')
@@ -2099,7 +2099,7 @@ project(':ce-auth-providers') {
     compile libs.jose4j
     compile project(':clients')
     compile project(':ce-client-plugins')
-    compile project(':ce-rbac-clients')
+    compile project(':ce-auth-clients')
 
     testCompile project(':clients').sourceSets.test.output
     testCompile project(':core').sourceSets.test.output
