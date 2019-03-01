@@ -25,9 +25,7 @@ import io.confluent.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.security.test.utils.LdapTestUtils;
 import java.util.HashMap;
 import java.util.Map;
-import kafka.security.auth.SimpleAclAuthorizer;
-import kafka.security.auth.SimpleAclAuthorizerTest;
-import kafka.server.KafkaConfig$;
+import kafka.security.auth.Authorizer;
 
 // Note: This test has been very useful for early development and testing, especially
 // as SimpleAclAuthorizer has been changing frequently in AK as wildcard support was
@@ -36,27 +34,13 @@ import kafka.server.KafkaConfig$;
 public class LdapAuthorizerUserAclTest extends ConfluentKafkaAuthorizerTest {
 
   private MiniKdcWithLdapService miniKdcWithLdapService;
-  private LdapAuthorizer ldapAuthorizer;
-  private LdapAuthorizer ldapAuthorizer2;
-
-  private String ldapSuperUsers;
 
   @Override
   public void setUp() {
-    super.setUp();
-
-    ldapAuthorizer = new TestLdapAuthorizer();
-    ldapAuthorizer2 = new TestLdapAuthorizer();
-    initializeForLdapTest();
 
     try {
       miniKdcWithLdapService = LdapTestUtils.createMiniKdcWithLdapService(null, null);
-
-      Map<String, Object> authorizerConfigs = new HashMap<>();
-      authorizerConfigs.put(KafkaConfig$.MODULE$.ZkConnectProp(), zkConnect());
-      authorizerConfigs.put(SimpleAclAuthorizer.SuperUsersProp(), ldapSuperUsers);
-      ldapAuthorizer.configure(authorizerConfigs);
-      ldapAuthorizer2.configure(authorizerConfigs);
+      super.setUp();
     } catch (Exception e) {
       throw new RuntimeException("LDAP authorizer set up failed", e);
     }
@@ -64,15 +48,15 @@ public class LdapAuthorizerUserAclTest extends ConfluentKafkaAuthorizerTest {
 
   @Override
   public void tearDown() {
-    if (ldapAuthorizer != null) {
-      ldapAuthorizer.close();
-    }
-    if (ldapAuthorizer2 != null) {
-      ldapAuthorizer2.close();
-    }
+    super.tearDown();
     if (miniKdcWithLdapService != null) {
       miniKdcWithLdapService.shutdown();
     }
+    KafkaTestUtils.verifyThreadCleanup();
+  }
+
+  protected Authorizer createAuthorizer() {
+    return new TestLdapAuthorizer();
   }
 
   // Some tests in SimpleAclAuthorizerTest configure the authorizer with just
@@ -88,16 +72,5 @@ public class LdapAuthorizerUserAclTest extends ConfluentKafkaAuthorizerTest {
     }
   }
 
-  private void initializeForLdapTest() {
-    try {
-      ldapSuperUsers = KafkaTestUtils.fieldValue(this, SimpleAclAuthorizerTest.class, "superUsers");
-      KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
-          "simpleAclAuthorizer", simpleAclAuthorizer(ldapAuthorizer));
-      KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
-          "simpleAclAuthorizer2", simpleAclAuthorizer(ldapAuthorizer2));
-    } catch (Exception e) {
-      throw new RuntimeException("Could not initialize test", e);
-    }
-  }
 }
 

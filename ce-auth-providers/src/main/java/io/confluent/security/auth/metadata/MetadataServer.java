@@ -11,12 +11,15 @@ public interface MetadataServer extends Configurable, Closeable {
   /**
    * Starts metadata server. This method should return as soon as possible after initiating
    * server start since broker's startup is blocked until this method returns.
+   * <p>
+   * This method is invoked only after the reader associated with the  provided `authStore` is
+   * initialized and the local cache is populated with existing entries. The metadata server
+   * can use {@link AuthStore#writer()} to update the store.
    *
    * @param embeddedAuthorizer An embedded cross-component authorizer that can be used to authorize any action
    * @param authStore An instance of AuthStore that can be used to read current role assignments,
    *                 user metadata etc. from an in-memory cache that is kept up-to-date by the embedded
-   *                 authorizer. AuthStore can also be used to update role assignments. The cache of
-   *                 `authStore` is initialized before this method is invoked.
+   *                 authorizer.
    */
   void start(Authorizer embeddedAuthorizer, AuthStore authStore);
 

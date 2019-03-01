@@ -3,6 +3,7 @@
 package io.confluent.security.rbac;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 
@@ -22,12 +23,19 @@ public class Role {
     this.accessPolicy = Objects.requireNonNull(accessPolicy, "access policy must not be null");
   }
 
+  @JsonProperty
   public String name() {
     return name;
   }
 
+  @JsonProperty
   public AccessPolicy accessPolicy() {
     return accessPolicy;
+  }
+
+  @JsonIgnore
+  public boolean hasResourceScope() {
+    return AccessPolicy.RESOURCE_SCOPE.equals(accessPolicy.scope());
   }
 
   @Override

@@ -3,6 +3,7 @@
 package io.confluent.security.rbac;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.confluent.kafka.security.authorizer.Operation;
 import io.confluent.kafka.security.authorizer.ResourceType;
@@ -65,6 +66,11 @@ public class AccessPolicy {
   public Collection<Operation> allowedOperations(ResourceType resourceType) {
     Collection<Operation> ops =  allowedOperations.get(resourceType);
     return ops == null ? Collections.emptySet() : ops;
+  }
+
+  @JsonIgnore
+  public boolean hasResourceScope() {
+    return AccessPolicy.RESOURCE_SCOPE.equalsIgnoreCase(scope);
   }
 
   @Override

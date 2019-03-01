@@ -5,26 +5,37 @@ package io.confluent.kafka.security.authorizer;
 import io.confluent.kafka.common.license.LicenseValidator;
 import io.confluent.kafka.security.authorizer.acl.AclMapper;
 import io.confluent.kafka.security.authorizer.acl.AclProvider;
+import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
+import io.confluent.kafka.security.authorizer.provider.Provider;
 import io.confluent.license.validator.ConfluentLicenseValidator;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 import kafka.network.RequestChannel;
 import kafka.network.RequestChannel.Session;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.common.utils.Utils;
 
 
 public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements Authorizer {
 
+  private static final Set<String> UNSCOPED_PROVIDERS =
+      Utils.mkSet(AccessRuleProviders.ACL.name(), AccessRuleProviders.MULTI_TENANT.name());
+
   private Authorizer aclAuthorizer;
+  private volatile Future<Void> readyFuture;
 
   public ConfluentKafkaAuthorizer() {
     this(Time.SYSTEM);
@@ -42,6 +53,21 @@ public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements Auth
         .findFirst()
         .map(a -> (Authorizer) a);
     aclAuthorizer = aclProvider.orElse(new AclErrorProvider());
+
+    // Embedded authorizer used in metadata server can use an empty scope since scopes used
+    // in authorization are provided by the remote client. For broker authorizer, the scope
+    // of the cluster is required if using providers other than ACL providers.
+    if (scope().isEmpty()) {
+      Set<String> scopedProviders = accessRuleProviders().stream()
+          .map(Provider::providerName)
+          .filter(a -> !UNSCOPED_PROVIDERS.contains(a))
+          .collect(Collectors.toSet());
+
+      if (!scopedProviders.isEmpty())
+        throw new ConfigException("Scope not provided for broker providers: " + scopedProviders);
+    }
+
+    readyFuture = start();
   }
 
   @Override
@@ -95,6 +121,10 @@ public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements Auth
   public void close() {
     log.debug("Closing Kafka authorizer");
     super.close();
+  }
+
+  public Future<Void> readyFuture() {
+    return readyFuture;
   }
 
   @Override

@@ -37,17 +37,13 @@ import scala.collection.immutable.Set;
 // becomes hard to maintain.
 public class ConfluentKafkaAuthorizerTest extends SimpleAclAuthorizerTest {
 
-  private Authorizer authorizer;
-  private Authorizer authorizer2;
-  private String superUsers;
-
   @Override
   public void setUp() {
     super.setUp();
 
-    authorizer = createAuthorizer();
-    authorizer2 = createAuthorizer();
-    initialize();
+    Authorizer authorizer = createAuthorizer();
+    Authorizer authorizer2 = createAuthorizer();
+    String superUsers = initialize(authorizer, authorizer2);
 
     try {
       Map<String, Object> authorizerConfigs = authorizerConfigs();
@@ -61,12 +57,8 @@ public class ConfluentKafkaAuthorizerTest extends SimpleAclAuthorizerTest {
 
   @Override
   public void tearDown() {
-    if (authorizer != null) {
-      authorizer.close();
-    }
-    if (authorizer2 != null) {
-      authorizer2.close();
-    }
+    super.tearDown();
+    KafkaTestUtils.verifyThreadCleanup();
   }
 
   protected Authorizer createAuthorizer() {
@@ -79,13 +71,21 @@ public class ConfluentKafkaAuthorizerTest extends SimpleAclAuthorizerTest {
     return authorizerConfigs;
   }
 
-  private void initialize() {
+  private String initialize(Authorizer authorizer, Authorizer authorizer2) {
     try {
-      superUsers = KafkaTestUtils.fieldValue(this, SimpleAclAuthorizerTest.class, "superUsers");
+      String superUsers = KafkaTestUtils.fieldValue(this, SimpleAclAuthorizerTest.class, "superUsers");
+      SimpleAclAuthorizer simpleAuthorizer = KafkaTestUtils.fieldValue(this,
+          SimpleAclAuthorizerTest.class, "simpleAclAuthorizer");
+      simpleAuthorizer.close();
+      SimpleAclAuthorizer simpleAuthorizer2 = KafkaTestUtils.fieldValue(this,
+          SimpleAclAuthorizerTest.class, "simpleAclAuthorizer2");
+      simpleAuthorizer2.close();
       KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
           "simpleAclAuthorizer", simpleAclAuthorizer(authorizer));
       KafkaTestUtils.setFinalField(this, SimpleAclAuthorizerTest.class,
           "simpleAclAuthorizer2", simpleAclAuthorizer(authorizer2));
+
+      return superUsers;
     } catch (Exception e) {
       throw new RuntimeException("Could not initialize test", e);
     }

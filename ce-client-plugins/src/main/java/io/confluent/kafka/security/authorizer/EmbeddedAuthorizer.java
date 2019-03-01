@@ -7,6 +7,7 @@ import io.confluent.kafka.common.license.InvalidLicenseException;
 import io.confluent.kafka.common.license.LicenseValidator;
 import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
 import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
+import io.confluent.kafka.security.authorizer.provider.Provider;
 import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
 import io.confluent.kafka.security.authorizer.provider.GroupProvider;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -43,6 +46,7 @@ public class EmbeddedAuthorizer implements Authorizer {
   private static final Map<Operation, Collection<Operation>> IMPLICIT_ALLOWED_OPS;
 
   private final Time time;
+  private final Set<Provider> providersCreated;
   private LicenseValidator licenseValidator;
   private GroupProvider groupProvider;
   private List<AccessRuleProvider> accessRuleProviders;
@@ -66,14 +70,12 @@ public class EmbeddedAuthorizer implements Authorizer {
 
   public EmbeddedAuthorizer(Time time) {
     this.time = time;
+    this.providersCreated = new HashSet<>();
   }
 
   @Override
   public void configure(Map<String, ?> configs) {
     ConfluentAuthorizerConfig authorizerConfig = new ConfluentAuthorizerConfig(configs);
-    groupProvider = authorizerConfig.groupProvider;
-    accessRuleProviders = authorizerConfig.accessRuleProviders;
-    metadataProvider = authorizerConfig.metadataProvider;
     allowEveryoneIfNoAcl = authorizerConfig.allowEveryoneIfNoAcl;
     scope = authorizerConfig.scope;
 
@@ -81,11 +83,21 @@ public class EmbeddedAuthorizer implements Authorizer {
     if (licenseValidator != null) {
       initializeAndValidateLicense(configs, licensePropName());
     }
+    ConfluentAuthorizerConfig.Providers providers = authorizerConfig.createProviders();
+    providersCreated.addAll(providers.accessRuleProviders);
+    if (providers.groupProvider != null)
+      providersCreated.add(providers.groupProvider);
+    if (providers.metadataProvider != null)
+      providersCreated.add(providers.metadataProvider);
+
+    configureProviders(providers.accessRuleProviders,
+        providers.groupProvider,
+        providers.metadataProvider);
   }
 
   @Override
   public List<AuthorizeResult> authorize(KafkaPrincipal sessionPrincipal, String host, List<Action> actions) {
-    return actions.stream()
+    return  actions.stream()
         .map(action -> authorize(sessionPrincipal, host, action))
         .collect(Collectors.toList());
   }
@@ -104,8 +116,29 @@ public class EmbeddedAuthorizer implements Authorizer {
       throw new IllegalArgumentException("Access rule provider not found: " + providerName);
   }
 
+  public CompletableFuture<Void> start() {
+    Set<Provider> providers = new HashSet<>(); // Use a set to remove duplicates
+    if (groupProvider != null)
+      providers.add(groupProvider);
+    providers.addAll(accessRuleProviders);
+    if (metadataProvider != null)
+      providers.add(metadataProvider);
+    List<CompletableFuture<Void>> futures = providers.stream()
+        .map(Provider::start).map(CompletionStage::toCompletableFuture)
+        .collect(Collectors.toList());
+    return CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
+  }
+
   protected List<AccessRuleProvider> accessRuleProviders() {
     return accessRuleProviders;
+  }
+
+  protected void configureProviders(List<AccessRuleProvider> accessRuleProviders,
+                                    GroupProvider groupProvider,
+                                    MetadataProvider metadataProvider) {
+    this.accessRuleProviders = accessRuleProviders;
+    this.groupProvider = groupProvider;
+    this.metadataProvider = metadataProvider;
   }
 
   private AuthorizeResult authorize(KafkaPrincipal sessionPrincipal, String host, Action action) {
@@ -166,12 +199,8 @@ public class EmbeddedAuthorizer implements Authorizer {
   @Override
   public void close() {
     AtomicReference<Throwable> firstException = new AtomicReference<>();
-    ClientUtils.closeQuietly(groupProvider, "groupProvider", firstException);
-    if (accessRuleProviders != null) {
-      accessRuleProviders.forEach(p ->
-          ClientUtils.closeQuietly(p, "accessRuleProvider", firstException));
-    }
-    ClientUtils.closeQuietly(metadataProvider, "metadataProvider", firstException);
+    providersCreated.forEach(provider ->
+        ClientUtils.closeQuietly(provider, provider.providerName(), firstException));
     ClientUtils.closeQuietly(licenseValidator, "licenseValidator", firstException);
     Throwable exception = firstException.getAndSet(null);
     if (exception != null)

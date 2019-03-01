@@ -9,13 +9,17 @@ import io.confluent.kafka.security.authorizer.provider.GroupProvider;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.GroupProviders;
 import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
+import io.confluent.kafka.security.authorizer.provider.Provider;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
@@ -29,7 +33,8 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
   public static final String SCOPE_PROP = "confluent.authorizer.scope";
   private static final String SCOPE_DEFAULT = "";
-  private static final String SCOPE_DOC = "The root scope of this authorizer."
+  private static final String SCOPE_DOC = "The scope used for role-based authorization"
+      + " of requests on the broker. This should be broker's cluster scope."
       + " This may be empty if RBAC provider is not enabled.";
 
   public static final String GROUP_PROVIDER_PROP = "confluent.authorizer.group.provider";
@@ -87,9 +92,6 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
             Importance.HIGH, LICENSE_DOC);
   }
   public final boolean allowEveryoneIfNoAcl;
-  public final List<AccessRuleProvider> accessRuleProviders;
-  public final GroupProvider groupProvider;
-  public final MetadataProvider metadataProvider;
   public final String scope;
 
   public ConfluentAuthorizerConfig(Map<?, ?> props) {
@@ -98,6 +100,11 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
     scope = getString(SCOPE_PROP);
     allowEveryoneIfNoAcl = getBoolean(ALLOW_IF_NO_ACLS_PROP);
 
+    if (getList(ACCESS_RULE_PROVIDERS_PROP).isEmpty())
+      throw new ConfigException("No access rule providers specified");
+  }
+
+  public final Providers createProviders() {
     List<String> authProviderNames = getList(ACCESS_RULE_PROVIDERS_PROP);
     // Multitenant ACLs are included in the MultiTenantProvider, so include only the MultiTenantProvider
     if (authProviderNames.contains(AccessRuleProviders.ACL.name())
@@ -106,34 +113,64 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
       authProviderNames.remove(AccessRuleProviders.ACL.name());
     }
     if (authProviderNames.isEmpty())
-      throw new ConfigException("No authorization providers specified");
+      throw new ConfigException("No access rule providers specified");
 
-    accessRuleProviders = ConfluentBuiltInProviders.loadAccessRuleProviders(authProviderNames);
-    accessRuleProviders.forEach(provider -> provider.configure(originals()));
+    List<AccessRuleProvider> accessRuleProviders =
+        ConfluentBuiltInProviders.loadAccessRuleProviders(authProviderNames);
+    Set<Provider> providers = new HashSet<>(accessRuleProviders);
 
-    String groupFeature = (String) props.get(GROUP_PROVIDER_PROP);
+    String groupFeature = getString(GROUP_PROVIDER_PROP);
     String groupProviderName = groupFeature == null || groupFeature.isEmpty()
         ? GroupProviders.NONE.name() : groupFeature;
-    Optional<AccessRuleProvider> combinedProvider = accessRuleProviders.stream()
-        .filter(p -> p.providerName().equals(groupProviderName) && p instanceof GroupProvider)
-        .findFirst();
-    if (combinedProvider.isPresent()) {
-      groupProvider = (GroupProvider) combinedProvider.get();
-    } else {
-      groupProvider = ConfluentBuiltInProviders.loadGroupProvider(groupProviderName);
-      groupProvider.configure(originals());
-    }
+    GroupProvider groupProvider = createProvider(GroupProvider.class,
+        groupProviderName,
+        ConfluentBuiltInProviders::loadGroupProvider,
+        providers);
+    providers.add(groupProvider);
 
-    String metadataFeature = (String) props.get(METADATA_PROVIDER_PROP);
+    String metadataFeature = getString(METADATA_PROVIDER_PROP);
     String metadataProviderName = metadataFeature == null || metadataFeature.isEmpty()
         ? MetadataProviders.NONE.name() : metadataFeature;
-    metadataProvider = ConfluentBuiltInProviders.loadMetadataProvider(metadataProviderName);
-    metadataProvider.configure(originals());
+    MetadataProvider metadataProvider = createProvider(MetadataProvider.class,
+        metadataProviderName,
+        ConfluentBuiltInProviders::loadMetadataProvider,
+        providers);
+    providers.add(metadataProvider);
+
+    providers.forEach(provider -> provider.configure(originals()));
+
+    return new Providers(accessRuleProviders, groupProvider, metadataProvider);
+  }
+
+  @SuppressWarnings("unchecked")
+  private <T extends Provider> T createProvider(Class<T> providerClass,
+                                                String providerName,
+                                                Function<String, T> creator,
+                                                Collection<? extends Provider> otherProviders) {
+    for (Provider provider : otherProviders) {
+      if (provider.providerName().equals(providerName) && providerClass.isInstance(provider))
+        return (T) provider;
+    }
+    return creator.apply(providerName);
   }
 
   @Override
   public String toString() {
     return Utils.mkString(values(), "", "", "=", "%n\t");
+  }
+
+  public static class Providers {
+    public final List<AccessRuleProvider> accessRuleProviders;
+    public final GroupProvider groupProvider;
+    public final MetadataProvider metadataProvider;
+
+    private Providers(List<AccessRuleProvider> accessRuleProviders,
+        GroupProvider groupProvider,
+        MetadataProvider metadataProvider) {
+      this.accessRuleProviders = accessRuleProviders;
+      this.groupProvider = groupProvider;
+      this.metadataProvider = metadataProvider;
+    }
   }
 
   public static void main(String[] args) throws Exception {

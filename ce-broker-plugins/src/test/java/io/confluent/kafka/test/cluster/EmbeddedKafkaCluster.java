@@ -66,9 +66,10 @@ public class EmbeddedKafkaCluster {
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.GroupInitialRebalanceDelayMsProp(), 0);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.OffsetsTopicReplicationFactorProp(), (short) 1);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.AutoCreateTopicsEnableProp(), true);
+    int brokerIdStart = Integer.parseInt(overrideProps.getOrDefault(KafkaConfig$.MODULE$.BrokerIdProp(), "0").toString());
 
     for (int i = 0; i < brokers.length; i++) {
-      brokerConfig.put(KafkaConfig$.MODULE$.BrokerIdProp(), i);
+      brokerConfig.put(KafkaConfig$.MODULE$.BrokerIdProp(), brokerIdStart + i);
       log.debug("Starting a Kafka instance on port {} ...",
           brokerConfig.get(KafkaConfig$.MODULE$.PortProp()));
       brokers[i] = new EmbeddedKafka.Builder(time).addConfigs(brokerConfig).build();

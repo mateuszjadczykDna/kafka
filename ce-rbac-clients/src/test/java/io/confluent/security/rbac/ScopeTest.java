@@ -15,18 +15,21 @@ public class ScopeTest {
 
   @Test
   public void testScopes() throws Exception {
+    Scope root = scope("{ \"name\": \"\" }");
     Scope abc = scope("{ \"name\": \"a/b/c\" }");
     Scope ab = scope("{ \"name\": \"a/b\" }");
     Scope a = scope("{ \"name\": \"a\" }");
     Scope c = scope("{ \"name\": \"c\" }");
 
+    assertEquals(root, scope(JsonMapper.objectMapper().writeValueAsString(root)));
     assertEquals(abc, scope(JsonMapper.objectMapper().writeValueAsString(abc)));
     assertEquals(ab, scope(JsonMapper.objectMapper().writeValueAsString(ab)));
     assertEquals(a, scope(JsonMapper.objectMapper().writeValueAsString(a)));
 
     assertEquals(ab, abc.parent());
     assertEquals(a, ab.parent());
-    assertNull(a.parent());
+    assertEquals(root, a.parent());
+    assertNull(root.parent());
 
     assertTrue(abc.containsScope(abc));
     assertTrue(a.containsScope(ab));
@@ -37,6 +40,14 @@ public class ScopeTest {
     assertFalse(abc.containsScope(c));
     assertFalse(ab.containsScope(c));
     assertFalse(a.containsScope(c));
+
+    assertTrue(root.containsScope(abc));
+    assertTrue(root.containsScope(ab));
+    assertTrue(root.containsScope(a));
+    assertTrue(root.containsScope(c));
+    assertFalse(abc.containsScope(root));
+    assertFalse(ab.containsScope(root));
+    assertFalse(c.containsScope(root));
   }
 
   private Scope scope(String json) {

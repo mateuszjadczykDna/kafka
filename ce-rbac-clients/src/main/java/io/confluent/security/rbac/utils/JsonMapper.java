@@ -14,7 +14,9 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import io.confluent.kafka.security.authorizer.ResourceType;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
 
@@ -33,11 +35,33 @@ public class JsonMapper {
     SimpleModule simpleModule = new SimpleModule();
     simpleModule.addSerializer(KafkaPrincipal.class, new PrincipalSerializer(KafkaPrincipal.class));
     simpleModule.addDeserializer(KafkaPrincipal.class, new PrincipalDeserializer(KafkaPrincipal.class));
+
+    // ResourceTypes are Strings rather than enums for extensibility. Serialize/Deserialize as String.
+    simpleModule.addSerializer(ResourceType.class, new ResourceTypeSerializer(ResourceType.class));
+    simpleModule.addDeserializer(ResourceType.class, new ResourceTypeDeserializer(ResourceType.class));
     OBJECT_MAPPER.registerModule(simpleModule);
   }
 
   public static ObjectMapper objectMapper() {
         return OBJECT_MAPPER;
+  }
+
+  public static ByteBuffer toByteBuffer(Object obj) {
+    try {
+      return ByteBuffer.wrap(OBJECT_MAPPER.writeValueAsBytes(obj));
+    } catch (IOException e) {
+      throw new IllegalArgumentException("JSON serialization failed for: " + obj, e);
+    }
+  }
+
+  public static <T> T fromByteBuffer(ByteBuffer buffer, Class<T> clazz) {
+    try {
+      byte[] bytes = new byte[buffer.remaining()];
+      buffer.get(bytes);
+      return OBJECT_MAPPER.readValue(bytes, clazz);
+    } catch (IOException e) {
+      throw new IllegalArgumentException("JSON deserialization failed for object of class " + clazz, e);
+    }
   }
 
   private static class PrincipalSerializer extends StdSerializer<KafkaPrincipal> {
@@ -63,6 +87,32 @@ public class JsonMapper {
     public KafkaPrincipal deserialize(JsonParser jsonParser,
         DeserializationContext deserializationContext) throws IOException {
       return SecurityUtils.parseKafkaPrincipal(jsonParser.getValueAsString());
+    }
+  }
+
+  private static class ResourceTypeSerializer extends StdSerializer<ResourceType> {
+
+    public ResourceTypeSerializer(Class<ResourceType> t) {
+      super(t);
+    }
+
+    @Override
+    public void serialize(ResourceType resourceType, JsonGenerator jsonGenerator,
+        SerializerProvider serializerProvider) throws IOException {
+      jsonGenerator.writeString(resourceType.name());
+    }
+  }
+
+  private static class ResourceTypeDeserializer extends StdDeserializer<ResourceType> {
+
+    public ResourceTypeDeserializer(Class<ResourceType> t) {
+      super(t);
+    }
+
+    @Override
+    public ResourceType deserialize(JsonParser jsonParser,
+        DeserializationContext deserializationContext) throws IOException {
+      return new ResourceType(jsonParser.getValueAsString());
     }
   }
 }

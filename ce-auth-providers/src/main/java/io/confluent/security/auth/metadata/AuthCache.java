@@ -9,6 +9,7 @@ import io.confluent.security.rbac.RoleAssignment;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.rbac.UserMetadata;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
@@ -29,7 +30,7 @@ public interface AuthCache {
    */
   boolean isSuperUser(Scope scope,
                       KafkaPrincipal userPrincipal,
-                      Set<KafkaPrincipal> groupPrincipals);
+                      Collection<KafkaPrincipal> groupPrincipals);
 
   /**
    * Returns the groups of the provided user principal.
@@ -51,7 +52,7 @@ public interface AuthCache {
   Set<AccessRule> rbacRules(Scope resourceScope,
                             Resource resource,
                             KafkaPrincipal userPrincipal,
-                            Set<KafkaPrincipal> groupPrincipals);
+                            Collection<KafkaPrincipal> groupPrincipals);
 
 
   /**
@@ -61,7 +62,7 @@ public interface AuthCache {
    * @param scope Scope for which role assignments are requested.
    * @return Set of roles currently assigned at the specified scope
    */
-  Collection<RoleAssignment> rbacRoleAssignments(Scope scope);
+  Set<RoleAssignment> rbacRoleAssignments(Scope scope);
 
   /**
    * Returns metadata for the specified user principal if available or null if user is not known.
@@ -70,6 +71,11 @@ public interface AuthCache {
    * @return user metadata including group membership
    */
   UserMetadata userMetadata(KafkaPrincipal userPrincipal);
+
+  /**
+   * Returns user metadata for all users.
+   */
+  Map<KafkaPrincipal, UserMetadata> users();
 
   /**
    * Returns the root scope of this cache. The cache discards entries with scope that is

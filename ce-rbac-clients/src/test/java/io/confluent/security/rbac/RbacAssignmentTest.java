@@ -2,6 +2,7 @@
 
 package io.confluent.security.rbac;
 
+import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.security.rbac.utils.JsonMapper;
 import io.confluent.security.test.utils.JsonTestUtils;
 import java.util.Collection;
@@ -31,7 +32,7 @@ public class RbacAssignmentTest {
     assertEquals(new KafkaPrincipal("User", "Bob"), bob.principal());
     assertEquals("Developer", bob.role());
     assertEquals("ClusterB", bob.scope());
-    Collection<RbacResource> resources = bob.resources();
+    Collection<Resource> resources = bob.resources();
     assertEquals(3, resources.size());
     verifyEquals(bob, roleAssignment(JsonMapper.objectMapper().writeValueAsString(bob)));
   }

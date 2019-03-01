@@ -2,8 +2,8 @@
 
 package io.confluent.kafka.security.authorizer.provider;
 
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,20 +49,21 @@ public class ConfluentBuiltInProviders {
   }
 
   public static List<AccessRuleProvider> loadAccessRuleProviders(List<String> names) {
-    Set<String> remainingNames = new HashSet<>(names);
-    List<AccessRuleProvider> authProviders = new ArrayList<>();
+    Map<String, AccessRuleProvider> authProviders = new HashMap<>(names.size());
     ServiceLoader<AccessRuleProvider> providers = ServiceLoader.load(AccessRuleProvider.class);
     for (AccessRuleProvider provider : providers) {
       String name = provider.providerName();
-      if (remainingNames.remove(name)) {
-        authProviders.add(provider);
-      }
-      if (remainingNames.isEmpty())
+      if (names.contains(name))
+        authProviders.putIfAbsent(name, provider);
+      if (authProviders.size() == names.size())
         break;
     }
-    if (!remainingNames.isEmpty())
+    if (authProviders.size() != names.size()) {
+      Set<String> remainingNames = new HashSet<>(names);
+      remainingNames.removeAll(authProviders.keySet());
       throw new ConfigException("Provider not found for " + remainingNames);
-    return authProviders;
+    }
+    return names.stream().map(authProviders::get).collect(Collectors.toList());
   }
 
   public static GroupProvider loadGroupProvider(String name) {

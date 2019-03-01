@@ -2,21 +2,25 @@
 
 package io.confluent.security.test.utils;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
-import io.confluent.kafka.security.authorizer.EmbeddedAuthorizer;
+import io.confluent.kafka.security.authorizer.Authorizer;
 import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.kafka.security.authorizer.ConfluentKafkaAuthorizer;
-import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
+import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
-import io.confluent.security.auth.provider.rbac.RbacProvider;
-import io.confluent.security.auth.store.KafkaAuthCache;
-import io.confluent.security.rbac.RbacResource;
+import io.confluent.security.auth.metadata.AuthStore;
+import io.confluent.security.auth.metadata.MetadataServer;
+import io.confluent.security.auth.metadata.MetadataServiceConfig;
+import io.confluent.security.auth.store.data.UserKey;
+import io.confluent.security.auth.store.data.UserValue;
+import io.confluent.security.auth.store.kafka.KafkaAuthWriter;
+import io.confluent.security.store.kafka.KafkaStoreConfig;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -26,34 +30,43 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import kafka.admin.AclCommand;
 import kafka.security.auth.Alter$;
-import kafka.security.auth.Authorizer;
 import kafka.security.auth.ClusterAction$;
 import kafka.server.KafkaConfig$;
-import kafka.server.KafkaServer;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.test.TestUtils;
-import scala.Option;
 
-public class RbacKafkaCluster {
+public class RbacClusters {
 
   private final SecurityProtocol kafkaSecurityProtocol = SecurityProtocol.SASL_PLAINTEXT;
   private final String kafkaSaslMechanism = "SCRAM-SHA-256";
+  private final EmbeddedKafkaCluster metadataCluster;
   public final EmbeddedKafkaCluster kafkaCluster;
   private final Map<String, User> users;
-  public KafkaAuthCache authCache;
 
-  public RbacKafkaCluster(String authorizerScope,
-                          String brokerUser,
-                          List<String> userNames) throws Exception {
+  public RbacClusters(String authorizerScope,
+                      String metadataServiceScope,
+                      String brokerUser,
+                      List<String> userNames) throws Exception {
+    RbacMetadataServer.reset();
+
+    metadataCluster = new EmbeddedKafkaCluster();
+    metadataCluster.startZooKeeper();
+    metadataCluster.startBrokers(1, metadataClusterServerConfig());
+
     kafkaCluster = new EmbeddedKafkaCluster();
     kafkaCluster.startZooKeeper();
 
     users = createUsers(brokerUser, userNames);
-    kafkaCluster.startBrokers(1, serverConfig(brokerUser, authorizerScope));
-    authCache = authCache();
+    kafkaCluster.startBrokers(1, serverConfig(brokerUser, authorizerScope, metadataServiceScope));
+
+    TestUtils.waitForCondition(() -> RbacMetadataServer.instance != null, "Metadata server not created");
+    TestUtils.waitForCondition(() -> RbacMetadataServer.instance.authStore != null,
+        30000, "Metadata server not started");
+    assertNotNull(RbacMetadataServer.instance.authStore.writer());
   }
 
   public void produceConsume(String user,
@@ -71,9 +84,17 @@ public class RbacKafkaCluster {
         users.get(user).jaasConfig);
   }
 
-  public void assignRole(String principalType, String userName, String role, String scope, RbacResource resource) {
+  public void assignRole(String principalType,
+                         String userName,
+                         String role,
+                         String scope,
+                         Set<Resource> resources) {
     KafkaPrincipal principal = new KafkaPrincipal(principalType, userName);
-    RbacTestUtils.addRoleAssignment(authCache, principal, role, scope, resource);
+    RbacMetadataServer.writer().setRoleResources(
+        principal,
+        role,
+        scope,
+        resources);
   }
 
   public void updateUserGroups(String userName, String... groups) {
@@ -81,7 +102,17 @@ public class RbacKafkaCluster {
     Set<KafkaPrincipal> groupPrincipals = Arrays.stream(groups)
         .map(group -> new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, group))
         .collect(Collectors.toSet());
-    RbacTestUtils.updateUserGroups(authCache, principal, groupPrincipals);
+    UserKey key = new UserKey(principal);
+    UserValue value = new UserValue(groupPrincipals);
+    RbacMetadataServer.writer().write(key, value, null);
+  }
+
+  public void shutdown() {
+    try {
+      kafkaCluster.shutdown();
+    } finally {
+      metadataCluster.shutdown();
+    }
   }
 
   public void waitUntilAccessAllowed(String user, String topic) throws Exception {
@@ -94,7 +125,9 @@ public class RbacKafkaCluster {
     }
   }
 
-  private Properties serverConfig(String brokerUser, String authorizerScope) {
+  private Properties serverConfig(String brokerUser,
+                                  String authorizerScope,
+                                  String metadataServiceScope) {
     Properties serverConfig = new Properties();
     serverConfig.setProperty(KafkaConfig$.MODULE$.ListenersProp(),
         kafkaSecurityProtocol + "://localhost:0");
@@ -110,10 +143,26 @@ public class RbacKafkaCluster {
 
     serverConfig.setProperty(KafkaConfig$.MODULE$.AuthorizerClassNameProp(),
         ConfluentKafkaAuthorizer.class.getName());
+    serverConfig.setProperty("super.users", "User:" + brokerUser);
     serverConfig.setProperty(ConfluentAuthorizerConfig.SCOPE_PROP, authorizerScope);
     serverConfig.setProperty(ConfluentAuthorizerConfig.ACCESS_RULE_PROVIDERS_PROP, "ACL,RBAC");
     serverConfig.setProperty(ConfluentAuthorizerConfig.GROUP_PROVIDER_PROP, "RBAC");
+    serverConfig.setProperty(ConfluentAuthorizerConfig.METADATA_PROVIDER_PROP, "RBAC");
+    serverConfig.setProperty(MetadataServiceConfig.SCOPE_PROP, metadataServiceScope);
+    serverConfig.setProperty(MetadataServiceConfig.METADATA_SERVER_LISTENERS_PROP, "http://0.0.0.0:8000");
+    serverConfig.setProperty(MetadataServiceConfig.METADATA_SERVER_ADVERTISED_LISTENERS_PROP, "http://localhost:8000");
+    serverConfig.setProperty(MetadataServiceConfig.METADATA_SERVER_CLASS_PROP,
+        RbacMetadataServer.class.getName());
+    serverConfig.setProperty(KafkaStoreConfig.PREFIX + CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG,
+        metadataCluster.bootstrapServers());
 
+    return serverConfig;
+  }
+
+  private Properties metadataClusterServerConfig() {
+    Properties serverConfig = new Properties();
+    serverConfig.setProperty(KafkaConfig$.MODULE$.BrokerIdProp(), "100");
+    serverConfig.setProperty(KafkaConfig$.MODULE$.ListenersProp(), "PLAINTEXT://localhost:0");
     return serverConfig;
   }
 
@@ -132,21 +181,39 @@ public class RbacKafkaCluster {
     return users;
   }
 
-  // RS: TODO: This is temporary code to enable auth cache to be populated. This will be removed
-  // when the Kafka storage layer is implemented for RBAC.
-  private KafkaAuthCache authCache() {
-    assertEquals(1, kafkaCluster.brokers().size());
-    KafkaServer server = kafkaCluster.brokers().get(0);
-    KafkaAuthCache authCache = null;
-    Option<Authorizer> authorizer = KafkaTestUtils.fieldValue(server, KafkaServer.class, "authorizer");
-    List<AccessRuleProvider> providers = KafkaTestUtils.fieldValue(authorizer.get(),
-        EmbeddedAuthorizer.class, "accessRuleProviders");
-    authCache = providers.stream()
-        .filter(p -> p instanceof RbacProvider)
-        .map(p -> RbacTestUtils.authCache((RbacProvider) p))
-        .findFirst()
-        .orElse(null);
-    assertNotNull("AuthCache not found", authCache);
-    return authCache;
+
+  public static class RbacMetadataServer implements MetadataServer {
+    volatile static RbacMetadataServer instance;
+    volatile Authorizer embeddedAuthorizer;
+    volatile AuthStore authStore;
+
+    public RbacMetadataServer() {
+      if (instance != null)
+        throw new IllegalStateException("Too many metadata servers");
+      instance = this;
+    }
+
+    @Override
+    public void configure(Map<String, ?> configs) {
+    }
+
+    @Override
+    public void start(Authorizer embeddedAuthorizer, AuthStore authStore) {
+      this.embeddedAuthorizer = embeddedAuthorizer;
+      this.authStore = authStore;
+    }
+
+    @Override
+    public void close() throws IOException {
+      reset();
+    }
+
+    static KafkaAuthWriter writer() {
+      return (KafkaAuthWriter) instance.authStore.writer();
+    }
+
+    static void reset() {
+      instance = null;
+    }
   }
 }

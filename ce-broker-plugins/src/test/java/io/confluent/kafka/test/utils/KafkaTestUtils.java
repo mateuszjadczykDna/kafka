@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import kafka.server.KafkaConfig$;
@@ -22,6 +23,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.internals.AbstractCoordinator;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -39,8 +41,15 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.auth.SecurityProtocol;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.test.TestUtils;
 
 public class KafkaTestUtils {
+
+  private static final Set<String> UNEXPECTED_THREADS = Utils.mkSet(
+      AbstractCoordinator.HEARTBEAT_THREAD_PREFIX,
+      "event-process-thread",
+      "EventThread");
 
   public static Properties brokerConfig(Properties overrideProps) throws Exception {
     Properties serverConfig = new Properties();
@@ -275,5 +284,19 @@ public class KafkaTestUtils {
     public AdminClient buildAdminClient() {
       return createAdminClient(bootstrapServers, securityProtocol, saslMechanism, jaasConfig);
     }
+  }
+
+  public static void verifyThreadCleanup() {
+    try {
+      TestUtils.waitForCondition(
+          () -> Thread.getAllStackTraces().keySet().stream().noneMatch(KafkaTestUtils::isUnexpectedThread),
+          () -> "Unexpected threads: " + Thread.getAllStackTraces().keySet());
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static boolean isUnexpectedThread(Thread thread) {
+    return UNEXPECTED_THREADS.stream().anyMatch(thread.getName()::contains);
   }
 }

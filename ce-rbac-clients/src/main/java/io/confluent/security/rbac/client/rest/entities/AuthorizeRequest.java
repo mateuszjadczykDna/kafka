@@ -4,9 +4,9 @@ package io.confluent.security.rbac.client.rest.entities;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.confluent.kafka.security.authorizer.Action;
 
+import io.confluent.security.rbac.utils.JsonMapper;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
@@ -52,6 +52,6 @@ public class AuthorizeRequest {
   }
 
   public String toJson() throws IOException {
-    return new ObjectMapper().writeValueAsString(this);
+    return JsonMapper.objectMapper().writeValueAsString(this);
   }
 }

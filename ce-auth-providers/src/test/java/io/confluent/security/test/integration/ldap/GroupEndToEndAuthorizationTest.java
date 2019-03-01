@@ -19,6 +19,7 @@
 package io.confluent.security.test.integration.ldap;
 
 import io.confluent.kafka.security.authorizer.AccessRule;
+import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.security.test.utils.LdapTestUtils;
 import kafka.api.SaslEndToEndAuthorizationTest;
@@ -75,6 +76,7 @@ public abstract class GroupEndToEndAuthorizationTest extends SaslEndToEndAuthori
       if (ldapServer != null) {
         ldapServer.shutdown();
       }
+      KafkaTestUtils.verifyThreadCleanup();
     }
   }
 

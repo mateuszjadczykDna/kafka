@@ -100,27 +100,38 @@
     <subpackage name="multitenant">
       <allow pkg="org.apache.kafka.test" />
     </subpackage>
+
+    <subpackage name="test">
+      <allow pkg="org.apache.kafka.test" />
+    </subpackage>
   </subpackage>
 
   <subpackage name="security">
     <allow pkg="io.confluent.kafka.common" />
     <allow pkg="io.confluent.kafka.security" />
+    <allow pkg="io.confluent.kafka.test" />
     <allow pkg="io.confluent.license" />
-    <allow pkg="io.confluent.security" />
+    <allow pkg="io.confluent.security.minikdc" />
+    <allow pkg="io.confluent.security.rbac" />
+    <allow pkg="io.confluent.security.test" />
     <allow pkg="kafka" />
     <allow pkg="org.apache.kafka.clients" />
     <allow pkg="org.apache.kafka.common" />
+    <allow pkg="org.apache.kafka.test" />
     <allow pkg="scala" />
 
-    <subpackage name="auth.provider">
-      <allow pkg="org.apache.kafka.test" />
-      <allow pkg="io.confluent.kafka.test" />
+    <subpackage name="auth">
+      <allow pkg="io.confluent.security.auth" />
+      <allow pkg="io.confluent.security.store" />
+    </subpackage>
+
+    <subpackage name="store">
+      <allow pkg="io.confluent.security.store" />
     </subpackage>
 
     <subpackage name="test">
-      <allow pkg="org.apache.kafka.test" />
       <allow pkg="io.confluent.kafka.security.ldap.authorizer" />
-      <allow pkg="io.confluent.kafka.test" />
+      <allow pkg="io.confluent.security" />
     </subpackage>
 
     <subpackage name="minikdc">

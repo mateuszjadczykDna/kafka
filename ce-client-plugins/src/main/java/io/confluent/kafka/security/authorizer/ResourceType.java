@@ -2,8 +2,6 @@
 
 package io.confluent.kafka.security.authorizer;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.Objects;
 
 /**
@@ -17,11 +15,10 @@ public class ResourceType {
 
   private final String name;
 
-  public ResourceType(@JsonProperty("name") String name) {
+  public ResourceType(String name) {
     this.name = name;
   }
 
-  @JsonProperty
   public String name() {
     return name;
   }

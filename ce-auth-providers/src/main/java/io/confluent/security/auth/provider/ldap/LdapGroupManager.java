@@ -2,10 +2,14 @@
 
 package io.confluent.security.auth.provider.ldap;
 
+import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
 import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig.SearchMode;
 import io.confluent.kafka.common.utils.RetryBackoff;
 
+import io.confluent.security.auth.store.data.UserKey;
+import io.confluent.security.auth.store.data.UserValue;
+import io.confluent.security.auth.store.external.ExternalStoreListener;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -29,6 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.naming.Context;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
@@ -50,6 +55,7 @@ import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.ListenerName;
 import org.apache.kafka.common.security.JaasContext;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.authenticator.LoginManager;
 import org.apache.kafka.common.security.kerberos.KerberosLogin;
 import org.apache.kafka.common.utils.Time;
@@ -89,13 +95,21 @@ public class LdapGroupManager {
   private final AtomicInteger retryCount;
   private final AtomicBoolean alive;
   private final PersistentSearch persistentSearch;
+  private final ExternalStoreListener<UserKey, UserValue> listener;
 
   private volatile LdapContext context;
   private volatile Future<?> searchFuture;
 
   public LdapGroupManager(LdapAuthorizerConfig config, Time time) {
+    this(config, time, null);
+  }
+
+  public LdapGroupManager(LdapAuthorizerConfig config,
+                          Time time,
+                          ExternalStoreListener<UserKey, UserValue> listener) {
     this.config = config;
     this.time = time;
+    this.listener = listener;
     this.subject = login();
     this.userGroupCache = new ConcurrentHashMap<>();
     persistentSearch = config.persistentSearch ? new PersistentSearch() : null;
@@ -186,6 +200,8 @@ public class LdapGroupManager {
         }
       }
     } while (!done);
+
+    onStartup();
 
     if (config.persistentSearch) {
       schedulePersistentSearch(0, false);
@@ -357,6 +373,35 @@ public class LdapGroupManager {
         .forEach(this::processSearchResultDelete);
   }
 
+  private void onUpdate(Set<String> users) {
+    if (listener != null) {
+      users.forEach(user -> {
+        Set<String> groups = userGroupCache.get(user);
+        if (groups != null) {
+          listener.update(userKey(user), userValue(groups));
+        } else
+          listener.delete(userKey(user));
+      });
+    }
+  }
+
+  private void onStartup() {
+    if (listener != null) {
+      listener.initialize(userGroupCache.entrySet().stream()
+          .collect(Collectors.toMap(e -> userKey(e.getKey()), e -> userValue(e.getValue()))));
+    }
+  }
+
+  private UserKey userKey(String user) {
+    return new UserKey(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, user));
+  }
+
+  private UserValue userValue(Set<String> groups) {
+    return new UserValue(groups.stream()
+        .map(group -> new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, group))
+        .collect(Collectors.toSet()));
+  }
+
   private NamingEnumeration<SearchResult> search(SearchControls searchControls)
       throws NamingException {
     if (config.searchMode == SearchMode.GROUPS) {
@@ -451,13 +496,17 @@ public class LdapGroupManager {
   }
 
   private void processSearchResultModify(ResultEntry resultEntry) {
+    Set<String> updatedUsers = new HashSet<>();
     if (resultEntry != null) {
       if (config.searchMode == SearchMode.GROUPS) {
         String group = resultEntry.name;
         Set<String> members = resultEntry.members;
         for (String user : members) {
           Set<String> groups = userGroupCache.computeIfAbsent(user, u -> new HashSet<>());
-          groups.add(group);
+          if (!groups.contains(group)) {
+            groups.add(group);
+            updatedUsers.add(user);
+          }
         }
         for (Map.Entry<String, Set<String>> entry : userGroupCache.entrySet()) {
           String user = entry.getKey();
@@ -467,14 +516,19 @@ public class LdapGroupManager {
             if (userGroups.isEmpty()) {
               userGroupCache.remove(user);
             }
+            updatedUsers.add(user);
           }
         }
       } else {
         String user = resultEntry.name;
         Set<String> groups = resultEntry.members;
-        userGroupCache.put(user, groups);
+        Set<String> oldValue = userGroupCache.put(user, groups);
+        if (oldValue == null || !oldValue.equals(groups)) {
+          updatedUsers.add(user);
+        }
       }
     }
+    onUpdate(updatedUsers);
   }
 
   private void processSearchResultDelete(String name) {
@@ -482,6 +536,7 @@ public class LdapGroupManager {
       processSearchResultModify(new ResultEntry(name, Collections.emptySet()));
     } else {
       userGroupCache.remove(name);
+      onUpdate(Collections.singleton(name));
     }
   }
 

@@ -3,6 +3,7 @@
 package io.confluent.security.auth.provider.rbac;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -11,19 +12,17 @@ import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
-import io.confluent.security.auth.store.KafkaAuthCache;
-import io.confluent.security.auth.store.clients.KafkaAuthStore;
+import io.confluent.security.auth.store.cache.DefaultAuthCache;
+import io.confluent.security.auth.store.data.RoleAssignmentKey;
+import io.confluent.security.auth.store.data.RoleAssignmentValue;
 import io.confluent.security.rbac.RbacRoles;
-import io.confluent.security.rbac.RbacResource;
 import io.confluent.security.rbac.Scope;
-import io.confluent.security.test.utils.RbacTestUtils;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
-import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.After;
 import org.junit.Before;
@@ -31,11 +30,10 @@ import org.junit.Test;
 
 public class RbacProviderTest {
 
-  private final MockTime time = new MockTime();
   private final String clusterA = "testOrg/clusterA";
   private RbacProvider rbacProvider;
-  private KafkaAuthCache authCache;
-  private RbacResource topic = new RbacResource("Topic", "topicA", PatternType.LITERAL);
+  private DefaultAuthCache authCache;
+  private Resource topic = new Resource("Topic", "topicA", PatternType.LITERAL);
 
   @Before
   public void setUp() throws Exception {
@@ -53,10 +51,17 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Super User", clusterA, null);
+    updateRoleAssignment(alice, "Super User", clusterA, null);
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
+
+    // Delete non-existing role
+    deleteRoleAssignment(alice, "Super User", "testOrg/clusterB");
+    assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
+
+    deleteRoleAssignment(alice, "Super User", clusterA);
+    assertFalse(rbacProvider.isSuperUser(alice, groups, clusterA));
   }
 
   @Test
@@ -65,9 +70,16 @@ public class RbacProviderTest {
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
 
-    RbacTestUtils.addRoleAssignment(authCache, admin, "Super User", clusterA, null);
+    updateRoleAssignment(admin, "Super User", clusterA, Collections.emptySet());
+    assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
+
+    assertFalse(rbacProvider.isSuperUser(alice, Collections.emptySet(), clusterA));
+
+    deleteRoleAssignment(admin, "Super User", clusterA);
+    assertFalse(rbacProvider.isSuperUser(alice, groups, clusterA));
+
   }
 
   @Test
@@ -75,29 +87,26 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Cluster Admin", clusterA, null);
+    updateRoleAssignment(alice, "Cluster Admin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
 
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Operator", clusterA, null);
+    updateRoleAssignment(alice, "Operator", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Operator", clusterA, topic);
+    updateRoleAssignment(alice, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Cluster Admin", clusterA, null);
+    deleteRoleAssignment(alice, "Cluster Admin", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Operator", clusterA, null);
+    deleteRoleAssignment(alice, "Operator", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
-    verifyRules(accessRules(alice, groups, topic),
-        "AlterConfigs", "DescribeConfigs");
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Operator", clusterA, topic);
     verifyRules(accessRules(alice, groups, topic));
   }
 
@@ -107,96 +116,92 @@ public class RbacProviderTest {
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
 
-    RbacTestUtils.addRoleAssignment(authCache, admin, "Cluster Admin", clusterA, null);
+    updateRoleAssignment(admin, "Cluster Admin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
     verifyRules(accessRules(alice, Collections.emptySet(), Resource.CLUSTER));
 
-    RbacTestUtils.addRoleAssignment(authCache, admin, "Operator", clusterA, null);
+    updateRoleAssignment(admin, "Operator", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
-    RbacTestUtils.addRoleAssignment(authCache, admin, "Operator", clusterA, topic);
+    updateRoleAssignment(admin, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Operator", clusterA, null);
+    updateRoleAssignment(alice, "Operator", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Operator", clusterA, null);
+    deleteRoleAssignment(alice, "Operator", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, admin, "Cluster Admin", clusterA, null);
+    deleteRoleAssignment(admin, "Cluster Admin", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, admin, "Operator", clusterA, topic);
+    deleteRoleAssignment(admin, "Operator", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
   }
 
   @Test
   public void testLiteralResourceAccessRules() {
-    verifyResourceAccessRules(new RbacResource("Topic", topic.name(), PatternType.LITERAL));
+    verifyResourceAccessRules(new Resource("Topic", topic.name(), PatternType.LITERAL));
   }
 
   @Test
   public void testWildcardResourceAccessRules() {
-    verifyResourceAccessRules(new RbacResource("Topic", "*", PatternType.LITERAL));
+    verifyResourceAccessRules(new Resource("Topic", "*", PatternType.LITERAL));
   }
 
   @Test
   public void testPrefixedResourceAccessRules() {
-    verifyResourceAccessRules(new RbacResource("Topic", "top", PatternType.PREFIXED));
+    verifyResourceAccessRules(new Resource("Topic", "top", PatternType.PREFIXED));
   }
 
   @Test
   public void testSingleCharPrefixedResourceAccessRules() {
-    verifyResourceAccessRules(new RbacResource("Topic", "t", PatternType.PREFIXED));
+    verifyResourceAccessRules(new Resource("Topic", "t", PatternType.PREFIXED));
   }
 
   @Test
   public void testFullNamePrefixedResourceAccessRules() {
-    verifyResourceAccessRules(new RbacResource("Topic", "topic", PatternType.PREFIXED));
+    verifyResourceAccessRules(new Resource("Topic", "topic", PatternType.PREFIXED));
   }
 
-  private void verifyResourceAccessRules(RbacResource roleResource) {
+  private void verifyResourceAccessRules(Resource roleResource) {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
     Set<KafkaPrincipal> emptyGroups = Collections.emptySet();
+    Set<Resource> resources = roleResource == null ?
+        Collections.emptySet() : Collections.singleton(roleResource);
 
-    authCache.onRoleAssignmentAdd(RbacTestUtils.roleAssignment(alice,
-        "Reader", clusterA, roleResource));
+    updateRoleAssignment(alice, "Reader", clusterA, resources);
     verifyRules(accessRules(alice, emptyGroups, Resource.CLUSTER));
     verifyRules(accessRules(alice, emptyGroups, topic), "Read", "Describe");
 
-    authCache.onRoleAssignmentAdd(RbacTestUtils.roleAssignment(admin,
-        "Writer", clusterA, roleResource));
+    updateRoleAssignment(admin, "Writer", clusterA, resources);
     verifyRules(accessRules(alice, groups, topic), "Read", "Describe", "Write");
 
-    authCache.onRoleAssignmentAdd(RbacTestUtils.roleAssignment(alice,
-        "Writer", clusterA, roleResource));
+    updateRoleAssignment(alice, "Writer", clusterA, resources);
     verifyRules(accessRules(alice, groups, topic), "Read", "Describe", "Write");
 
-    authCache.onRoleAssignmentDelete(RbacTestUtils.roleAssignment(admin,
-        "Writer", clusterA, roleResource));
+    deleteRoleAssignment(admin, "Writer", clusterA);
     verifyRules(accessRules(alice, groups, topic), "Read", "Describe", "Write");
 
-    authCache.onRoleAssignmentDelete(RbacTestUtils.roleAssignment(alice,
-        "Reader", clusterA, roleResource));
+    deleteRoleAssignment(alice, "Reader", clusterA);
     verifyRules(accessRules(alice, groups, topic), "Describe", "Write");
 
-    authCache.onRoleAssignmentDelete(RbacTestUtils.roleAssignment(alice,
-        "Writer", clusterA, roleResource));
+    deleteRoleAssignment(alice, "Writer", clusterA);
     verifyRules(accessRules(alice, groups, topic));
   }
 
@@ -205,12 +210,12 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Operator", clusterA, topic);
+    updateRoleAssignment(alice, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(accessRules(alice, groups, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
 
     String clusterB = "testOrg/clusterB";
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Cluster Admin", clusterB, null);
+    updateRoleAssignment(alice, "Cluster Admin", clusterB, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic), "AlterConfigs", "DescribeConfigs");
 
@@ -223,12 +228,12 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Operator", clusterA, topic);
+    updateRoleAssignment(alice, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, Resource.CLUSTER));
 
     String clusterB = "testOrg/clusterB";
-    RbacTestUtils.addRoleAssignment(authCache, alice, "Cluster Admin", clusterB, null);
+    updateRoleAssignment(alice, "Cluster Admin", clusterB, Collections.emptySet());
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, Resource.CLUSTER));
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(rbacProvider.accessRules(alice, groups, clusterB, Resource.CLUSTER), "AlterConfigs", "DescribeConfigs");
@@ -243,14 +248,28 @@ public class RbacProviderTest {
   }
 
   private void initializeRbacProvider(String scope) throws Exception {
-    rbacProvider = new RbacProvider();
+    RbacRoles rbacRoles = RbacRoles.load(this.getClass().getClassLoader(), "test_rbac_roles.json");
+    MockRbacProvider.MockAuthStore authStore = new MockRbacProvider.MockAuthStore(rbacRoles, new Scope(scope));
+    authCache = authStore.authCache();
+    rbacProvider = new RbacProvider() {
+      @Override
+      public void configure(Map<String, ?> configs) {
+        KafkaTestUtils.setFinalField(rbacProvider, RbacProvider.class, "authCache", authCache);
+      }
+    };
     Map<String, Object> configs = Collections.singletonMap(ConfluentAuthorizerConfig.SCOPE_PROP, scope);
     rbacProvider.configure(configs);
+  }
 
-    RbacRoles rbacRoles = RbacRoles.load(this.getClass().getClassLoader(), "test_rbac_roles.json");
-    KafkaAuthStore authStore = new KafkaAuthStore(rbacRoles, time, new Scope(scope));
-    authCache = authStore.authCache();
-    KafkaTestUtils.setFinalField(rbacProvider, RbacProvider.class, "authCache", authCache);
+  private void updateRoleAssignment(KafkaPrincipal principal, String role, String scope, Set<Resource> resources) {
+    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
+    RoleAssignmentValue value = new RoleAssignmentValue(resources == null ? Collections.emptySet() : resources);
+    authCache.put(key, value);
+  }
+
+  private void deleteRoleAssignment(KafkaPrincipal principal, String role, String scope) {
+    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
+    authCache.remove(key);
   }
 
   private Set<AccessRule> accessRules(KafkaPrincipal userPrincipal,

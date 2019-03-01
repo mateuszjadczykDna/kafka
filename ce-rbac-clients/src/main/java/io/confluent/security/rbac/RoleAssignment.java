@@ -4,9 +4,10 @@ package io.confluent.security.rbac;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.ArrayList;
+import io.confluent.kafka.security.authorizer.Resource;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
@@ -17,7 +18,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 public class RoleAssignment {
 
   private final KafkaPrincipal principal;
-  private final Collection<RbacResource> resources;
+  private final Collection<Resource> resources;
   private final String role;
   private final String scope;
 
@@ -25,7 +26,7 @@ public class RoleAssignment {
   public RoleAssignment(@JsonProperty("principal") KafkaPrincipal principal,
                         @JsonProperty("role") String role,
                         @JsonProperty("scope") String scope,
-                        @JsonProperty("resources") Collection<RbacResource> resources) {
+                        @JsonProperty("resources") Collection<Resource> resources) {
     this.principal = Objects.requireNonNull(principal, "principal must not be null");
     if (role == null || role.isEmpty())
       throw new IllegalArgumentException("Role must be non-empty for role assignment");
@@ -34,7 +35,7 @@ public class RoleAssignment {
       throw new IllegalArgumentException("Scope must be non-empty for role assignment");
     this.scope = scope;
     this.resources = resources == null ? Collections.emptySet() :
-        Collections.unmodifiableList(new ArrayList<>(resources));
+        Collections.unmodifiableSet(new HashSet<>(resources));
   }
 
   @JsonProperty
@@ -53,7 +54,7 @@ public class RoleAssignment {
   }
 
   @JsonProperty
-  public Collection<RbacResource> resources() {
+  public Collection<Resource> resources() {
     return resources;
   }
 

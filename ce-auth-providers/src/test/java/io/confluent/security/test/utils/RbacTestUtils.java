@@ -1,41 +1,87 @@
-// (Copyright) [2018 - 2019] Confluent, Inc.
+// (Copyright) [2019 - 2019] Confluent, Inc.
 
 package io.confluent.security.test.utils;
 
-import io.confluent.kafka.test.utils.KafkaTestUtils;
-import io.confluent.security.auth.provider.rbac.RbacProvider;
-import io.confluent.security.auth.store.KafkaAuthCache;
-import io.confluent.security.rbac.RbacResource;
-import io.confluent.security.rbac.RoleAssignment;
-import io.confluent.security.rbac.UserMetadata;
+import io.confluent.kafka.security.authorizer.Resource;
+import io.confluent.security.auth.store.cache.DefaultAuthCache;
+import io.confluent.security.auth.store.data.RoleAssignmentKey;
+import io.confluent.security.auth.store.data.RoleAssignmentValue;
+import io.confluent.security.auth.store.data.UserKey;
+import io.confluent.security.auth.store.data.UserValue;
+import io.confluent.security.auth.store.kafka.KafkaAuthStore;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.Node;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.utils.Utils;
 
 public class RbacTestUtils {
 
-  public static void addRoleAssignment(KafkaAuthCache authCache, KafkaPrincipal principal, String role, String scope, RbacResource resource) {
-    authCache.onRoleAssignmentAdd(roleAssignment(principal, role, scope, resource));
+  public static void updateRoleAssignment(DefaultAuthCache authCache,
+                                    KafkaPrincipal principal,
+                                    String role,
+                                    String scope,
+                                    Set<Resource> resources) {
+    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
+    RoleAssignmentValue value = new RoleAssignmentValue(resources == null ? Collections.emptySet() : resources);
+    authCache.put(key, value);
   }
 
-  public static void deleteRoleAssignment(KafkaAuthCache authCache, KafkaPrincipal principal, String role, String scope, RbacResource resource) {
-    authCache.onRoleAssignmentDelete(roleAssignment(principal, role, scope, resource));
+  public static void deleteRoleAssignment(DefaultAuthCache authCache,
+                                    KafkaPrincipal principal,
+                                    String role,
+                                    String scope) {
+    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
+    authCache.remove(key);
   }
 
-  public static RoleAssignment roleAssignment(KafkaPrincipal principal, String role, String scope, RbacResource resource) {
-    return new RoleAssignment(
-        principal,
-        role,
-        scope,
-        resource == null ? Collections.emptySet() : Collections.singleton(resource));
+  public static void updateUser(DefaultAuthCache authCache, KafkaPrincipal user, Collection<KafkaPrincipal> groups) {
+    authCache.put(new UserKey(user), new UserValue(groups));
   }
 
-  public static void updateUserGroups(KafkaAuthCache authCache, KafkaPrincipal user, Set<KafkaPrincipal> groups) {
-    UserMetadata userMetadata = new UserMetadata(groups);
-    authCache.onUserUpdate(user, userMetadata);
+  public static void deleteUser(DefaultAuthCache authCache, KafkaPrincipal user) {
+    authCache.remove(new UserKey(user));
   }
 
-  public static KafkaAuthCache authCache(RbacProvider rbacProvider) {
-    return KafkaTestUtils.fieldValue(rbacProvider, RbacProvider.class, "authCache");
+  public static Cluster mockCluster(int numNodes) {
+    Node[] nodes = new Node[numNodes];
+    for (int i = 0; i < numNodes; i++)
+      nodes[i] = new Node(i, "host" + i, 9092);
+    Node[] replicas = numNodes == 1 ? new Node[]{nodes[0]} : new Node[]{nodes[0], nodes[1]};
+    PartitionInfo partitionInfo = new PartitionInfo(KafkaAuthStore.AUTH_TOPIC, 0,
+        nodes[0], replicas, replicas);
+    return new Cluster("cluster", Utils.mkSet(nodes),
+        Collections.singleton(partitionInfo), Collections.emptySet(), Collections.emptySet());
+  }
+
+  public static <K, V> MockConsumer<K, V> mockConsumer(Cluster cluster, int numAuthTopicPartitions) {
+    Node node = cluster.nodes().get(0);
+    List<PartitionInfo> partitionInfos = new ArrayList<>(numAuthTopicPartitions);
+    Map<TopicPartition, Long> offsets = new HashMap<>(numAuthTopicPartitions);
+
+    for (int i = 0; i < numAuthTopicPartitions; i++) {
+      partitionInfos.add(new PartitionInfo(KafkaAuthStore.AUTH_TOPIC,
+          i,
+          node,
+          new Node[]{node},
+          new Node[]{node}));
+      offsets.put(new TopicPartition(KafkaAuthStore.AUTH_TOPIC, i), 0L);
+    }
+
+    MockConsumer<K, V> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+    consumer.updatePartitions(KafkaAuthStore.AUTH_TOPIC, partitionInfos);
+    consumer.updateBeginningOffsets(offsets);
+    consumer.updateEndOffsets(offsets);
+    return consumer;
   }
 }

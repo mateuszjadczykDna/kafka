@@ -4,16 +4,14 @@ package io.confluent.kafka.security.authorizer.provider;
 
 import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.Resource;
-import java.io.Closeable;
 import java.util.Set;
-import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 /**
  * Interface used by providers of access rules used for authorization.
  * Access rules may be derived from ACLs, RBAC policies etc.
  */
-public interface AccessRuleProvider extends Configurable, Closeable {
+public interface AccessRuleProvider extends Provider {
 
   /**
    * Returns true if either the session's user principal or one of the provided group
@@ -48,10 +46,4 @@ public interface AccessRuleProvider extends Configurable, Closeable {
    * @return Boolean indicating if the provider supports DENY rules.
    */
   boolean mayDeny();
-
-  /**
-   * Returns the name of the provider.
-   * @return Provider name
-   */
-  String providerName();
 }

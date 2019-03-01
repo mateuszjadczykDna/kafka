@@ -2,6 +2,7 @@
 
 package io.confluent.kafka.security.authorizer;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePattern;
@@ -21,20 +22,29 @@ public class Resource implements Comparable<Resource> {
   private final ResourceType resourceType;
   private final PatternType patternType;
 
-  public Resource(ResourceType resourceType, String name, PatternType patternType) {
+  public Resource(String type, String name, PatternType patternType) {
+    this(new ResourceType(type), name, patternType);
+  }
+
+  public Resource(@JsonProperty("resourceType") ResourceType resourceType,
+                  @JsonProperty("name") String name,
+                  @JsonProperty("patternType") PatternType patternType) {
     this.name = name;
     this.resourceType = resourceType;
     this.patternType = patternType;
   }
 
+  @JsonProperty
   public String name() {
     return name;
   }
 
+  @JsonProperty
   public ResourceType resourceType() {
     return resourceType;
   }
 
+  @JsonProperty
   public PatternType patternType() {
     return patternType;
   }

@@ -123,6 +123,7 @@ public abstract class AbstractEndToEndAuthorizationTest {
       kafkaCluster.shutdown();
     } finally {
       SecurityTestUtils.clearSecurityConfigs();
+      KafkaTestUtils.verifyThreadCleanup();
     }
   }
 

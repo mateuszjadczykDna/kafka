@@ -26,17 +26,17 @@ public class Scope {
 
   @JsonCreator
   public Scope(@JsonProperty("name") String name) {
-    if (name == null || name.isEmpty())
-      throw new IllegalArgumentException("Scope must be non-empty");
-    if (name.startsWith(SCOPE_SEPARATOR) || name.endsWith(SCOPE_SEPARATOR))
+    String scopeName = name == null ? "" : name;
+    if (scopeName.startsWith(SCOPE_SEPARATOR) || scopeName.endsWith(SCOPE_SEPARATOR))
       throw new IllegalArgumentException("Scope elements must be non-empty");
-    this.name = name;
-    int index = name.lastIndexOf(SCOPE_SEPARATOR);
-    if (index >= 0) {
-      this.parent = new Scope(name.substring(0, index));
-    } else {
+    this.name = scopeName;
+    int index = scopeName.lastIndexOf(SCOPE_SEPARATOR);
+    if (index >= 0)
+      this.parent = new Scope(scopeName.substring(0, index));
+    else if (!scopeName.isEmpty())
+      this.parent = new Scope("");
+    else
       this.parent = null;
-    }
   }
 
   @JsonProperty
