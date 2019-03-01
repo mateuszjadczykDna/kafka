@@ -8,19 +8,20 @@ import java.io.{File, IOException}
 import java.util
 
 import com.yammer.metrics.core.{Gauge, MetricName}
+import kafka.api.ApiVersion
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server._
 import kafka.server.epoch.LeaderEpochFileCache
 import kafka.tier.TierMetadataManager
 import kafka.tier.domain.TierObjectMetadata
 import kafka.tier.state.{MemoryTierPartitionStateFactory, TierPartitionState}
-import kafka.utils.{Scheduler, Logging}
+import kafka.utils.{Logging, Scheduler}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.{KafkaStorageException, OffsetOutOfRangeException}
 import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
-import org.apache.kafka.common.record.{MemoryRecords, FileRecords}
+import org.apache.kafka.common.record.{FileRecords, MemoryRecords}
 import org.apache.kafka.common.requests.FetchResponse.AbortedTransaction
-import org.apache.kafka.common.utils.{Utils, Time}
+import org.apache.kafka.common.utils.{Time, Utils}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConverters._
@@ -447,8 +448,9 @@ class MergedLog(private[log] val localLog: Log,
 
   override def activeSegment: LogSegment = localLog.activeSegment
 
-  override def appendAsLeader(records: MemoryRecords, leaderEpoch: Int, isFromClient: Boolean): LogAppendInfo = {
-    localLog.appendAsLeader(records, leaderEpoch, isFromClient)
+  override def appendAsLeader(records: MemoryRecords, leaderEpoch: Int, isFromClient: Boolean,
+                              interBrokerProtocolVersion: ApiVersion): LogAppendInfo = {
+    localLog.appendAsLeader(records, leaderEpoch, isFromClient, interBrokerProtocolVersion)
   }
 
   def latestEpoch: Option[Int] = localLog.latestEpoch
@@ -657,10 +659,12 @@ sealed trait AbstractLog {
     *
     * @param records The records to append
     * @param isFromClient Whether or not this append is from a producer
+    * @param interBrokerProtocolVersion Inter-broker message protocol version
     * @throws KafkaStorageException If the append fails due to an I/O error.
     * @return Information about the appended messages including the first and last offset.
     */
-  def appendAsLeader(records: MemoryRecords, leaderEpoch: Int, isFromClient: Boolean = true): LogAppendInfo
+  def appendAsLeader(records: MemoryRecords, leaderEpoch: Int, isFromClient: Boolean = true,
+                     interBrokerProtocolVersion: ApiVersion = ApiVersion.latestVersion): LogAppendInfo
 
   /**
     * Append this message set to the active segment of the log without assigning offsets or Partition Leader Epochs
