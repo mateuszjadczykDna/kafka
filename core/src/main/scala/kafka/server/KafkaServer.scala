@@ -631,9 +631,6 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         if (tierTopicManager != null)
           CoreUtils.swallow(tierTopicManager.shutdown(), this)
 
-        if (tierMetadataManager != null)
-          CoreUtils.swallow(tierMetadataManager.close(), this)
-
         if (tierObjectStore.isDefined)
           CoreUtils.swallow(tierObjectStore.get.close(), this)
 
@@ -671,6 +668,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           CoreUtils.swallow(replicaManager.shutdown(), this)
         if (logManager != null)
           CoreUtils.swallow(logManager.shutdown(), this)
+
+        if (tierMetadataManager != null)
+          CoreUtils.swallow(tierMetadataManager.close(), this)
 
         if (kafkaController != null)
           CoreUtils.swallow(kafkaController.shutdown(), this)
