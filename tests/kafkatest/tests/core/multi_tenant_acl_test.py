@@ -97,7 +97,8 @@ class MultiTenantAclTest(ProduceConsumeValidateTest, KafkaPathResolverMixin):
                                        "io.confluent.kafka.multitenant.MultiTenantPrincipalBuilder"],
                                       [listener_prop("sasl_plaintext", "plain.sasl.jaas.config"),
                                        server_jaas_config],
-                                      ["super.users", "User:ANONYMOUS"]
+                                      ["super.users", "User:ANONYMOUS"],
+                                      ["confluent.max.acls.per.tenant", "10000"]
                                   ])
 
         for node in self.kafka.nodes:
