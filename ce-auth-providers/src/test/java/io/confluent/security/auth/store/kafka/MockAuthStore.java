@@ -24,10 +24,12 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -38,6 +40,8 @@ import java.util.stream.Collectors;
 import org.apache.kafka.clients.KafkaClient;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.MockClient;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.MockAdminClient;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -49,6 +53,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
+import org.apache.kafka.common.TopicPartitionInfo;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
 import org.apache.kafka.common.requests.JoinGroupResponse;
@@ -77,7 +82,11 @@ public class MockAuthStore extends KafkaAuthStore {
   private volatile long consumeDelayMs;
   private volatile MockClient coordinatorClient;
 
-  private MockAuthStore(RbacRoles roles, Time time, Scope scope, int numAuthTopicPartitions, int nodeId) {
+  public MockAuthStore(RbacRoles roles,
+                       Time time,
+                       Scope scope,
+                       int numAuthTopicPartitions,
+                       int nodeId) {
     super(roles, time, scope);
     this.nodeId = nodeId;
     this.numAuthTopicPartitions = numAuthTopicPartitions;
@@ -129,6 +138,16 @@ public class MockAuthStore extends KafkaAuthStore {
       }
     };
     return producer;
+  }
+
+  @Override
+  protected AdminClient createAdminClient(Map<String, Object> configs) {
+    MockAdminClient adminClient = new MockAdminClient(cluster.nodes(), cluster.nodeById(0));
+    List<TopicPartitionInfo> topicPartitionInfos = new ArrayList<>(numAuthTopicPartitions);
+    for (int i = 0; i < numAuthTopicPartitions; i++)
+      topicPartitionInfos.add(new TopicPartitionInfo(i, cluster.nodeById(0), cluster.nodes(), Collections.<Node>emptyList()));
+    adminClient.addTopic(true, AUTH_TOPIC, topicPartitionInfos, null);
+    return adminClient;
   }
 
   @Override

@@ -18,6 +18,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.time.Duration;
 import java.util.concurrent.CompletionStage;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.KafkaAdminClient;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -79,7 +81,8 @@ public class KafkaAuthStore implements AuthStore, ConsumerListener<AuthKey, Auth
 
   @Override
   public CompletionStage<Void> startReader() {
-    return reader.start(clientConfig.topicCreateTimeout);
+    return reader.start(() -> createAdminClient(clientConfig.writerConfigs()),
+        clientConfig.topicCreateTimeout);
   }
 
   @Override
@@ -95,11 +98,12 @@ public class KafkaAuthStore implements AuthStore, ConsumerListener<AuthKey, Auth
         AUTH_TOPIC,
         clientConfig,
         createProducer(clientConfig.writerConfigs()),
+        () -> createAdminClient(clientConfig.writerConfigs()),
         authCache,
         time);
 
     nodeManager = createNodeManager(nodeUrls, clientConfig, writer, time);
-    writer.start(reader.numPartitions(), nodeManager);
+    writer.rebalanceListener(nodeManager);
     nodeManager.start();
   }
 
@@ -158,6 +162,11 @@ public class KafkaAuthStore implements AuthStore, ConsumerListener<AuthKey, Auth
   // Visibility to override in tests
   protected Producer<AuthKey, AuthValue> createProducer(Map<String, Object> configs) {
     return new KafkaProducer<>(configs, keySerde.serializer(), valueSerde.serializer());
+  }
+
+  // Visibility to override in tests
+  protected AdminClient createAdminClient(Map<String, Object> configs) {
+    return KafkaAdminClient.create(configs);
   }
 
   // Visibility to override in tests

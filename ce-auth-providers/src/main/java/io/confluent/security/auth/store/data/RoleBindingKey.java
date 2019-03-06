@@ -8,16 +8,16 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
-public class RoleAssignmentKey extends AuthKey {
+public class RoleBindingKey extends AuthKey {
 
   private final KafkaPrincipal principal;
   private final String role;
   private final String scope;
 
   @JsonCreator
-  public RoleAssignmentKey(@JsonProperty("principal") KafkaPrincipal principal,
-                           @JsonProperty("role") String role,
-                           @JsonProperty("scope") String scope) {
+  public RoleBindingKey(@JsonProperty("principal") KafkaPrincipal principal,
+                        @JsonProperty("role") String role,
+                        @JsonProperty("scope") String scope) {
     this.principal = principal;
     this.role = role;
     this.scope = scope;
@@ -41,7 +41,7 @@ public class RoleAssignmentKey extends AuthKey {
   @JsonIgnore
   @Override
   public AuthEntryType entryType() {
-    return AuthEntryType.ROLE_ASSIGNMENT;
+    return AuthEntryType.ROLE_BINDING;
   }
 
   @Override
@@ -49,14 +49,14 @@ public class RoleAssignmentKey extends AuthKey {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof RoleAssignmentKey)) {
+    if (!(o instanceof RoleBindingKey)) {
       return false;
     }
     if (!super.equals(o)) {
       return false;
     }
 
-    RoleAssignmentKey that = (RoleAssignmentKey) o;
+    RoleBindingKey that = (RoleBindingKey) o;
     return Objects.equals(principal, that.principal) &&
         Objects.equals(role, that.role) &&
         Objects.equals(scope, that.scope);
@@ -69,7 +69,7 @@ public class RoleAssignmentKey extends AuthKey {
 
   @Override
   public String toString() {
-    return "RoleAssignmentKey{" +
+    return "RoleBindingKey{" +
         "principal=" + principal +
         ", role='" + role + '\'' +
         ", scope='" + scope + '\'' +

@@ -13,8 +13,8 @@ import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
-import io.confluent.security.auth.store.data.RoleAssignmentKey;
-import io.confluent.security.auth.store.data.RoleAssignmentValue;
+import io.confluent.security.auth.store.data.RoleBindingKey;
+import io.confluent.security.auth.store.data.RoleBindingValue;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.Scope;
 import java.util.Collections;
@@ -51,16 +51,16 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleAssignment(alice, "Super User", clusterA, null);
+    updateRoleBinding(alice, "Super User", clusterA, null);
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
 
     // Delete non-existing role
-    deleteRoleAssignment(alice, "Super User", "testOrg/clusterB");
+    deleteRoleBinding(alice, "Super User", "testOrg/clusterB");
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
 
-    deleteRoleAssignment(alice, "Super User", clusterA);
+    deleteRoleBinding(alice, "Super User", clusterA);
     assertFalse(rbacProvider.isSuperUser(alice, groups, clusterA));
   }
 
@@ -70,14 +70,14 @@ public class RbacProviderTest {
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
 
-    updateRoleAssignment(admin, "Super User", clusterA, Collections.emptySet());
+    updateRoleBinding(admin, "Super User", clusterA, Collections.emptySet());
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
 
     assertFalse(rbacProvider.isSuperUser(alice, Collections.emptySet(), clusterA));
 
-    deleteRoleAssignment(admin, "Super User", clusterA);
+    deleteRoleBinding(admin, "Super User", clusterA);
     assertFalse(rbacProvider.isSuperUser(alice, groups, clusterA));
 
   }
@@ -87,25 +87,25 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleAssignment(alice, "Cluster Admin", clusterA, Collections.emptySet());
+    updateRoleBinding(alice, "Cluster Admin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
 
-    updateRoleAssignment(alice, "Operator", clusterA, Collections.emptySet());
+    updateRoleBinding(alice, "Operator", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
-    updateRoleAssignment(alice, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleAssignment(alice, "Cluster Admin", clusterA);
+    deleteRoleBinding(alice, "Cluster Admin", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleAssignment(alice, "Operator", clusterA);
+    deleteRoleBinding(alice, "Operator", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
   }
@@ -116,38 +116,38 @@ public class RbacProviderTest {
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
 
-    updateRoleAssignment(admin, "Cluster Admin", clusterA, Collections.emptySet());
+    updateRoleBinding(admin, "Cluster Admin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
     verifyRules(accessRules(alice, Collections.emptySet(), Resource.CLUSTER));
 
-    updateRoleAssignment(admin, "Operator", clusterA, Collections.emptySet());
+    updateRoleBinding(admin, "Operator", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
-    updateRoleAssignment(admin, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(admin, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    updateRoleAssignment(alice, "Operator", clusterA, Collections.emptySet());
+    updateRoleBinding(alice, "Operator", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleAssignment(alice, "Operator", clusterA);
+    deleteRoleBinding(alice, "Operator", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleAssignment(admin, "Cluster Admin", clusterA);
+    deleteRoleBinding(admin, "Cluster Admin", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleAssignment(admin, "Operator", clusterA);
+    deleteRoleBinding(admin, "Operator", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
   }
@@ -185,23 +185,23 @@ public class RbacProviderTest {
     Set<Resource> resources = roleResource == null ?
         Collections.emptySet() : Collections.singleton(roleResource);
 
-    updateRoleAssignment(alice, "Reader", clusterA, resources);
+    updateRoleBinding(alice, "Reader", clusterA, resources);
     verifyRules(accessRules(alice, emptyGroups, Resource.CLUSTER));
     verifyRules(accessRules(alice, emptyGroups, topic), "Read", "Describe");
 
-    updateRoleAssignment(admin, "Writer", clusterA, resources);
+    updateRoleBinding(admin, "Writer", clusterA, resources);
     verifyRules(accessRules(alice, groups, topic), "Read", "Describe", "Write");
 
-    updateRoleAssignment(alice, "Writer", clusterA, resources);
+    updateRoleBinding(alice, "Writer", clusterA, resources);
     verifyRules(accessRules(alice, groups, topic), "Read", "Describe", "Write");
 
-    deleteRoleAssignment(admin, "Writer", clusterA);
+    deleteRoleBinding(admin, "Writer", clusterA);
     verifyRules(accessRules(alice, groups, topic), "Read", "Describe", "Write");
 
-    deleteRoleAssignment(alice, "Reader", clusterA);
+    deleteRoleBinding(alice, "Reader", clusterA);
     verifyRules(accessRules(alice, groups, topic), "Describe", "Write");
 
-    deleteRoleAssignment(alice, "Writer", clusterA);
+    deleteRoleBinding(alice, "Writer", clusterA);
     verifyRules(accessRules(alice, groups, topic));
   }
 
@@ -210,12 +210,12 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleAssignment(alice, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(accessRules(alice, groups, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
 
     String clusterB = "testOrg/clusterB";
-    updateRoleAssignment(alice, "Cluster Admin", clusterB, Collections.emptySet());
+    updateRoleBinding(alice, "Cluster Admin", clusterB, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic), "AlterConfigs", "DescribeConfigs");
 
@@ -228,12 +228,12 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleAssignment(alice, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic));
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, Resource.CLUSTER));
 
     String clusterB = "testOrg/clusterB";
-    updateRoleAssignment(alice, "Cluster Admin", clusterB, Collections.emptySet());
+    updateRoleBinding(alice, "Cluster Admin", clusterB, Collections.emptySet());
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, Resource.CLUSTER));
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(rbacProvider.accessRules(alice, groups, clusterB, Resource.CLUSTER), "AlterConfigs", "DescribeConfigs");
@@ -261,14 +261,14 @@ public class RbacProviderTest {
     rbacProvider.configure(configs);
   }
 
-  private void updateRoleAssignment(KafkaPrincipal principal, String role, String scope, Set<Resource> resources) {
-    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
-    RoleAssignmentValue value = new RoleAssignmentValue(resources == null ? Collections.emptySet() : resources);
+  private void updateRoleBinding(KafkaPrincipal principal, String role, String scope, Set<Resource> resources) {
+    RoleBindingKey key = new RoleBindingKey(principal, role, scope);
+    RoleBindingValue value = new RoleBindingValue(resources == null ? Collections.emptySet() : resources);
     authCache.put(key, value);
   }
 
-  private void deleteRoleAssignment(KafkaPrincipal principal, String role, String scope) {
-    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
+  private void deleteRoleBinding(KafkaPrincipal principal, String role, String scope) {
+    RoleBindingKey key = new RoleBindingKey(principal, role, scope);
     authCache.remove(key);
   }
 

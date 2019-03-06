@@ -3,7 +3,7 @@
 package io.confluent.security.auth.store.data;
 
 public enum AuthEntryType {
-  ROLE_ASSIGNMENT,
+  ROLE_BINDING,
   USER,
   STATUS
 }

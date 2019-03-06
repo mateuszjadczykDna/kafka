@@ -215,5 +215,10 @@ public class MetadataNodeManagerTest {
         this.active.set(false);
       }
     }
+
+    @Override
+    public boolean ready() {
+      return active.get();
+    }
   }
 }

@@ -26,6 +26,11 @@ public class TestGroupProvider implements GroupProvider {
   }
 
   @Override
+  public boolean usesMetadataFromThisKafkaCluster() {
+    return false;
+  }
+
+  @Override
   public String providerName() {
     return "TEST";
   }

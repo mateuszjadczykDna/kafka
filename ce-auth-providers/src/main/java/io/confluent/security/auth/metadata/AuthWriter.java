@@ -8,7 +8,7 @@ import java.util.concurrent.CompletionStage;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 /**
- * Writer interface used by Metadata Server to update role assignments. All update methods are
+ * Writer interface used by Metadata Server to update role bindings. All update methods are
  * asynchronous and the returned future completes when the update has been written to
  * log, acknowledged and has been consumed by the local reader. Update methods may block for
  * writer to be ready if a rebalance is in progress. Incremental update methods will also block
@@ -17,7 +17,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 public interface AuthWriter {
 
   /**
-   * Adds a new role assignment without any resources. If the specified role has resource-level
+   * Adds a new role binding without any resources. If the specified role has resource-level
    * scope, no access rules are added for the principal until resources are added to the role
    * using {@link #addRoleResources(KafkaPrincipal, String, String, Collection)}.
    *
@@ -26,53 +26,53 @@ public interface AuthWriter {
    * @param scope Scope at which role is assigned
    * @return a stage that is completed when update completes
    */
-  CompletionStage<Void> addRoleAssignment(KafkaPrincipal principal, String role, String scope);
+  CompletionStage<Void> addRoleBinding(KafkaPrincipal principal, String role, String scope);
 
   /**
-   * Adds resources to a role assignment. If the role is not assigned to the principal, an
-   * assignment will be added with the specified resources. If an assignment exists, the provided
+   * Adds resources to a role binding. If the role is not assigned to the principal, an
+   * binding will be added with the specified resources. If an binding exists, the provided
    * roles will be added to the list of resources. This method will block until the local cache is
-   * up-to-date and the new assignment is queued for update with the updated resources.
+   * up-to-date and the new binding is queued for update with the updated resources.
    *
    * @param principal User or group principal to which role is assigned
    * @param role Name of role
    * @param scope Scope at which role is assigned
-   * @param resources Resources to add to role assignment
+   * @param resources Resources to add to role binding
    * @return a stage that is completed when update completes
    */
   CompletionStage<Void> addRoleResources(KafkaPrincipal principal, String role, String scope, Collection<Resource> resources);
 
   /**
-   * Removes a role assignment. If the specified role has resource-level scope, role
-   * assignment is removed for all assigned resources.
+   * Removes a role binding. If the specified role has resource-level scope, role
+   * binding is removed for all assigned resources.
    *
    * @param principal User or group principal from which role is removed
    * @param role Name of role
    * @param scope Scope at which role is assigned
    * @return a stage that is completed when update completes
    */
-  CompletionStage<Void> removeRoleAssignment(KafkaPrincipal principal, String role, String scope);
+  CompletionStage<Void> removeRoleBinding(KafkaPrincipal principal, String role, String scope);
 
   /**
-   * Removes resources from an existing role assignment. This method will block until the
-   * local cache is up-to-date and a new assignment is queued with the updated resources.
+   * Removes resources from an existing role binding. This method will block until the
+   * local cache is up-to-date and a new binding is queued with the updated resources.
    *
    * @param principal User or group principal from which role is removed
    * @param role Name of role
    * @param scope Scope at which role is assigned
-   * @param resources Resources being removed for the role assignment
+   * @param resources Resources being removed for the role binding
    * @return a stage that is completed when update completes
    */
   CompletionStage<Void> removeRoleResources(KafkaPrincipal principal, String role, String scope, Collection<Resource> resources);
 
   /**
-   * Sets resources for an existing role assignment. If the role doesn't exist, a new role
+   * Sets resources for an existing role binding. If the role doesn't exist, a new role
    * is created with the provided set of resources.
    *
    * @param principal User or group principal to which role is assigned
    * @param role Name of role
    * @param scope Scope at which role is assigned
-   * @param resources Updated collection of resources for the role assignment
+   * @param resources Updated collection of resources for the role binding
    * @return a stage that is completed when update completes
    */
   CompletionStage<Void> setRoleResources(KafkaPrincipal principal, String role, String scope, Collection<Resource> resources);

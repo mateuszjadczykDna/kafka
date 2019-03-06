@@ -8,8 +8,10 @@ import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -22,6 +24,23 @@ import org.apache.kafka.common.utils.Utils;
 public class KafkaStoreConfig extends AbstractConfig {
 
   public static final String PREFIX = "confluent.metadata.";
+
+  public static final String NUM_PARTITIONS_PROP = "confluent.metadata.topic.num.partitions";
+  private static final int NUM_PARTITIONS_DEFAULT = 5;
+  private static final String NUM_PARTITIONS_DOC = "The number of partitions in the metadata topic."
+      + " This is used for creation of the topic if it doesn't exist. Partition count cannot be"
+      + " altered after the topic is created.";
+
+  public static final String REPLICATION_FACTOR_PROP = "confluent.metadata.topic.replication.factor";
+  private static final short REPLICATION_FACTOR_DEFAULT = 3;
+  private static final String REPLICATION_FACTOR_DOC = "Replication factor of the metadata topic."
+      + " This is used for creation of the topic if it doesn't exist. Replication factor cannot be"
+      + " altered after the topic is created.";
+
+  public static final String SEGMENT_BYTES_PROP = "confluent.metadata.topic.segment.bytes";
+  private static final int SEGMENT_BYTES_DEFAULT = 100 * 1024 * 1024;
+  private static final String SEGMENT_BYTES_DOC = "Segment size for the metadata topic."
+      + " This is used for creation of the topic if it doesn't exist.";
 
   public static final String TOPIC_CREATE_TIMEOUT_PROP = "confluent.metadata.topic.create.timeout.ms";
   private static final int TOPIC_CREATE_TIMEOUT_DEFAULT = 60000;
@@ -41,6 +60,12 @@ public class KafkaStoreConfig extends AbstractConfig {
     CONFIG = new ConfigDef()
         .define(BOOTSTRAP_SERVERS_PROP, Type.LIST,
             Importance.HIGH, CommonClientConfigs.BOOTSTRAP_SERVERS_DOC)
+        .define(NUM_PARTITIONS_PROP, Type.INT, NUM_PARTITIONS_DEFAULT,
+            atLeast(1), Importance.LOW, NUM_PARTITIONS_DOC)
+        .define(REPLICATION_FACTOR_PROP, Type.SHORT, REPLICATION_FACTOR_DEFAULT,
+            atLeast(1), Importance.LOW, REPLICATION_FACTOR_DOC)
+        .define(SEGMENT_BYTES_PROP, Type.INT, SEGMENT_BYTES_DEFAULT,
+            atLeast(1), Importance.LOW, SEGMENT_BYTES_DOC)
         .define(TOPIC_CREATE_TIMEOUT_PROP, Type.INT, TOPIC_CREATE_TIMEOUT_DEFAULT,
             atLeast(1), Importance.LOW, TOPIC_CREATE_TIMEOUT_DOC)
         .define(REFRESH_TIMEOUT_PROP, Type.INT, REFRESH_TIMEOUT_DEFAULT,
@@ -60,7 +85,9 @@ public class KafkaStoreConfig extends AbstractConfig {
   }
 
   public Map<String, Object> readerConfigs() {
-    Map<String, Object> configs = originalsWithPrefix(PREFIX + "reader.");
+    Map<String, Object> configs = baseConfigs();
+    configs.putAll(originalsWithPrefix(PREFIX + "reader."));
+
     configs.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     configs.put(ConsumerConfig.GROUP_ID_CONFIG, "__metadata_reader_group");
     configs.put(ConsumerConfig.CLIENT_ID_CONFIG, "__metadata_reader");
@@ -71,7 +98,8 @@ public class KafkaStoreConfig extends AbstractConfig {
   }
 
   public Map<String, Object> writerConfigs() {
-    Map<String, Object> configs = originalsWithPrefix(PREFIX + "writer.");
+    Map<String, Object> configs = baseConfigs();
+    configs.putAll(originalsWithPrefix(PREFIX + "writer."));
     configs.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     configs.put(ConsumerConfig.CLIENT_ID_CONFIG, "__metadata_writer");
 
@@ -82,7 +110,8 @@ public class KafkaStoreConfig extends AbstractConfig {
   }
 
   public Map<String, Object> coordinatorConfigs() {
-    Map<String, Object> configs = originalsWithPrefix(PREFIX + "coordinator.");
+    Map<String, Object> configs = baseConfigs();
+    configs.putAll(originalsWithPrefix(PREFIX + "coordinator."));
     configs.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     configs.put(ConsumerConfig.GROUP_ID_CONFIG, "__metadata_coordinator_group");
     configs.put(ConsumerConfig.CLIENT_ID_CONFIG, "__metadata_coordinator");
@@ -94,6 +123,26 @@ public class KafkaStoreConfig extends AbstractConfig {
     configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
     configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class);
     return configs;
+  }
+
+  // Allow inheritance of security configs for reader/writer/coordinator
+  private Map<String, Object> baseConfigs() {
+    Map<String, Object> configs = originals();
+    configs.putAll(originalsWithPrefix(PREFIX));
+    CONFIG.names().stream().filter(name -> name.startsWith(PREFIX))
+        .map(name -> name.substring(PREFIX.length()))
+        .forEach(configs::remove);
+    return configs;
+  }
+
+  public NewTopic metadataTopicCreateConfig(String topic) {
+    int numPartitions = getInt(NUM_PARTITIONS_PROP);
+    short replicationFactor = getShort(REPLICATION_FACTOR_PROP);
+    Map<String, String> configs = new HashMap<>();
+    configs.put("cleanup.policy", "compact");
+    configs.put("compression.type", "producer");
+    configs.put("segment.bytes", String.valueOf(getInt(SEGMENT_BYTES_PROP)));
+    return  new NewTopic(topic, numPartitions, replicationFactor).configs(configs);
   }
 
   @Override

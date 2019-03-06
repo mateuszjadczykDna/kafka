@@ -15,7 +15,7 @@ import io.confluent.security.auth.store.data.StatusValue;
 import io.confluent.security.auth.store.kafka.KafkaAuthStore;
 import io.confluent.security.auth.store.kafka.MockAuthStore;
 import io.confluent.security.rbac.RbacRoles;
-import io.confluent.security.rbac.RoleAssignment;
+import io.confluent.security.rbac.RoleBinding;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.rbac.UserMetadata;
 import io.confluent.security.store.MetadataStoreException;
@@ -55,79 +55,79 @@ public class DefaultAuthCacheTest {
   }
 
   @Test
-  public void testClusterRoleAssignment() throws Exception {
+  public void testClusterRoleBinding() throws Exception {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Cluster Admin", "clusterA", Collections.emptySet());
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Cluster Admin", "clusterA", Collections.emptySet());
     assertEquals(1, authCache.rbacRules(clusterA).size());
     verifyPermissions(alice, Resource.CLUSTER, "DescribeConfigs", "AlterConfigs");
-    assertEquals(Collections.singleton(new RoleAssignment(alice, "Cluster Admin", "clusterA", null)),
-        authCache.rbacRoleAssignments(clusterA));
-    assertEquals(Collections.emptySet(), authCache.rbacRoleAssignments(new Scope("clusterB")));
+    assertEquals(Collections.singleton(new RoleBinding(alice, "Cluster Admin", "clusterA", null)),
+        authCache.rbacRoleBindings(clusterA));
+    assertEquals(Collections.emptySet(), authCache.rbacRoleBindings(new Scope("clusterB")));
 
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Cluster Admin", "clusterA");
+    RbacTestUtils.deleteRoleBinding(authCache, alice, "Cluster Admin", "clusterA");
     assertTrue(authCache.rbacRules(clusterA).isEmpty());
 
     assertEquals(rbacRoles, authCache.rbacRoles());
   }
 
   @Test
-  public void testResourceRoleAssignment() throws Exception {
+  public void testResourceRoleBinding() throws Exception {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Resource topicA = new Resource("Topic", "topicA", PatternType.LITERAL);
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Reader", "clusterA", Collections.singleton(topicA));
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Reader", "clusterA", Collections.singleton(topicA));
     assertEquals(1, authCache.rbacRules(clusterA).size());
     verifyPermissions(alice, topicA, "Read", "Describe");
 
     KafkaPrincipal bob = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Bob");
     Resource topicB = new Resource("Topic", "topicB", PatternType.LITERAL);
-    RbacTestUtils.updateRoleAssignment(authCache, bob, "Writer", "clusterA", Collections.singleton(topicB));
+    RbacTestUtils.updateRoleBinding(authCache, bob, "Writer", "clusterA", Collections.singleton(topicB));
     assertEquals(2, authCache.rbacRules(clusterA).size());
     verifyPermissions(bob, topicB, "Write", "Describe");
     verifyPermissions(alice, topicA, "Read", "Describe");
     verifyPermissions(alice, topicB);
     verifyPermissions(bob, topicA);
 
-    // Delete assignment of unassigned role
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Writer", "clusterA");
+    // Delete binding of unassigned role
+    RbacTestUtils.deleteRoleBinding(authCache, alice, "Writer", "clusterA");
     assertEquals(2, authCache.rbacRules(clusterA).size());
     verifyPermissions(bob, topicB, "Write", "Describe");
     verifyPermissions(alice, topicA, "Read", "Describe");
 
-    // Delete assignment without specifying resource
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Writer", "clusterA");
+    // Delete binding without specifying resource
+    RbacTestUtils.deleteRoleBinding(authCache, alice, "Writer", "clusterA");
     assertEquals(2, authCache.rbacRules(clusterA).size());
     verifyPermissions(bob, topicB, "Write", "Describe");
     verifyPermissions(alice, topicA, "Read", "Describe");
 
     // Add new topic to existing role
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Reader", "clusterA", Utils.mkSet(topicA, topicB));
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Reader", "clusterA", Utils.mkSet(topicA, topicB));
     verifyPermissions(alice, topicA, "Read", "Describe");
     verifyPermissions(alice, topicB, "Read", "Describe");
     verifyPermissions(bob, topicB, "Write", "Describe");
 
     // Add additional role to existing topic
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Writer", "clusterA", Collections.singleton(topicB));
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Writer", "clusterA", Collections.singleton(topicB));
     verifyPermissions(alice, topicA, "Read", "Describe");
     verifyPermissions(alice, topicB, "Read", "Describe", "Write");
     verifyPermissions(bob, topicB, "Write", "Describe");
 
-    // Delete existing assignment
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Reader", "clusterA", Collections.singleton(topicA));
+    // Delete existing binding
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Reader", "clusterA", Collections.singleton(topicA));
     verifyPermissions(alice, topicB, "Write", "Describe");
     verifyPermissions(alice, topicA, "Read", "Describe");
     verifyPermissions(bob, topicB, "Write", "Describe");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Writer", "clusterA");
+    RbacTestUtils.deleteRoleBinding(authCache, alice, "Writer", "clusterA");
     verifyPermissions(alice, topicB);
     verifyPermissions(alice, topicA, "Read", "Describe");
     verifyPermissions(bob, topicB, "Write", "Describe");
 
-    RbacTestUtils.deleteRoleAssignment(authCache, bob, "Writer", "clusterA");
+    RbacTestUtils.deleteRoleBinding(authCache, bob, "Writer", "clusterA");
     assertEquals(1, authCache.rbacRules(clusterA).size());
     verifyPermissions(alice, topicA, "Read", "Describe");
     verifyPermissions(bob, topicB);
 
-    RbacTestUtils.deleteRoleAssignment(authCache, alice, "Reader", "clusterA");
+    RbacTestUtils.deleteRoleBinding(authCache, alice, "Reader", "clusterA");
     assertTrue(authCache.rbacRules(clusterA).isEmpty());
   }
 
@@ -172,18 +172,18 @@ public class DefaultAuthCacheTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> emptyGroups = Collections.emptySet();
     Resource topicA = new Resource("Topic", "topicA", PatternType.LITERAL);
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Reader", clusterA.name(), Collections.singleton(topicA));
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Reader", clusterA.name(), Collections.singleton(topicA));
     assertEquals(1, authCache.rbacRules(clusterA).size());
     verifyPermissions(clusterA, alice, topicA, "Read", "Describe");
 
     Scope clusterB = new Scope("org1/clusterB");
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Cluster Admin", clusterB.name(), Collections.emptySet());
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Cluster Admin", clusterB.name(), Collections.emptySet());
     verifyPermissions(clusterB, alice, Resource.CLUSTER, "AlterConfigs", "DescribeConfigs");
     verifyPermissions(clusterA, alice, Resource.CLUSTER);
     verifyPermissions(clusterA, alice, topicA, "Read", "Describe");
 
     Scope clusterC = new Scope("org2/clusterC");
-    RbacTestUtils.updateRoleAssignment(authCache, alice, "Writer", clusterC.name(), Collections.singleton(topicA));
+    RbacTestUtils.updateRoleBinding(authCache, alice, "Writer", clusterC.name(), Collections.singleton(topicA));
     try {
       authCache.rbacRules(clusterC, topicA, alice, emptyGroups);
       fail("Exception not thrown for unknown cluster");

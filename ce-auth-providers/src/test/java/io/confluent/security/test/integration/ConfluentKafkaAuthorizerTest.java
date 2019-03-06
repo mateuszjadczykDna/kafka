@@ -2,6 +2,7 @@
 
 package io.confluent.security.test.integration;
 
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.kafka.security.authorizer.AccessRule;
@@ -9,6 +10,8 @@ import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
+import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.test.utils.LdapTestUtils;
 import io.confluent.security.test.utils.RbacClusters;
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,6 +45,7 @@ public class ConfluentKafkaAuthorizerTest {
   private static final String APP2_TOPIC = "app2-topic";
   private static final String APP2_CONSUMER_GROUP = "app2-consumer-group";
 
+  private RbacClusters.Config rbacConfig;
   private RbacClusters rbacClusters;
 
   @Before
@@ -51,12 +55,10 @@ public class ConfluentKafkaAuthorizerTest {
         DEVELOPER1,
         RESOURCE_OWNER1
     );
-    rbacClusters = new RbacClusters(CLUSTER, "confluent", BROKER_USER, otherUsers);
-
-    rbacClusters.kafkaCluster.createTopic(APP1_TOPIC, 2, 1);
-    rbacClusters.kafkaCluster.createTopic(APP2_TOPIC, 2, 1);
-
-    initializeRoles();
+    rbacConfig = new RbacClusters.Config()
+        .authorizerScope(CLUSTER)
+        .metadataServiceScope("confluent")
+        .users(BROKER_USER, otherUsers);
   }
 
   @After
@@ -72,6 +74,10 @@ public class ConfluentKafkaAuthorizerTest {
 
   @Test
   public void testRbacWithAcls() throws Throwable {
+    rbacConfig = rbacConfig.withLdapGroups();
+    rbacClusters = new RbacClusters(rbacConfig);
+    initializeRbacClusters();
+
     // Access granted using role for user
     rbacClusters.produceConsume(RESOURCE_OWNER1, APP1_TOPIC, APP1_CONSUMER_GROUP, true);
 
@@ -96,7 +102,7 @@ public class ConfluentKafkaAuthorizerTest {
       addTopicAcls(auditors, "__audit", PatternType.PREFIXED, AclPermissionType.ALLOW);
       waitForAccess(adminClient, auditTopic, false);
 
-      rbacClusters.updateUserGroups(DEVELOPER1, auditors.getName());
+      rbacClusters.updateUserGroup(DEVELOPER1, auditors.getName());
       waitForAccess(adminClient, auditTopic, true);
 
       // Access denied using literal ACL for user
@@ -109,6 +115,27 @@ public class ConfluentKafkaAuthorizerTest {
     }
   }
 
+  @Test
+  public void testLdapServerFailure() throws Throwable {
+    rbacConfig = rbacConfig.withLdapGroups()
+        .overrideMetadataBrokerConfig(LdapAuthorizerConfig.REFRESH_INTERVAL_MS_PROP, "10")
+        .overrideMetadataBrokerConfig(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, "1000");
+    rbacClusters = new RbacClusters(rbacConfig);
+    initializeRbacClusters();
+    assertNotNull(rbacClusters.miniKdcWithLdapService);
+    rbacClusters.miniKdcWithLdapService.stopLdap();
+    rbacClusters.waitUntilAccessDenied(DEVELOPER1, APP2_TOPIC);
+    LdapTestUtils.restartLdapServer(rbacClusters.miniKdcWithLdapService);
+    rbacClusters.waitUntilAccessAllowed(DEVELOPER1, APP2_TOPIC);
+  }
+
+  private void initializeRbacClusters() throws Exception {
+    rbacClusters.kafkaCluster.createTopic(APP1_TOPIC, 2, 1);
+    rbacClusters.kafkaCluster.createTopic(APP2_TOPIC, 2, 1);
+
+    initializeRoles();
+  }
+
   private void initializeRoles() throws Exception {
     rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER1, "Resource Owner", CLUSTER,
         Utils.mkSet(new Resource("Topic", "*", PatternType.LITERAL),
@@ -118,7 +145,8 @@ public class ConfluentKafkaAuthorizerTest {
         Utils.mkSet(new Resource("Topic", "app2", PatternType.PREFIXED),
             new Resource("Group", "app2", PatternType.PREFIXED)));
 
-    rbacClusters.updateUserGroups(DEVELOPER1, DEVELOPER_GROUP);
+    rbacClusters.updateUserGroup(DEVELOPER1, DEVELOPER_GROUP);
+    rbacClusters.waitUntilAccessAllowed(RESOURCE_OWNER1, APP1_TOPIC);
     rbacClusters.waitUntilAccessAllowed(DEVELOPER1, APP2_TOPIC);
   }
 

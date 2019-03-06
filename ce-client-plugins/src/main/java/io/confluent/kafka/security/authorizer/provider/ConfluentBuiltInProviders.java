@@ -112,6 +112,11 @@ public class ConfluentBuiltInProviders {
     }
 
     @Override
+    public boolean usesMetadataFromThisKafkaCluster() {
+      return false;
+    }
+
+    @Override
     public String providerName() {
       return GroupProviders.NONE.name();
     }
@@ -130,6 +135,11 @@ public class ConfluentBuiltInProviders {
     @Override
     public String providerName() {
       return MetadataProviders.NONE.name();
+    }
+
+    @Override
+    public boolean usesMetadataFromThisKafkaCluster() {
+      return false;
     }
 
     @Override

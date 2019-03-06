@@ -12,12 +12,12 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 
-public class RoleAssignmentValue extends AuthValue {
+public class RoleBindingValue extends AuthValue {
 
   private final Set<Resource> resources;
 
   @JsonCreator
-  public RoleAssignmentValue(@JsonProperty("resources") Collection<Resource> resources) {
+  public RoleBindingValue(@JsonProperty("resources") Collection<Resource> resources) {
     this.resources = resources == null ? Collections.emptySet() : new HashSet<>(resources);
   }
 
@@ -29,7 +29,7 @@ public class RoleAssignmentValue extends AuthValue {
   @JsonIgnore
   @Override
   public AuthEntryType entryType() {
-    return AuthEntryType.ROLE_ASSIGNMENT;
+    return AuthEntryType.ROLE_BINDING;
   }
 
   @Override
@@ -37,14 +37,14 @@ public class RoleAssignmentValue extends AuthValue {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof RoleAssignmentValue)) {
+    if (!(o instanceof RoleBindingValue)) {
       return false;
     }
     if (!super.equals(o)) {
       return false;
     }
 
-    RoleAssignmentValue that = (RoleAssignmentValue) o;
+    RoleBindingValue that = (RoleBindingValue) o;
 
     return Objects.equals(resources, that.resources);
   }
@@ -56,7 +56,7 @@ public class RoleAssignmentValue extends AuthValue {
 
   @Override
   public String toString() {
-    return "RoleAssignmentValue(" +
+    return "RoleBindingValue(" +
         "resources=" + resources +
         ')';
   }

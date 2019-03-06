@@ -5,7 +5,7 @@ package io.confluent.security.auth.metadata;
 import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.security.rbac.RbacRoles;
-import io.confluent.security.rbac.RoleAssignment;
+import io.confluent.security.rbac.RoleBinding;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.rbac.UserMetadata;
 import java.util.Collection;
@@ -56,13 +56,13 @@ public interface AuthCache {
 
 
   /**
-   * Returns the role assignments at the specified scope. Note that roles assignments of
+   * Returns the role bindings at the specified scope. Note that roles bindings of
    * parent scopes are not returned. The returned collection may be empty.
    *
-   * @param scope Scope for which role assignments are requested.
+   * @param scope Scope for which role bindings are requested.
    * @return Set of roles currently assigned at the specified scope
    */
-  Set<RoleAssignment> rbacRoleAssignments(Scope scope);
+  Set<RoleBinding> rbacRoleBindings(Scope scope);
 
   /**
    * Returns metadata for the specified user principal if available or null if user is not known.

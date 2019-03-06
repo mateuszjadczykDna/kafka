@@ -23,4 +23,9 @@ public interface Writer {
    *                     current writer generation
    */
   void stopWriter(Integer generationId);
+
+  /**
+   * Returns true if this is the master writer and is ready to process requests
+   */
+  boolean ready();
 }

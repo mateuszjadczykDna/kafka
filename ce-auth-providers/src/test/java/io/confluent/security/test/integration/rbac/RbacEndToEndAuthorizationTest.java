@@ -7,6 +7,7 @@ import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import io.confluent.security.test.utils.RbacClusters;
+import io.confluent.security.test.utils.RbacClusters.Config;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -44,7 +45,11 @@ public class RbacEndToEndAuthorizationTest {
         RESOURCE_OWNER,
         OPERATOR
     );
-    rbacClusters = new RbacClusters(CLUSTER, "confluent", BROKER_USER, otherUsers);
+    Config config = new Config()
+        .authorizerScope(CLUSTER)
+        .metadataServiceScope("confluent")
+        .users(BROKER_USER, otherUsers);
+    rbacClusters = new RbacClusters(config);
 
     rbacClusters.kafkaCluster.createTopic(APP1_TOPIC, 2, 1);
     rbacClusters.kafkaCluster.createTopic(APP2_TOPIC, 2, 1);
@@ -76,7 +81,7 @@ public class RbacEndToEndAuthorizationTest {
 
   @Test
   public void testProduceConsumeWithGroupRoles() throws Throwable {
-    rbacClusters.updateUserGroups(DEVELOPER2, DEVELOPER_GROUP);
+    rbacClusters.updateUserGroup(DEVELOPER2, DEVELOPER_GROUP);
     rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", CLUSTER,
         Utils.mkSet(new Resource("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL),
             new Resource("Topic", APP1_TOPIC, PatternType.LITERAL)));

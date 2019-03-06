@@ -85,7 +85,6 @@ public class LdapAuthorizerTest {
     if (ldapAuthorizer != null) {
       ldapAuthorizer.close();
     }
-    kafkaCluster.shutdown();
     if (miniKdcWithLdapService != null) {
       miniKdcWithLdapService.shutdown();
     }

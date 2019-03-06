@@ -18,7 +18,7 @@
 package io.confluent.kafka.test.cluster;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
@@ -40,11 +40,12 @@ public class EmbeddedKafkaCluster {
   private static final int DEFAULT_BROKER_PORT = 0; // 0 results in a random port being selected
 
   private final MockTime time;
+  private final List<EmbeddedKafka> brokers;
   private EmbeddedZookeeper zookeeper;
-  private EmbeddedKafka[] brokers;
 
   public EmbeddedKafkaCluster() {
     time = new MockTime(System.currentTimeMillis(), System.nanoTime());
+    brokers = new ArrayList<>();
   }
 
   public void startZooKeeper() {
@@ -55,7 +56,6 @@ public class EmbeddedKafkaCluster {
 
   public void startBrokers(int numBrokers, Properties overrideProps) throws Exception {
     log.debug("Initiating embedded Kafka cluster startup with config {}", overrideProps);
-    brokers = new EmbeddedKafka[numBrokers];
 
     Properties brokerConfig = new Properties();
     brokerConfig.put(KafkaConfig$.MODULE$.ZkConnectProp(), zkConnect());
@@ -68,13 +68,14 @@ public class EmbeddedKafkaCluster {
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.AutoCreateTopicsEnableProp(), true);
     int brokerIdStart = Integer.parseInt(overrideProps.getOrDefault(KafkaConfig$.MODULE$.BrokerIdProp(), "0").toString());
 
-    for (int i = 0; i < brokers.length; i++) {
+    for (int i = 0; i < numBrokers; i++) {
       brokerConfig.put(KafkaConfig$.MODULE$.BrokerIdProp(), brokerIdStart + i);
       log.debug("Starting a Kafka instance on port {} ...",
           brokerConfig.get(KafkaConfig$.MODULE$.PortProp()));
-      brokers[i] = new EmbeddedKafka.Builder(time).addConfigs(brokerConfig).build();
+      EmbeddedKafka broker = new EmbeddedKafka.Builder(time).addConfigs(brokerConfig).build();
+      brokers.add(broker);
 
-      log.debug("Kafka instance started: {}", brokers[i]);
+      log.debug("Kafka instance started: {}", broker);
     }
   }
 
@@ -111,7 +112,7 @@ public class EmbeddedKafkaCluster {
    * <p>You can use this to tell Kafka producers how to connect to this cluster. </p>
    */
   public String bootstrapServers(String listener) {
-    return Arrays.asList(brokers).stream()
+    return brokers.stream()
         .map(broker -> broker.brokerConnect(listener))
         .collect(Collectors.joining(","));
   }
@@ -120,20 +121,20 @@ public class EmbeddedKafkaCluster {
    * Bootstrap server's for the external listener
    */
   public String bootstrapServers() {
-    List<String> listeners = brokers[0].listeners();
+    List<String> listeners = brokers.get(0).listeners();
     if (listeners.size() > 2) {
       throw new IllegalStateException("Listener name not specified for listeners " + listeners);
     }
     String listener = listeners.get(0);
     if (listeners.size() > 1
-        && brokers[0].kafkaServer().config().interBrokerListenerName().value().equals(listener)) {
+        && brokers.get(0).kafkaServer().config().interBrokerListenerName().value().equals(listener)) {
       listener = listeners.get(1);
     }
     return bootstrapServers(listener);
   }
 
   public void createTopic(String topic, int partitions, int replication) {
-    brokers[0].createTopic(topic, partitions, replication, new Properties());
+    brokers.get(0).createTopic(topic, partitions, replication, new Properties());
     List<TopicPartition> topicPartitions = new ArrayList<>();
     for (int partition = 0; partition < partitions; partition++) {
       topicPartitions.add(new TopicPartition(topic, partition));
@@ -166,14 +167,10 @@ public class EmbeddedKafkaCluster {
   }
 
   public List<EmbeddedKafka> kafkas() {
-      return Arrays.asList(brokers);
+      return Collections.unmodifiableList(brokers);
   }
 
   public List<KafkaServer> brokers() {
-    List<KafkaServer> servers = new ArrayList<>();
-    for (EmbeddedKafka broker : brokers) {
-      servers.add(broker.kafkaServer());
-    }
-    return servers;
+    return brokers.stream().map(EmbeddedKafka::kafkaServer).collect(Collectors.toList());
   }
 }

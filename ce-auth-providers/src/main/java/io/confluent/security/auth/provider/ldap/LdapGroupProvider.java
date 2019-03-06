@@ -50,6 +50,11 @@ public class LdapGroupProvider implements GroupProvider {
   }
 
   @Override
+  public boolean usesMetadataFromThisKafkaCluster() {
+    return false;
+  }
+
+  @Override
   public void close() {
     if (groupManager != null) {
       groupManager.close();

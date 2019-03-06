@@ -10,18 +10,16 @@ import static org.junit.Assert.assertTrue;
 import io.confluent.kafka.security.authorizer.AccessRule;
 import io.confluent.kafka.security.authorizer.Action;
 import io.confluent.kafka.security.authorizer.AuthorizeResult;
-import io.confluent.kafka.security.authorizer.Authorizer;
 import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.kafka.security.authorizer.EmbeddedAuthorizer;
 import io.confluent.kafka.security.authorizer.Operation;
 import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.security.authorizer.ResourceType;
-import io.confluent.security.auth.metadata.MetadataServerTest.TestMetadataServer.ServerState;
+import io.confluent.security.auth.metadata.MockMetadataServer.ServerState;
 import io.confluent.security.auth.provider.rbac.RbacProvider;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.test.utils.RbacTestUtils;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,8 +29,8 @@ import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.test.TestUtils;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 public class MetadataServerTest {
@@ -40,16 +38,11 @@ public class MetadataServerTest {
   private final String clusterA = "testOrg/clusterA";
   private EmbeddedAuthorizer authorizer;
   private RbacProvider metadataRbacProvider;
+  private MockMetadataServer metadataServer;
   private Resource topic = new Resource("Topic", "topicA", PatternType.LITERAL);
-
-  @Before
-  public void setUp() throws Exception {
-    TestMetadataServer.reset();
-  }
 
   @After
   public void tearDown() {
-    TestMetadataServer.reset();
     if (authorizer != null)
       authorizer.close();
   }
@@ -80,7 +73,6 @@ public class MetadataServerTest {
   }
 
   private void verifyMetadataServer(String cacheScope, String invalidScope) {
-    TestMetadataServer metadataServer = TestMetadataServer.instance;
     assertEquals(ServerState.STARTED, metadataServer.serverState);
     assertNotNull(metadataServer.authStore);
     assertNotNull(metadataServer.embeddedAuthorizer);
@@ -95,7 +87,7 @@ public class MetadataServerTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    RbacTestUtils.updateRoleAssignment(metadataAuthCache, alice, "Cluster Admin", clusterA, Collections.emptySet());
+    RbacTestUtils.updateRoleBinding(metadataAuthCache, alice, "Cluster Admin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER), "Alter", "Describe", "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
 
@@ -125,7 +117,6 @@ public class MetadataServerTest {
     configs.put("confluent.metadata.server.listeners", "http://0.0.0.0:8090");
     configs.put("confluent.metadata.server.advertised.listeners", "http://localhost:8090");
     createEmbeddedAuthorizer(configs);
-    TestMetadataServer metadataServer = TestMetadataServer.instance;
     assertEquals("some.value", metadataServer.configs.get("custom.config"));
     assertEquals("trust.jks", metadataServer.configs.get("ssl.truststore.location"));
     assertEquals("key.jks", metadataServer.configs.get("ssl.keystore.location"));
@@ -149,16 +140,6 @@ public class MetadataServerTest {
     createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, "anotherOrg"));
   }
 
-  @Test(expected = ConfigException.class)
-  public void testMissingMetadataServer() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.METADATA_SERVER_CLASS_PROP, null));
-  }
-
-  @Test(expected = ConfigException.class)
-  public void testInvalidMetadataServer() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.METADATA_SERVER_CLASS_PROP, "some.class"));
-  }
-
   private void createEmbeddedAuthorizer(Map<String, Object> configOverrides) {
     authorizer = new EmbeddedAuthorizer();
     Map<String, Object> configs = new HashMap<>();
@@ -166,12 +147,28 @@ public class MetadataServerTest {
     configs.put(ConfluentAuthorizerConfig.ACCESS_RULE_PROVIDERS_PROP, "MOCK_RBAC");
     configs.put(ConfluentAuthorizerConfig.METADATA_PROVIDER_PROP, "MOCK_RBAC");
     configs.put(MetadataServiceConfig.SCOPE_PROP, clusterA);
-    configs.put(MetadataServiceConfig.METADATA_SERVER_CLASS_PROP, TestMetadataServer.class.getName());
     configs.put(MetadataServiceConfig.METADATA_SERVER_LISTENERS_PROP, "http://localhost:8090");
+    configs.put("listeners", "PLAINTEXT://localhost:9092");
     configs.putAll(configOverrides);
     authorizer.configure(configs);
     authorizer.start();
-    assertNotNull(TestMetadataServer.instance);
+    try {
+      TestUtils.waitForCondition(() -> metadataServer(authorizer) != null,
+          "Metadata server not created");
+      this.metadataServer = metadataServer(authorizer);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private MockMetadataServer metadataServer(EmbeddedAuthorizer authorizer) {
+    assertTrue(authorizer.metadataProvider() instanceof  RbacProvider);
+    MetadataServer metadataServer = ((RbacProvider) authorizer.metadataProvider()).metadataServer();
+    if (metadataServer != null) {
+      assertTrue(metadataServer instanceof MockMetadataServer);
+      return (MockMetadataServer) metadataServer;
+    } else
+      return null;
   }
 
   private Set<AccessRule> accessRules(KafkaPrincipal userPrincipal,
@@ -185,54 +182,5 @@ public class MetadataServerTest {
     assertEquals(Utils.mkSet(expectedOps), actualOps);
   }
 
-  public static class TestMetadataServer implements MetadataServer {
-    enum ServerState {
-      CREATED,
-      CONFIGURED,
-      STARTED,
-      CLOSED
-    }
-    volatile static TestMetadataServer instance;
-    volatile ServerState serverState;
-    volatile Authorizer embeddedAuthorizer;
-    volatile AuthStore authStore;
-    volatile AuthCache authCache;
-    volatile Map<String, ?> configs;
-
-    public TestMetadataServer() {
-      if (instance != null)
-        throw new IllegalStateException("Too many metadata servers, state: " + instance.serverState);
-      this.serverState = ServerState.CREATED;
-      instance = this;
-    }
-
-    @Override
-    public void configure(Map<String, ?> configs) {
-      if (serverState != ServerState.CREATED)
-        throw new IllegalStateException("configure() invoked in invalid state: " + serverState);
-      this.configs = configs;
-      serverState = ServerState.CONFIGURED;
-    }
-
-    @Override
-    public void start(Authorizer embeddedAuthorizer, AuthStore authStore) {
-      if (serverState != ServerState.CONFIGURED)
-        throw new IllegalStateException("start() invoked in invalid state: " + serverState);
-
-      this.embeddedAuthorizer = embeddedAuthorizer;
-      this.authStore = authStore;
-      this.authCache = authStore.authCache();
-      serverState = ServerState.STARTED;
-    }
-
-    @Override
-    public void close() throws IOException {
-      serverState = ServerState.CLOSED;
-    }
-
-    static void reset() {
-      instance = null;
-    }
-  }
 }
 

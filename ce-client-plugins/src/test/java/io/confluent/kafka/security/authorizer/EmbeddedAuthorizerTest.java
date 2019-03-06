@@ -3,8 +3,12 @@
 package io.confluent.kafka.security.authorizer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
 import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -12,8 +16,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Test;
 
@@ -125,6 +134,44 @@ public class EmbeddedAuthorizerTest {
     TestAccessRuleProvider.superUsers.add(principal);
     result = authorizer.authorize(principal, "localhost", Collections.singletonList(write));
     assertEquals(Collections.singletonList(AuthorizeResult.UNKNOWN_SCOPE), result);
+  }
+
+  @Test
+  public void testFutureOrTimeout() throws Exception {
+    configureAuthorizer("TEST", "TEST");
+    CompletableFuture<Void> future1 = new CompletableFuture<>();
+    CompletableFuture<Void> future2 = authorizer.futureOrTimeout(future1, Duration.ofSeconds(60));
+
+    TestUtils.waitForCondition(() -> threadCount("authorizer") == 1, "Timeout thread not created");
+    try {
+      future2.get(5, TimeUnit.MILLISECONDS);
+      fail("Future completed before timeout or completion of stages");
+    } catch (TimeoutException e) {
+      // Expected exception
+    }
+
+    assertFalse(future1.isDone());
+    assertFalse(future2.isDone());
+    future1.complete(null);
+    assertNull(future2.get(5, TimeUnit.SECONDS));
+    TestUtils.waitForCondition(() -> threadCount("authorizer") == 0, "Timeout thread not deleted");
+
+    CompletableFuture<Void> future3 = new CompletableFuture<>();
+    CompletableFuture<Void> future4 = authorizer.futureOrTimeout(future3, Duration.ofMillis(5));
+    try {
+      future4.get();
+      fail("Future completed before timeout or completion of stages");
+    } catch (ExecutionException e) {
+      assertEquals(org.apache.kafka.common.errors.TimeoutException.class, e.getCause().getClass());
+      assertFalse(future3.isDone());
+    }
+    TestUtils.waitForCondition(() -> threadCount("authorizer") == 0, "Timeout thread not deleted");
+  }
+
+  private long threadCount(String prefix) {
+    return Thread.getAllStackTraces().keySet().stream()
+        .filter(t -> t.getName().startsWith(prefix))
+        .count();
   }
 
   private void configureAuthorizer(String accessRuleProvider, String groupProvider) {

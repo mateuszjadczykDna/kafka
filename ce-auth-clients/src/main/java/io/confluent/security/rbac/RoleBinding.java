@@ -12,10 +12,10 @@ import java.util.Objects;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 /**
- * Role assignment that assigns a role to a user or group principal at a specified scope.
- * The assignment may be scoped to specific resources by specifying a collection of resources.
+ * Role binding that assigns a role to a user or group principal at a specified scope.
+ * The binding may be scoped to specific resources by specifying a collection of resources.
  */
-public class RoleAssignment {
+public class RoleBinding {
 
   private final KafkaPrincipal principal;
   private final Collection<Resource> resources;
@@ -23,16 +23,16 @@ public class RoleAssignment {
   private final String scope;
 
   @JsonCreator
-  public RoleAssignment(@JsonProperty("principal") KafkaPrincipal principal,
-                        @JsonProperty("role") String role,
-                        @JsonProperty("scope") String scope,
-                        @JsonProperty("resources") Collection<Resource> resources) {
+  public RoleBinding(@JsonProperty("principal") KafkaPrincipal principal,
+                     @JsonProperty("role") String role,
+                     @JsonProperty("scope") String scope,
+                     @JsonProperty("resources") Collection<Resource> resources) {
     this.principal = Objects.requireNonNull(principal, "principal must not be null");
     if (role == null || role.isEmpty())
-      throw new IllegalArgumentException("Role must be non-empty for role assignment");
+      throw new IllegalArgumentException("Role must be non-empty for role binding");
     this.role = role;
     if (scope == null || scope.isEmpty())
-      throw new IllegalArgumentException("Scope must be non-empty for role assignment");
+      throw new IllegalArgumentException("Scope must be non-empty for role binding");
     this.scope = scope;
     this.resources = resources == null ? Collections.emptySet() :
         Collections.unmodifiableSet(new HashSet<>(resources));
@@ -63,11 +63,11 @@ public class RoleAssignment {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof RoleAssignment)) {
+    if (!(o instanceof RoleBinding)) {
       return false;
     }
 
-    RoleAssignment that = (RoleAssignment) o;
+    RoleBinding that = (RoleBinding) o;
     return Objects.equals(principal, that.principal) &&
         Objects.equals(role, that.role) &&
         Objects.equals(scope, that.scope) &&
@@ -81,7 +81,7 @@ public class RoleAssignment {
 
   @Override
   public String toString() {
-    return "RoleAssignment(" +
+    return "RoleBinding(" +
         "principal=" + principal +
         ", role='" + role + '\'' +
         ", scope='" + scope + '\'' +

@@ -6,22 +6,28 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import io.confluent.security.store.KeyValueStore;
 import io.confluent.security.store.MetadataStoreStatus;
 import io.confluent.security.test.utils.RbacTestUtils;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.MockAdminClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.TopicPartitionInfo;
 import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.test.TestUtils;
@@ -57,7 +63,7 @@ public class KafkaReaderTest {
   @Test
   public void testReader() throws Exception {
     createTopic();
-    reader.start(Duration.ofMillis(100));
+    startReader();
 
     verifyNewRecord(1, 1, "key1", "value1", null);
     assertEquals("value1", cache.get("key1"));
@@ -88,7 +94,7 @@ public class KafkaReaderTest {
     offsets.put(new TopicPartition(topic, 1), 10L);
     consumer.updateEndOffsets(offsets);
 
-    CompletableFuture<Void> future = reader.start(Duration.ofMillis(100)).toCompletableFuture();
+    CompletableFuture<Void> future = startReader();
     assertFalse(future.isDone());
 
     verifyNewRecord(0, 0, "STATUS-0", "INITIALIZED", null);
@@ -125,7 +131,7 @@ public class KafkaReaderTest {
     offsets.put(new TopicPartition(topic, 1), 5L);
     consumer.updateEndOffsets(offsets);
 
-    CompletableFuture<Void> future = reader.start(Duration.ofMillis(100)).toCompletableFuture();
+    CompletableFuture<Void> future = startReader();
     assertFalse(future.isDone());
 
     for (int i = 1; i < 5; i++) {
@@ -144,9 +150,41 @@ public class KafkaReaderTest {
   }
 
   @Test
+  public void testReaderDoesNotWaitForNewWriterBeforeCompletingFuture() throws Exception {
+    createTopic();
+
+    Map<TopicPartition, Long> offsets = new HashMap<>();
+    offsets.put(new TopicPartition(topic, 0), 0L);
+    offsets.put(new TopicPartition(topic, 1), 0L);
+    consumer.updateBeginningOffsets(offsets);
+
+    offsets.put(new TopicPartition(topic, 0), 5L);
+    offsets.put(new TopicPartition(topic, 1), 5L);
+    consumer.updateEndOffsets(offsets);
+
+    consumer.assign(Arrays.asList(new TopicPartition(topic, 0), new TopicPartition(topic, 1)));
+
+    for (int partition = 0; partition < 2; partition++) {
+      for (int i = 1; i < 5; i++) {
+        consumer.addRecord(new ConsumerRecord<>(topic, partition, i, "key", "value"));
+      }
+      consumer.addRecord(new ConsumerRecord<>(topic, partition, 6, "STATUS-" + partition, "INITIALIZED"));
+      consumer.addRecord(new ConsumerRecord<>(topic, partition, 7, "STATUS-" + partition, "FAILED"));
+      consumer.addRecord(new ConsumerRecord<>(topic, partition, 8, "STATUS-" + partition, "INITIALIZING"));
+    }
+    consumer.unsubscribe();
+
+    listener.verifyRecords = false;
+    CompletableFuture<Void> future = startReader();
+    future.get(5, TimeUnit.SECONDS);
+    assertTrue(future.isDone());
+    assertEquals("value", cache.get("key"));
+  }
+
+  @Test
   public void testStatus() throws Exception {
     createTopic();
-    reader.start(Duration.ofMillis(100));
+    startReader();
 
     verifyNewRecord(1, 1, "STATUS-1", MetadataStoreStatus.INITIALIZING.name(), null);
     assertEquals(MetadataStoreStatus.INITIALIZING, cache.status(1));
@@ -158,10 +196,36 @@ public class KafkaReaderTest {
     assertEquals(MetadataStoreStatus.FAILED, cache.status(1));
   }
 
-  @Test(expected = TimeoutException.class)
+  @Test
   public void testTopicCreateTimeout() throws Exception {
-    reader.start(Duration.ofMillis(100));
-    time.sleep(100);
+    CompletableFuture<Void> future = reader.start(() -> createAdminClient(null), Duration.ofSeconds(100))
+        .toCompletableFuture();
+    time.sleep(100 * 1000);
+    try {
+      future.get(10, TimeUnit.SECONDS);
+      fail("Did not timeout for topic creation");
+    } catch (ExecutionException e) {
+      assertEquals(TimeoutException.class, e.getCause().getClass());
+    }
+  }
+
+  private CompletableFuture<Void> startReader() throws Exception {
+    CompletableFuture<Void> future = reader.start(() -> createAdminClient(topic), Duration.ofMillis(100))
+        .toCompletableFuture();
+    TestUtils.waitForCondition(() -> reader.numPartitions() > 0, "Reader not initialized");
+    return future;
+  }
+
+  private AdminClient createAdminClient(String topic) {
+    MockAdminClient adminClient = new MockAdminClient(cluster.nodes(), cluster.nodeById(0));
+    if (topic != null) {
+      TopicPartitionInfo tp1 = new TopicPartitionInfo(0, cluster.nodeById(0), cluster.nodes(),
+          Collections.<Node>emptyList());
+      TopicPartitionInfo tp2 = new TopicPartitionInfo(1, cluster.nodeById(0), cluster.nodes(),
+          Collections.<Node>emptyList());
+      adminClient.addTopic(true, topic, Arrays.asList(tp1, tp2), null);
+    }
+    return adminClient;
   }
 
   private void createTopic() {
@@ -225,11 +289,14 @@ public class KafkaReaderTest {
     private Map<Integer, Long> consumedOffsets = new HashMap<>(2);
     private ConsumerRecord<String, String> expectedNewRecord;
     private String expectedOldValue;
+    private volatile boolean verifyRecords = true;
 
     @Override
     public void onConsumerRecord(ConsumerRecord<String, String> record, String oldValue) {
-      assertEquals(expectedNewRecord, record);
-      assertEquals(expectedOldValue, oldValue);
+      if (verifyRecords) {
+        assertEquals(expectedNewRecord, record);
+        assertEquals(expectedOldValue, oldValue);
+      }
       consumedOffsets.put(record.partition(), record.offset());
     }
   }

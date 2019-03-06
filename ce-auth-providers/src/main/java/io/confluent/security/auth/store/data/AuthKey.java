@@ -10,7 +10,7 @@ import java.util.Objects;
               include = JsonTypeInfo.As.PROPERTY,
               property = "_type")
 @JsonSubTypes(value = {
-    @JsonSubTypes.Type(value = RoleAssignmentKey.class, name = "RoleAssignment"),
+    @JsonSubTypes.Type(value = RoleBindingKey.class, name = "RoleBinding"),
     @JsonSubTypes.Type(value = UserKey.class, name = "User"),
     @JsonSubTypes.Type(value = StatusKey.class, name = "Status")
 })

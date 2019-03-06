@@ -17,10 +17,13 @@ public interface MetadataServer extends Configurable, Closeable {
    * can use {@link AuthStore#writer()} to update the store.
    *
    * @param embeddedAuthorizer An embedded cross-component authorizer that can be used to authorize any action
-   * @param authStore An instance of AuthStore that can be used to read current role assignments,
+   * @param authStore An instance of AuthStore that can be used to read current role bindings,
    *                 user metadata etc. from an in-memory cache that is kept up-to-date by the embedded
    *                 authorizer.
    */
   void start(Authorizer embeddedAuthorizer, AuthStore authStore);
 
+  default String providerName() {
+    return "RBAC";
+  }
 }

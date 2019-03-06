@@ -246,6 +246,8 @@ public class LdapGroupManager {
       log.info("LDAP search succeeded, resetting failed status");
     }
     failureStartMs.set(0);
+    if (listener != null)
+      listener.resetFailure();
   }
 
   private int processFailureAndGetBackoff(Throwable exception) {
@@ -267,6 +269,8 @@ public class LdapGroupManager {
     if (failureStartMs.get() == 0) {
       failureStartMs.set(time.milliseconds());
     }
+    if (listener != null && failed())
+      listener.fail("LDAP search failed with exception: " + exception);
     return retryBackoff.backoffMs(retryCount.getAndIncrement());
   }
 

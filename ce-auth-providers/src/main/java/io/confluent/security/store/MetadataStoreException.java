@@ -2,9 +2,9 @@
 
 package io.confluent.security.store;
 
-import org.apache.kafka.common.KafkaException;
+import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
 
-public class MetadataStoreException extends KafkaException {
+public class MetadataStoreException extends ProviderFailedException {
 
   private static final long serialVersionUID = 1L;
 

@@ -30,4 +30,8 @@ public interface Provider extends Configurable, Closeable {
    */
   String providerName();
 
+  /**
+   * Returns true if this provider uses metadata from a Kafka topic on this cluster.
+   */
+  boolean usesMetadataFromThisKafkaCluster();
 }

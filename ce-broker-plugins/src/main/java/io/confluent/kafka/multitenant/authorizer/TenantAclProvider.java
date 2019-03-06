@@ -111,6 +111,11 @@ public class TenantAclProvider extends AclProvider {
     return true;
   }
 
+  @Override
+  public boolean usesMetadataFromThisKafkaCluster() {
+    return false;
+  }
+
   private boolean isSuperUser(KafkaPrincipal userPrincipal) {
     return (userPrincipal instanceof MultiTenantPrincipal)
         && ((MultiTenantPrincipal) userPrincipal).tenantMetadata().isSuperUser;

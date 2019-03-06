@@ -36,6 +36,11 @@ public class SuperUserProvider implements AccessRuleProvider {
   }
 
   @Override
+  public boolean usesMetadataFromThisKafkaCluster() {
+    return false;
+  }
+
+  @Override
   public String providerName() {
     return "SUPER_USERS";
   }

@@ -5,12 +5,14 @@ package io.confluent.kafka.security.authorizer;
 import io.confluent.kafka.common.license.LicenseExpiredException;
 import io.confluent.kafka.common.license.InvalidLicenseException;
 import io.confluent.kafka.common.license.LicenseValidator;
+import io.confluent.kafka.common.utils.ThreadUtils;
 import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
 import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
 import io.confluent.kafka.security.authorizer.provider.Provider;
 import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
 import io.confluent.kafka.security.authorizer.provider.GroupProvider;
 import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -21,11 +23,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.kafka.clients.ClientUtils;
-import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.Logger;
@@ -52,6 +57,9 @@ public class EmbeddedAuthorizer implements Authorizer {
   private List<AccessRuleProvider> accessRuleProviders;
   private MetadataProvider metadataProvider;
   private boolean allowEveryoneIfNoAcl;
+  private Set<KafkaPrincipal> superUsers;
+  private Duration initTimeout;
+  private boolean usesMetadataFromThisKafkaCluster;
   private String scope;
 
   static {
@@ -71,12 +79,14 @@ public class EmbeddedAuthorizer implements Authorizer {
   public EmbeddedAuthorizer(Time time) {
     this.time = time;
     this.providersCreated = new HashSet<>();
+    this.superUsers = Collections.emptySet();
   }
 
   @Override
   public void configure(Map<String, ?> configs) {
     ConfluentAuthorizerConfig authorizerConfig = new ConfluentAuthorizerConfig(configs);
     allowEveryoneIfNoAcl = authorizerConfig.allowEveryoneIfNoAcl;
+    superUsers = authorizerConfig.superUsers;
     scope = authorizerConfig.scope;
 
     licenseValidator = licenseValidator();
@@ -93,6 +103,14 @@ public class EmbeddedAuthorizer implements Authorizer {
     configureProviders(providers.accessRuleProviders,
         providers.groupProvider,
         providers.metadataProvider);
+
+    initTimeout = authorizerConfig.initTimeout;
+    if (groupProvider != null && groupProvider.usesMetadataFromThisKafkaCluster())
+      usesMetadataFromThisKafkaCluster = true;
+    else if (accessRuleProviders.stream().anyMatch(AccessRuleProvider::usesMetadataFromThisKafkaCluster))
+      usesMetadataFromThisKafkaCluster = true;
+    else
+      usesMetadataFromThisKafkaCluster = metadataProvider != null && metadataProvider.usesMetadataFromThisKafkaCluster();
   }
 
   @Override
@@ -102,10 +120,12 @@ public class EmbeddedAuthorizer implements Authorizer {
         .collect(Collectors.toList());
   }
 
+  // Visibility for testing
   public GroupProvider groupProvider() {
     return groupProvider;
   }
 
+  // Visibility for testing
   public AccessRuleProvider accessRuleProvider(String providerName) {
     Optional<AccessRuleProvider> provider = accessRuleProviders.stream()
         .filter(p -> p.providerName().equals(providerName))
@@ -114,6 +134,11 @@ public class EmbeddedAuthorizer implements Authorizer {
       return provider.get();
     else
       throw new IllegalArgumentException("Access rule provider not found: " + providerName);
+  }
+
+  // Visibility for testing
+  public MetadataProvider metadataProvider() {
+    return metadataProvider;
   }
 
   public CompletableFuture<Void> start() {
@@ -126,7 +151,18 @@ public class EmbeddedAuthorizer implements Authorizer {
     List<CompletableFuture<Void>> futures = providers.stream()
         .map(Provider::start).map(CompletionStage::toCompletableFuture)
         .collect(Collectors.toList());
-    return CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
+    CompletableFuture<Void> readyFuture =
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
+    CompletableFuture<Void> future = futureOrTimeout(readyFuture, initTimeout);
+
+    // For clusters that are not hosting the metadata topic, we can safely wait for the
+    // future to complete before any listeners are started. For brokers on the cluster
+    // hosting the metadata topic, we will wait later after starting the inter-broker
+    // listener, to enable metadata to be loaded into cache prior to accepting connections
+    // on other listeners.
+    if (!usesMetadataFromThisKafkaCluster)
+      future.join();
+    return future;
   }
 
   protected List<AccessRuleProvider> accessRuleProviders() {
@@ -147,8 +183,22 @@ public class EmbeddedAuthorizer implements Authorizer {
       if (licenseValidator != null)
         licenseValidator.verifyLicense(false);
 
-      Set<KafkaPrincipal> groupPrincipals = groupProvider.groups(sessionPrincipal);
-      boolean authorized = authorize(sessionPrincipal, groupPrincipals, host, action);
+      boolean authorized;
+      KafkaPrincipal userPrincipal = userPrincipal(sessionPrincipal);
+      if (superUsers.contains(userPrincipal)) {
+        log.debug("principal = {} is a super user, allowing operation without checking any providers.", userPrincipal);
+        authorized = true;
+      } else {
+        Set<KafkaPrincipal> groupPrincipals = groupProvider.groups(sessionPrincipal);
+        Optional<KafkaPrincipal> superGroup = groupPrincipals.stream().filter(superUsers::contains).findFirst();
+        if (superGroup.isPresent()) {
+          log.debug("principal = {} belongs to super group {}, allowing operation without checking acls.",
+              userPrincipal, superGroup.get());
+          authorized = true;
+        } else {
+          authorized = authorize(sessionPrincipal, groupPrincipals, host, action);
+        }
+      }
       logAuditMessage(sessionPrincipal, authorized, action.operation(), action.resource(), host);
       return authorized ? AuthorizeResult.ALLOWED : AuthorizeResult.DENIED;
 
@@ -203,8 +253,9 @@ public class EmbeddedAuthorizer implements Authorizer {
         ClientUtils.closeQuietly(provider, provider.providerName(), firstException));
     ClientUtils.closeQuietly(licenseValidator, "licenseValidator", firstException);
     Throwable exception = firstException.getAndSet(null);
+    // We don't want to prevent clean broker shutdown if providers are not gracefully closed.
     if (exception != null)
-      throw new KafkaException("Failed to close authorizer cleanly", exception);
+      log.error("Failed to close authorizer cleanly", exception);
   }
 
   protected String scope() {
@@ -252,6 +303,12 @@ public class EmbeddedAuthorizer implements Authorizer {
     }
   }
 
+  private KafkaPrincipal userPrincipal(KafkaPrincipal sessionPrincipal) {
+    return sessionPrincipal.getClass() != KafkaPrincipal.class
+        ? new KafkaPrincipal(sessionPrincipal.getPrincipalType(), sessionPrincipal.getName())
+        : sessionPrincipal;
+  }
+
   /**
    * Log using the same format as SimpleAclAuthorizer:
    * <pre>
@@ -297,6 +354,23 @@ public class EmbeddedAuthorizer implements Authorizer {
               + " user-principal based authorization using 'kafka.security.auth.SimpleAclAuthorizer'"
               + " without a license.", this.getClass().getName()), e);
     }
+  }
+
+  // Visibility for testing
+  CompletableFuture<Void> futureOrTimeout(CompletableFuture<Void> readyFuture, Duration timeout) {
+    if (readyFuture.isDone())
+      return readyFuture;
+    CompletableFuture<Void> timeoutFuture = new CompletableFuture<>();
+    ScheduledExecutorService executor =
+        Executors.newSingleThreadScheduledExecutor(ThreadUtils.createThreadFactory("authorizer-%d", true));
+    executor.schedule(() -> {
+      TimeoutException e = new TimeoutException("Authorizer did not start up within timeout " +
+          timeout.toMillis() + " ms.");
+      timeoutFuture.completeExceptionally(e);
+    }, timeout.toMillis(), TimeUnit.MILLISECONDS);
+    return CompletableFuture.anyOf(readyFuture, timeoutFuture)
+        .thenApply(unused -> (Void) null)
+        .whenComplete((unused, e) -> executor.shutdownNow());
   }
 
   private static class DummyLicenseValidator implements LicenseValidator {

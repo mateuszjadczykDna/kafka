@@ -13,12 +13,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import kafka.network.RequestChannel;
 import kafka.network.RequestChannel.Session;
 import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
+import kafka.security.auth.AuthorizerWithKafkaStore;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
 import org.apache.kafka.common.config.ConfigException;
@@ -29,13 +30,13 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 
 
-public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements Authorizer {
+public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements AuthorizerWithKafkaStore {
 
   private static final Set<String> UNSCOPED_PROVIDERS =
       Utils.mkSet(AccessRuleProviders.ACL.name(), AccessRuleProviders.MULTI_TENANT.name());
 
   private Authorizer aclAuthorizer;
-  private volatile Future<Void> readyFuture;
+  private volatile CompletableFuture<Void> readyFuture;
 
   public ConfluentKafkaAuthorizer() {
     this(Time.SYSTEM);
@@ -123,7 +124,8 @@ public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer implements Auth
     super.close();
   }
 
-  public Future<Void> readyFuture() {
+  @Override
+  public CompletableFuture<Void> readyFuture() {
     return readyFuture;
   }
 

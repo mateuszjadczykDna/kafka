@@ -12,19 +12,19 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class RbacAssignmentTest {
+public class RoleBindingTest {
 
   @Test
   public void testAssignment() throws Exception {
-    RoleAssignment alice = roleAssignment(
+    RoleBinding alice = roleBinding(
         "{ \"principal\": \"User:Alice\", \"role\": \"Cluster Admin\", \"scope\": \"ClusterA\" }");
     assertEquals(new KafkaPrincipal("User", "Alice"), alice.principal());
     assertEquals("Cluster Admin", alice.role());
     assertEquals("ClusterA", alice.scope());
     assertTrue(alice.resources().isEmpty());
-    verifyEquals(alice, roleAssignment(JsonMapper.objectMapper().writeValueAsString(alice)));
+    verifyEquals(alice, roleBinding(JsonMapper.objectMapper().writeValueAsString(alice)));
 
-    RoleAssignment bob = roleAssignment(
+    RoleBinding bob = roleBinding(
         "{ \"principal\": \"User:Bob\", \"role\": \"Developer\", \"scope\": \"ClusterB\", " +
             "\"resources\" : [ {\"resourceType\": \"Topic\", \"patternType\": \"PREFIXED\", \"name\": \"Finance\"}," +
             "{\"resourceType\": \"Group\", \"patternType\": \"LITERAL\", \"name\": \"*\"}," +
@@ -34,14 +34,14 @@ public class RbacAssignmentTest {
     assertEquals("ClusterB", bob.scope());
     Collection<Resource> resources = bob.resources();
     assertEquals(3, resources.size());
-    verifyEquals(bob, roleAssignment(JsonMapper.objectMapper().writeValueAsString(bob)));
+    verifyEquals(bob, roleBinding(JsonMapper.objectMapper().writeValueAsString(bob)));
   }
 
-  private RoleAssignment roleAssignment(String json) {
-    return JsonTestUtils.jsonObject(RoleAssignment.class, json);
+  private RoleBinding roleBinding(String json) {
+    return JsonTestUtils.jsonObject(RoleBinding.class, json);
   }
 
-  private void verifyEquals(RoleAssignment assignment1, RoleAssignment assignment2) {
+  private void verifyEquals(RoleBinding assignment1, RoleBinding assignment2) {
     assertEquals(assignment1.principal(), assignment2.principal());
     assertEquals(assignment1.role(), assignment2.role());
     assertEquals(assignment1.scope(), assignment2.scope());

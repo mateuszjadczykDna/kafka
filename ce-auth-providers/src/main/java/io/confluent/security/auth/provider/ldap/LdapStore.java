@@ -9,11 +9,12 @@ import io.confluent.security.auth.store.external.ExternalStore;
 import io.confluent.security.auth.store.external.ExternalStoreListener;
 import io.confluent.security.auth.store.kafka.KafkaAuthWriter;
 import io.confluent.security.rbac.UserMetadata;
+import io.confluent.security.store.MetadataStoreStatus;
 import java.util.Map;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Time;
 
-public class LdapStore implements ExternalStore<UserKey, UserValue> {
+public class LdapStore implements ExternalStore {
 
   private final Time time;
   private final UserStoreListener listener;
@@ -46,13 +47,19 @@ public class LdapStore implements ExternalStore<UserKey, UserValue> {
     listener.generationId = -1;
   }
 
+  @Override
+  public boolean failed() {
+    LdapGroupManager manager = ldapGroupManager;
+    return manager != null && manager.failed();
+  }
+
   private static class UserStoreListener implements ExternalStoreListener<UserKey, UserValue> {
 
     private final AuthCache authCache;
     private final KafkaAuthWriter writer;
     private volatile int generationId;
 
-    public UserStoreListener(AuthCache authCache, KafkaAuthWriter writer) {
+    UserStoreListener(AuthCache authCache, KafkaAuthWriter writer) {
       this.authCache = authCache;
       this.writer = writer;
     }
@@ -76,12 +83,22 @@ public class LdapStore implements ExternalStore<UserKey, UserValue> {
 
     @Override
     public void update(UserKey key, UserValue value) {
-      writer.write(key, value, generationId);
+      writer.writeExternalEntry(key, value, generationId);
     }
 
     @Override
     public void delete(UserKey key) {
-      writer.write(key, null, generationId);
+      writer.writeExternalEntry(key, null, generationId);
+    }
+
+    @Override
+    public void fail(String errorMessage) {
+      writer.writeExternalStatus(MetadataStoreStatus.FAILED, errorMessage, generationId);
+    }
+
+    @Override
+    public void resetFailure() {
+      writer.writeExternalStatus(MetadataStoreStatus.INITIALIZED, null, generationId);
     }
   }
 }

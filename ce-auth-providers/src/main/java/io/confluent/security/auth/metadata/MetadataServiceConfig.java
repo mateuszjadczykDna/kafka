@@ -9,7 +9,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,11 +29,6 @@ public class MetadataServiceConfig extends AbstractConfig {
   private static final String SCOPE_DOC = "The root scope of the metadata server."
       + " By default, metadata from all scopes will be processed by this server";
 
-  public static final String METADATA_SERVER_CLASS_PROP = "confluent.metadata.server.class";
-  private static final String METADATA_SERVER_CLASS_DOC = "The fully qualified name of a class that implements"
-      + " the " + MetadataServer.class + " interface. Additional configs for the metadata service may be"
-      + " provided with the prefix '" + METADATA_SERVER_PREFIX + "'.";
-
   public static final String METADATA_SERVER_LISTENERS_PROP = "confluent.metadata.server.listeners";
   private static final String METADATA_SERVER_LISTENERS_DOC = "Comma-separated list of listener URLs"
       + " for metadata server to listener on if this broker hosts an embedded metadata server plugin."
@@ -52,8 +46,6 @@ public class MetadataServiceConfig extends AbstractConfig {
 
   static {
     CONFIG = new ConfigDef()
-        .define(METADATA_SERVER_CLASS_PROP, Type.CLASS,
-            Importance.HIGH, METADATA_SERVER_CLASS_DOC)
         .define(METADATA_SERVER_LISTENERS_PROP, Type.LIST,
             Importance.HIGH, METADATA_SERVER_LISTENERS_DOC)
         .define(METADATA_SERVER_ADVERTISED_LISTENERS_PROP, Type.LIST, METADATA_SERVER_ADVERTISED_LISTENERS_DEFAULT,
@@ -64,7 +56,6 @@ public class MetadataServiceConfig extends AbstractConfig {
 
   public final Scope scope;
   public final Collection<URL> metadataServerUrls;
-  private final Class<MetadataServer> metadataServerClass;
 
   @SuppressWarnings("unchecked")
   public MetadataServiceConfig(Map<?, ?> props) {
@@ -74,10 +65,6 @@ public class MetadataServiceConfig extends AbstractConfig {
     } catch (Exception e) {
       throw new ConfigException("Invalid scope for metadata server", e);
     }
-
-    metadataServerClass = (Class<MetadataServer>) getClass(METADATA_SERVER_CLASS_PROP);
-    if (metadataServerClass == null)
-      throw new ConfigException("Metadata server class not provided");
 
     Map<String, URL> listeners = urls(getList(METADATA_SERVER_LISTENERS_PROP));
     Map<String, URL> advertisedListeners;
@@ -95,13 +82,10 @@ public class MetadataServiceConfig extends AbstractConfig {
     }
   }
 
-  public MetadataServer metadataServer() {
-    return getConfiguredInstances(Collections.singletonList(metadataServerClass.getName()),
-        MetadataServer.class, metadataServerConfigs()).get(0);
-  }
-
   public Map<String, Object> metadataServerConfigs() {
-    return originalsWithPrefix(METADATA_SERVER_PREFIX);
+    Map<String, Object> configs = originals();
+    configs.putAll(originalsWithPrefix(METADATA_SERVER_PREFIX));
+    return configs;
   }
 
   @Override

@@ -57,7 +57,7 @@ public class UserValue extends AuthValue {
   @Override
   public String toString() {
     return "UserValue(" +
-        ", groups=" + groups +
+        "groups=" + groups +
         ')';
   }
 }

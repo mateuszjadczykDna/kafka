@@ -198,9 +198,9 @@ public class KafkaTestUtils {
     }
   }
 
-  public static boolean canAccess(KafkaProducer<String, String> producer, String topic) {
+  public static boolean canAccess(AdminClient adminClient, String topic) {
     try {
-      return producer.partitionsFor(topic).size() > 0;
+      return adminClient.describeTopics(Collections.singleton(topic)).all().get().containsKey(topic);
     } catch (Exception e) {
       return false;
     }

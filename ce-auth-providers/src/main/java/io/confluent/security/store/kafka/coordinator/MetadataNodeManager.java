@@ -125,6 +125,7 @@ public class MetadataNodeManager extends Thread implements MetadataServiceRebala
   @Override
   public void run() {
     try {
+      log.debug("Starting metadata node coordinator");
       while (isAlive.get()) {
         coordinator.poll(Duration.ofMillis(Long.MAX_VALUE));
       }

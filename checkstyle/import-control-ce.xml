@@ -101,6 +101,10 @@
       <allow pkg="org.apache.kafka.test" />
     </subpackage>
 
+    <subpackage name="security">
+      <allow pkg="org.apache.kafka.test" />
+    </subpackage>
+
     <subpackage name="test">
       <allow pkg="org.apache.kafka.test" />
     </subpackage>

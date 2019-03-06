@@ -2,6 +2,8 @@
 
 package io.confluent.kafka.security.authorizer;
 
+import static org.apache.kafka.common.config.ConfigDef.Range.atLeast;
+
 import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders;
 import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.MetadataProviders;
@@ -13,18 +15,24 @@ import io.confluent.kafka.security.authorizer.provider.Provider;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.common.utils.Utils;
 
 public class ConfluentAuthorizerConfig extends AbstractConfig {
@@ -56,6 +64,13 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
       + " Supported providers are " + ConfluentBuiltInProviders.builtInMetadataProviders()
       + ". Metadata servers are disabled by default. Note that the metadata server started by this provider"
       + " enables authorization in other components, but is not used for authorization within this broker.";
+
+  public static final String INIT_TIMEOUT_PROP = "confluent.authorizer.init.timeout.ms";
+  private static final int INIT_TIMEOUT_DEFAULT = 600000;
+  private static final String INIT_TIMEOUT_DOC = "The number of milliseconds to wait for"
+      + " authorizer to start up and initialize any metadata from Kafka topics. On brokers of"
+      + " the cluster hosting metadata topics, inter-broker listeners will be started prior"
+      + " to initialization of authorizer metadata from Kafka topics.";
 
   public static final String LICENSE_PROP = "confluent.license";
   private static final String LICENSE_DEFAULT = "";
@@ -89,10 +104,14 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
         .define(METADATA_PROVIDER_PROP, Type.STRING, METADATA_PROVIDER_DEFAULT,
             Importance.MEDIUM, METATDATA_PROVIDER_DOC)
         .define(LICENSE_PROP, Type.STRING, LICENSE_DEFAULT,
-            Importance.HIGH, LICENSE_DOC);
+            Importance.HIGH, LICENSE_DOC)
+        .define(INIT_TIMEOUT_PROP, Type.INT, INIT_TIMEOUT_DEFAULT,
+            atLeast(0), Importance.LOW, INIT_TIMEOUT_DOC);
   }
   public final boolean allowEveryoneIfNoAcl;
   public final String scope;
+  public Set<KafkaPrincipal> superUsers;
+  public final Duration initTimeout;
 
   public ConfluentAuthorizerConfig(Map<?, ?> props) {
     super(CONFIG, props);
@@ -102,6 +121,18 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
     if (getList(ACCESS_RULE_PROVIDERS_PROP).isEmpty())
       throw new ConfigException("No access rule providers specified");
+
+    String su = getString(ConfluentAuthorizerConfig.SUPER_USERS_PROP);
+    if (su != null && !su.trim().isEmpty()) {
+      String[] users = su.split(";");
+      superUsers = Arrays.stream(users)
+          .map(user -> SecurityUtils.parseKafkaPrincipal(user.trim()))
+          .collect(Collectors.toSet());
+    } else {
+      superUsers = Collections.emptySet();
+    }
+
+    initTimeout = Duration.ofMillis(getInt(INIT_TIMEOUT_PROP));
   }
 
   public final Providers createProviders() {

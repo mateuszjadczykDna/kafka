@@ -53,6 +53,11 @@ public class TestAccessRuleProvider implements AccessRuleProvider {
   }
 
   @Override
+  public boolean usesMetadataFromThisKafkaCluster() {
+    return false;
+  }
+
+  @Override
   public String providerName() {
     return "TEST";
   }

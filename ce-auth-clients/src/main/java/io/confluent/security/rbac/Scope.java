@@ -7,15 +7,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 
 /**
- * Hierarchical scopes for role assignments. This is used to scope roles assignments to
+ * Hierarchical scopes for role bindings. This is used to scope roles bindings to
  * individual clusters or other levels of scope. It is also used to limit the data cached
  * in embedded authorizers.
  *
  * For example, with a two level scope consisting of root scope "myorg" and clusters
  * "myorg/clusterA" and "myorg/clusterB", roles may be assigned at cluster level for
  * "myorg/clusterA" and "myorg/clusterB". Authorization service providing metadata for
- * all clusters will use the root scope "myorg" to process role assignments of both clusters,
- * while a broker belonging to "myorg/clusterA" only uses role assignments of clusterA.
+ * all clusters will use the root scope "myorg" to process role bindings of both clusters,
+ * while a broker belonging to "myorg/clusterA" only uses role bindings of clusterA.
  */
 public class Scope {
 

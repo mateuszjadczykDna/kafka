@@ -28,7 +28,7 @@ public class MockRbacProvider extends RbacProvider implements MetadataProvider {
     return new MockAuthStore(RbacRoles.loadDefaultPolicy(), scope);
   }
 
-  static class MockAuthStore implements AuthStore {
+  public static class MockAuthStore implements AuthStore {
 
     private final Scope scope;
     private final Collection<URL> activeNodes;

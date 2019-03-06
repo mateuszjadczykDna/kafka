@@ -109,19 +109,20 @@ public class KafkaPartitionWriter<K, V> {
     });
   }
 
-  public void onInitializationComplete(final int generationId, K statusKey, V statusValue) {
+  public void writeStatus(int generationId, K statusKey, V statusValue, MetadataStoreStatus status) {
+    log.debug("writeStatus generation {} status {}", generationId, statusValue);
     synchronized (this) {
       if (this.generationId != generationId)
         return;
     }
-
     ProducerRecord<K, V> record = new ProducerRecord<>(topicPartition.topic(),
         topicPartition.partition(), statusKey, statusValue);
     producer.send(record, (metadata, exception) -> {
       if (exception != null) {
+        log.error("Error could not be added to auth topic", exception);
         rebalanceListener.onWriterResigned(generationId);
       } else {
-        onStatusRecordWriteCompletion(generationId, MetadataStoreStatus.INITIALIZED, metadata.offset());
+        onStatusRecordWriteCompletion(generationId, status, metadata.offset());
       }
     });
   }
@@ -152,7 +153,7 @@ public class KafkaPartitionWriter<K, V> {
    * @return future that completes when the record is written to the partition and consumed
    *         by the local reader
    */
-  public CompletionStage<Void> write(K key, V value, Integer expectedGenerationId) {
+  public CompletionStage<Void> write(K key, V value, Integer expectedGenerationId, boolean waitForInitialization) {
     PendingWrite pendingWrite;
     synchronized (this) {
       if (expectedGenerationId != null && this.generationId != expectedGenerationId) {
@@ -160,7 +161,7 @@ public class KafkaPartitionWriter<K, V> {
       }
 
       pendingWrite = new PendingWrite(generationId, key);
-      boolean canAdd = waitUntil(unused -> status == MetadataStoreStatus.INITIALIZED &&
+      boolean canAdd = waitUntil(unused -> (!waitForInitialization || status == MetadataStoreStatus.INITIALIZED) &&
           pendingWrites.offer(pendingWrite), true);
       if (!canAdd)
         throw new TimeoutException("Failed to write record within timeout");
@@ -174,7 +175,6 @@ public class KafkaPartitionWriter<K, V> {
       onRecordWriteFailure(pendingWrite, e);
     }
     return pendingWrite.future;
-
   }
 
   /**
@@ -219,15 +219,8 @@ public class KafkaPartitionWriter<K, V> {
       maybeCancelPendingWrites(newGenerationId);
 
       if (newGenerationId == this.generationId) {
-
-        // This is the status written by the current writer. If not a duplicate, verify that there
-        // are no pending writes since records are appended only after generation status entry is consumed.
-        if (this.status != MetadataStoreStatus.INITIALIZED && !pendingWrites.isEmpty()) {
-          throw new IllegalStateException("Pending writes should be added only after writer is ready, status=" + this.status);
-        }
         // Set status and notify any threads waiting to write
         this.status(status);
-
       } else if (newGenerationId > this.generationId && this.generationId != NOT_MASTER_WRITER) {
 
         // Received a newer generation id than that of this writer, so it must be from another node.
@@ -236,7 +229,6 @@ public class KafkaPartitionWriter<K, V> {
         resignGenerationId = this.generationId;
         if (!pendingWrites.isEmpty())
           throw new IllegalStateException("All pending writes of older generation must have been cancelled");
-
       }
     }
     if (resignGenerationId != null)
@@ -269,7 +261,7 @@ public class KafkaPartitionWriter<K, V> {
       maybeCompletePendingWrites(lastConsumedOffset);
     }
     if (overwriteValue)
-      write(record.key(), oldValue, generationId);
+      write(record.key(), oldValue, generationId, true);
 
     if (resignGenerationId != null)
       rebalanceListener.onWriterResigned(resignGenerationId);
@@ -285,7 +277,9 @@ public class KafkaPartitionWriter<K, V> {
    * @param status Status written
    * @param offset Offset of status record
    */
-  private synchronized void onStatusRecordWriteCompletion(int generationId, MetadataStoreStatus status, long offset) {
+  private synchronized void onStatusRecordWriteCompletion(int generationId,
+                                                          MetadataStoreStatus status,
+                                                          long offset) {
     this.lastProducedOffset = offset;
     if (this.generationId == generationId) {
       log.debug("Status record of generation {} for partition {} written at offset {}",

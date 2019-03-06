@@ -4,8 +4,8 @@ package io.confluent.security.test.utils;
 
 import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
-import io.confluent.security.auth.store.data.RoleAssignmentKey;
-import io.confluent.security.auth.store.data.RoleAssignmentValue;
+import io.confluent.security.auth.store.data.RoleBindingKey;
+import io.confluent.security.auth.store.data.RoleBindingValue;
 import io.confluent.security.auth.store.data.UserKey;
 import io.confluent.security.auth.store.data.UserValue;
 import io.confluent.security.auth.store.kafka.KafkaAuthStore;
@@ -27,21 +27,21 @@ import org.apache.kafka.common.utils.Utils;
 
 public class RbacTestUtils {
 
-  public static void updateRoleAssignment(DefaultAuthCache authCache,
-                                    KafkaPrincipal principal,
-                                    String role,
-                                    String scope,
-                                    Set<Resource> resources) {
-    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
-    RoleAssignmentValue value = new RoleAssignmentValue(resources == null ? Collections.emptySet() : resources);
+  public static void updateRoleBinding(DefaultAuthCache authCache,
+                                       KafkaPrincipal principal,
+                                       String role,
+                                       String scope,
+                                       Set<Resource> resources) {
+    RoleBindingKey key = new RoleBindingKey(principal, role, scope);
+    RoleBindingValue value = new RoleBindingValue(resources == null ? Collections.emptySet() : resources);
     authCache.put(key, value);
   }
 
-  public static void deleteRoleAssignment(DefaultAuthCache authCache,
-                                    KafkaPrincipal principal,
-                                    String role,
-                                    String scope) {
-    RoleAssignmentKey key = new RoleAssignmentKey(principal, role, scope);
+  public static void deleteRoleBinding(DefaultAuthCache authCache,
+                                       KafkaPrincipal principal,
+                                       String role,
+                                       String scope) {
+    RoleBindingKey key = new RoleBindingKey(principal, role, scope);
     authCache.remove(key);
   }
 

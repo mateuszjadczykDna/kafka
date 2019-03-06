@@ -2,9 +2,11 @@
 
 package io.confluent.security.store.kafka.clients;
 
+import io.confluent.kafka.common.utils.ThreadUtils;
 import io.confluent.security.store.KeyValueStore;
 import io.confluent.security.store.MetadataStoreStatus;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,11 +18,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InterruptException;
 import org.apache.kafka.common.errors.TimeoutException;
@@ -52,42 +56,77 @@ public class KafkaReader<K, V> implements Runnable {
     this.cache = Objects.requireNonNull(cache, "cache");
     this.time = Objects.requireNonNull(time, "time");
     this.consumerListener = consumerListener;
-    this.executor = Executors.newSingleThreadExecutor();
+    this.executor = Executors.newSingleThreadExecutor(
+        ThreadUtils.createThreadFactory("auth-reader-%d", true));
     this.alive = new AtomicBoolean(true);
     this.partitionStates = new HashMap<>();
   }
 
-  public CompletionStage<Void> start(Duration topicCreateTimeout) {
+  public CompletionStage<Void> start(Supplier<AdminClient> adminClientSupplier,
+                                     Duration topicCreateTimeout) {
+    CompletableFuture<Void> readyFuture = new CompletableFuture<>();
+    executor.submit(() -> {
+      try {
+        initialize(adminClientSupplier, topicCreateTimeout);
+        List<CompletableFuture<Void>> futures = partitionStates.values().stream()
+            .map(s -> s.readyFuture).collect(Collectors.toList());
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]))
+            .whenComplete((result, exception) -> {
+              if (exception != null) {
+                log.error("Kafka reader failed to initialize partition", exception);
+                readyFuture.completeExceptionally(exception);
+              } else {
+                log.debug("Kafka reader initialized on all partitions");
+                readyFuture.complete(result);
+              }
+            });
+      } catch (Throwable e) {
+        log.error("Failed to initialize Kafka reader", e);
+        alive.set(false);
+        readyFuture.completeExceptionally(e);
+      }
+    });
+    executor.submit(this);
+
+    return readyFuture;
+  }
+
+  private void initialize(Supplier<AdminClient> adminClientSupplier,
+                          Duration topicCreateTimeout) {
     long timeoutMs = topicCreateTimeout.toMillis();
     long endTimeMs = time.milliseconds() + timeoutMs;
-    List<PartitionInfo> partitionInfos;
-    do {
-      partitionInfos = consumer.partitionsFor(topic);
-      if (partitionInfos == null) {
-        long remainingMs = endTimeMs - time.milliseconds();
-        if (remainingMs <= 0) {
-          throw new TimeoutException(String.format("Topic %s not created within timeout %s ms",
-              topic, timeoutMs));
-        } else {
-          time.sleep(Math.min(remainingMs, 10));
+    TopicDescription topicDescription = null;
+    try (AdminClient adminClient = adminClientSupplier.get()) {
+      long remainingMs = timeoutMs;
+      do {
+        try {
+          topicDescription = adminClient.describeTopics(Collections.singleton(topic))
+              .all().get(remainingMs, TimeUnit.MILLISECONDS).get(topic);
+        } catch (Exception e) {
+          log.debug("Describe failed with exception", e);
+          remainingMs = endTimeMs - time.milliseconds();
+          if (remainingMs <= 0) {
+            throw new TimeoutException(String.format("Topic %s not created within timeout %s ms",
+                topic, timeoutMs));
+          } else {
+            time.sleep(Math.min(remainingMs, 10));
+          }
         }
-      }
-    } while (partitionInfos == null);
+      } while (topicDescription == null && alive.get());
+    }
+    if (!alive.get())
+      return;
 
-    Set<TopicPartition> partitions = partitionInfos.stream()
-        .map(p -> new TopicPartition(p.topic(), p.partition()))
+    Set<TopicPartition> partitions = topicDescription.partitions().stream()
+        .map(p -> new TopicPartition(topic, p.partition()))
         .collect(Collectors.toSet());
     this.consumer.assign(partitions);
 
     consumer.seekToEnd(partitions);
-    partitions.forEach(tp -> partitionStates.put(tp, new PartitionState(consumer.position(tp) - 1)));
+    partitions
+        .forEach(tp -> partitionStates.put(tp, new PartitionState(consumer.position(tp) - 1)));
 
     consumer.seekToBeginning(partitions);
-    executor.submit(this);
-
-    List<CompletableFuture<Void>> futures = partitionStates.values().stream()
-        .map(s -> s.readyFuture).collect(Collectors.toList());
-    return CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
   }
 
   @Override
@@ -108,7 +147,8 @@ public class KafkaReader<K, V> implements Runnable {
     }
   }
 
-  public int numPartitions() {
+  // For unit tests
+  int numPartitions() {
     return partitionStates.size();
   }
 
