@@ -4,6 +4,8 @@ package io.confluent.kafka.server.plugins.policy;
 import com.google.common.collect.ImmutableMap;
 
 import java.util.Optional;
+
+import io.confluent.common.InterClusterConnection;
 import org.apache.kafka.clients.NodeApiVersions;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.AdminClientUnitTestEnv;
@@ -244,7 +246,7 @@ public class CreateTopicPolicyTest {
     Map<String, String> config = new HashMap<>();
     config.put("advertised.listeners",
                "INTERNAL://broker-1:9071,REPLICATION://broker-1:9072,EXTERNAL://broker-1");
-    String bootstrapBroker = policy.getBootstrapBrokerForListener("INTERNAL", config);
+    String bootstrapBroker = InterClusterConnection.getBootstrapBrokerForListener("INTERNAL", config);
     assertNotNull(bootstrapBroker);
     assertEquals(bootstrapBroker, "broker-1:9071");
   }
@@ -297,7 +299,7 @@ public class CreateTopicPolicyTest {
     Map<String, String> config = new HashMap<>();
     config.put("listener.security.protocol.map",
                "INTERNAL:PLAINTEXT,REPLICATION:PLAINTEXT,EXTERNAL:SASL_PLAINTEXT");
-    String securityProtocol = policy.getListenerSecurityProtocol("INTERNAL", config);
+    String securityProtocol = InterClusterConnection.getListenerSecurityProtocol("INTERNAL", config);
     assertNotNull(securityProtocol);
     assertEquals(securityProtocol, "PLAINTEXT");
   }

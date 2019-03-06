@@ -2,6 +2,9 @@
 
 package io.confluent.kafka.multitenant;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.common.config.internals.ConfluentConfigs;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.IOException;
@@ -9,28 +12,44 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Date;
 import java.util.Map;
 import java.util.stream.Stream;
 
 public class Utils {
-  static final LogicalClusterMetadata LC_META_XYZ =
+  public static final LogicalClusterMetadata LC_META_XYZ =
       new LogicalClusterMetadata("lkc-xyz", "pkc-xyz", "xyz",
           "my-account", "k8s-abc", LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
           104857600L, 1024L, 2048L,
           LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-          LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
+          LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE,
+          new LogicalClusterMetadata.LifecycleMetadata("xyz", "pkc-xyz", null, null));
   public static final LogicalClusterMetadata LC_META_ABC =
       new LogicalClusterMetadata("lkc-abc", "pkc-abc", "abc",
           "my-account", "k8s-abc", LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
           10485760L, 102400L, 204800L,
           LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-          LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
+          LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE,
+          new LogicalClusterMetadata.LifecycleMetadata("abc", "pkc-abc", null, null));
+  // Note that this cluster will be "deleted" on arrival
+  public static final LogicalClusterMetadata LC_META_DED =
+          new LogicalClusterMetadata("lkc-ded", "pkc-ded", "ded",
+          "my-account", "k8s-abc", LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
+          10485760L, 102400L, 204800L,
+          LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
+          LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE,
+          new LogicalClusterMetadata.LifecycleMetadata("ded", "pkc-ded", null, new Date()));
   public static final LogicalClusterMetadata LC_META_HEALTHCHECK =
       new LogicalClusterMetadata("lkc-htc", "pkc-xyz", "external-healthcheck-pkc-xyz", "my-account",
                                  "k8s-abc", LogicalClusterMetadata.HEALTHCHECK_LOGICAL_CLUSTER_TYPE,
-                                 null, null, null, null, null);
+                                 null, null, null, null, null, null);
 
   public static PhysicalClusterMetadata initiatePhysicalClusterMetadata(Map<String, Object> configs) throws IOException {
+    return initiatePhysicalClusterMetadata(configs, ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_DEFAULT);
+  }
+
+  public static PhysicalClusterMetadata initiatePhysicalClusterMetadata(Map<String, Object> configs, long reloadDelay) throws IOException {
+    configs.put(ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_CONFIG, reloadDelay);
     PhysicalClusterMetadata metadata = new PhysicalClusterMetadata();
     metadata.configure(configs);
 
@@ -163,6 +182,11 @@ public class Utils {
         "\"account_id\": \"" + lcMeta.accountId() + "\"," +
         "\"k8s_cluster_id\": \"" + lcMeta.k8sClusterId() + "\"," +
         "\"logical_cluster_type\": \"" + lcMeta.logicalClusterType() + "\"";
+    try {
+      json += ", \"metadata\": " + lifecycleJsonString(lcMeta);
+    } catch (JsonProcessingException e) {
+      // if we can't get the json string for the lifecycleMetadata, just skip it
+    }
     if (lcMeta.storageBytes() != null) {
       json += ", \"storage_bytes\": " + lcMeta.storageBytes();
     }
@@ -174,5 +198,11 @@ public class Utils {
     }
 
     return json;
+  }
+
+  private static String lifecycleJsonString(LogicalClusterMetadata lcMeta) throws JsonProcessingException {
+    ObjectMapper mapper = new ObjectMapper();
+
+    return mapper.writeValueAsString(lcMeta.lifecycleMetadata());
   }
 }

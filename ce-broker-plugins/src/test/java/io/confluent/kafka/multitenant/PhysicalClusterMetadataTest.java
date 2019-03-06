@@ -14,6 +14,7 @@ import org.junit.Test;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
+import static io.confluent.kafka.multitenant.Utils.LC_META_DED;
 import static io.confluent.kafka.multitenant.quota.TenantQuotaCallback.DEFAULT_MIN_PARTITIONS;
 import static io.confluent.kafka.multitenant.Utils.LC_META_ABC;
 import static io.confluent.kafka.multitenant.Utils.LC_META_XYZ;
@@ -49,8 +50,8 @@ public class PhysicalClusterMetadataTest {
 
   @Before
   public void setUp() throws Exception {
-    lcCache = new PhysicalClusterMetadata(TEST_CACHE_RELOAD_DELAY_MS);
-    lcCache.configure(tempFolder.getRoot().getCanonicalPath());
+    lcCache = new PhysicalClusterMetadata();
+    lcCache.configure(tempFolder.getRoot().getCanonicalPath(), TEST_CACHE_RELOAD_DELAY_MS);
     // but not started, so we can test different initial state of the directory
   }
 
@@ -176,7 +177,7 @@ public class PhysicalClusterMetadataTest {
         "new-name", "new-account", LC_META_XYZ.k8sClusterId(),
         LC_META_XYZ.logicalClusterType(), LC_META_XYZ.storageBytes(),
         LC_META_XYZ.producerByteRate(), LC_META_XYZ.consumerByteRate(),
-        LC_META_XYZ.requestPercentage().longValue(), LC_META_XYZ.networkQuotaOverhead()
+        LC_META_XYZ.requestPercentage().longValue(), LC_META_XYZ.networkQuotaOverhead(), null
     );
     Utils.updateLogicalClusterFile(updatedLcMeta, tempFolder);
     TestUtils.waitForCondition(
@@ -212,7 +213,7 @@ public class PhysicalClusterMetadataTest {
         "lkc-123", "pkc-123", "123", "my-account", "k8s-123",
         LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
         10485760L, 102400L, 204800L, LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-        LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
+        LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE, null);
     Utils.createLogicalClusterFile(anotherMeta, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(anotherMeta.logicalClusterId()) != null,
@@ -380,7 +381,7 @@ public class PhysicalClusterMetadataTest {
                                    LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
                                    104857600L, 1024L, null,
                                    LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-                                   LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
+                                   LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE, null);
 
     lcCache.start();
     assertTrue(lcCache.isUpToDate());
@@ -396,7 +397,7 @@ public class PhysicalClusterMetadataTest {
         "lkc-qwr", "pkc-qwr", "xyz", "my-account", "k8s-abc",
         LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE, 104857600L, 1024L, 2048L,
         LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-        LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
+        LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE, null);
     Utils.updateLogicalClusterFile(lcValidMeta, tempFolder);
     TestUtils.waitForCondition(
         () -> lcCache.metadata(lcValidMeta.logicalClusterId()) != null,
@@ -521,4 +522,28 @@ public class PhysicalClusterMetadataTest {
 
     assertTrue(lcCache.isStale());
   }
+
+  @Test
+  public void testShouldNotReturnDeletedLogicalClusters() throws IOException, InterruptedException {
+
+    lcCache.start();
+
+    // create two tenants, one is deleted
+    Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
+    Utils.createLogicalClusterFile(LC_META_DED, tempFolder);
+
+    // Wait until the cache is updated. We are checking that the non-deleted one is in the cache
+    // and the deleted one is marked as deleted
+    TestUtils.waitForCondition(
+            () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) != null &&
+                    lcCache.deletedClusters().contains(LC_META_DED.logicalClusterId()),
+            TEST_MAX_WAIT_MS,
+            "Expected new logical cluster to be added to the cache and deleted cluster to be "
+                    + "deleted.");
+
+    // Make sure we are not returning deleted tenants to authorizer
+    assertFalse(lcCache.logicalClusterIds().contains(LC_META_DED.logicalClusterId()));
+    assertFalse(lcCache.logicalClusterIdsIncludingStale().contains(LC_META_DED.logicalClusterId()));
+  }
+
 }

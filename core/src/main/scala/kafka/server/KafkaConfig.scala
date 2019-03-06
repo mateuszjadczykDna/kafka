@@ -857,6 +857,8 @@ object KafkaConfig {
   val PasswordEncoderKeyLengthDoc =  "The key length used for encoding dynamically configured passwords."
   val PasswordEncoderIterationsDoc =  "The iteration count used for encoding dynamically configured passwords."
 
+  val MultitenantMetadataReloadDelayMsDoc = "Interval (in ms) between full reloads of logical cluster metadata. Defaults to 10 minutes."
+
   private val configDef = {
     import ConfigDef.Importance._
     import ConfigDef.Range._
@@ -1114,6 +1116,8 @@ object KafkaConfig {
                       ConfluentConfigs.MULTITENANT_METADATA_CLASS_DEFAULT, LOW)
       .defineInternal(ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG, STRING,
                       ConfluentConfigs.MULTITENANT_METADATA_DIR_DEFAULT, LOW)
+      .defineInternal(ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_CONFIG, LONG,
+                      ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_DEFAULT, LOW, MultitenantMetadataReloadDelayMsDoc)
   }
 
   def configNames() = configDef.names().asScala.toList.sorted

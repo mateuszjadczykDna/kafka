@@ -768,6 +768,7 @@ class KafkaConfigTest {
         // Confluent Cloud configs
         case KafkaConfig.BrokerSessionUuidProp => // ignore string
         case ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG => // ignore string
+        case ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_CONFIG => // ignore
 
         case _ => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "-1")
       }

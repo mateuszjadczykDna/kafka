@@ -7,6 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
+
+import static io.confluent.kafka.multitenant.Utils.LC_META_ABC;
+import static io.confluent.kafka.multitenant.Utils.LC_META_DED;
+import static io.confluent.kafka.multitenant.Utils.LC_META_XYZ;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -16,19 +20,9 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Date;
 
 public class LogicalClusterMetadataTest {
-
-  private static final LogicalClusterMetadata LC_META_XYZ =
-      new LogicalClusterMetadata("lkc-xyz", "pkc-xyz", "xyz", "my-account", "k8s-abc",
-                                 LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
-                                 104857600L, 1024L, 2048L,
-                                 LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-                                 LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE);
-  private static final LogicalClusterMetadata LC_META_ABC =
-      new LogicalClusterMetadata("lkc-abc", "pkc-abc", "abc", "my-account", "k8s-abc",
-                                 LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
-                                 104857600L, 1024L, 2048L, 10L, 5);
 
   @Rule
   public TemporaryFolder tempFolder = new TemporaryFolder();
@@ -53,6 +47,29 @@ public class LogicalClusterMetadataTest {
     LogicalClusterMetadata meta = loadFromFile(metaFile);
     assertEquals(LC_META_ABC, meta);
     assertTrue(meta.isValid());
+  }
+
+  @Test
+  public void testLifeCycleMetadataOfLiveCluster() throws IOException {
+    final Path metaFile = tempFolder.newFile("lkc-xyz.json").toPath();
+    Files.write(metaFile, Utils.logicalClusterJsonString(LC_META_XYZ, true, true).getBytes());
+
+    // load metadata and verify that we have lifecycle metadata
+    LogicalClusterMetadata meta = loadFromFile(metaFile);
+    assertEquals(LC_META_XYZ, meta);
+    assertEquals(meta.lifecycleMetadata().logicalClusterName(), "xyz");
+  }
+
+  @Test
+  public void testLifeCycleMetadataOfDeadCluster() throws IOException {
+
+    final Path metaFile = tempFolder.newFile("lkc-abs.json").toPath();
+    Files.write(metaFile, Utils.logicalClusterJsonString(LC_META_DED, true, true).getBytes());
+
+    // load metadata and verify that we have lifecycle metadata
+    LogicalClusterMetadata meta = loadFromFile(metaFile);
+    assertEquals(LC_META_DED, meta);
+    assertTrue(meta.lifecycleMetadata().deletionDate().before(new Date()));
   }
 
   @Test

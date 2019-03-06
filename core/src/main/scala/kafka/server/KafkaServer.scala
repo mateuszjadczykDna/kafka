@@ -164,7 +164,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
   private var _clusterId: String = null
   private var _brokerTopicStats: BrokerTopicStats = null
 
-  private val _multitenantMetadata: MultiTenantMetadata = ConfluentConfigs.buildMultitenantMetadata(config.values)
+  val multitenantMetadata: MultiTenantMetadata = ConfluentConfigs.buildMultitenantMetadata(config.values)
 
   def clusterId: String = _clusterId
 
@@ -691,8 +691,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         if (brokerTopicStats != null)
           CoreUtils.swallow(brokerTopicStats.close(), this)
 
-        if (_multitenantMetadata != null) {
-          _multitenantMetadata.close(config.brokerSessionUuid)
+        if (multitenantMetadata != null) {
+          multitenantMetadata.close(config.brokerSessionUuid)
         }
 
         // Clear all reconfigurable instances stored in DynamicBrokerConfig

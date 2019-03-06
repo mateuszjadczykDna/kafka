@@ -54,4 +54,5 @@ public class LogicalCluster {
   public String logicalClusterId() {
     return logicalClusterId;
   }
+
 }

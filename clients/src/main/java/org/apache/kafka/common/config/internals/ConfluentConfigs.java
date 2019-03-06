@@ -23,6 +23,7 @@ import org.apache.kafka.server.interceptor.DefaultBrokerInterceptor;
 import org.apache.kafka.server.multitenant.MultiTenantMetadata;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ConfluentConfigs {
     public static final String BROKER_INTERCEPTOR_CLASS_CONFIG = "broker.interceptor.class";
@@ -31,7 +32,9 @@ public class ConfluentConfigs {
     public static final String MULTITENANT_METADATA_CLASS_DEFAULT = null;
     public static final String MULTITENANT_METADATA_DIR_CONFIG = "multitenant.metadata.dir";
     public static final String MULTITENANT_METADATA_DIR_DEFAULT = null;
-
+    public static final String MULTITENANT_METADATA_RELOAD_DELAY_MS_CONFIG = "multitenant.metadata"
+            + ".reload.delay.ms";
+    public static final Long MULTITENANT_METADATA_RELOAD_DELAY_MS_DEFAULT = TimeUnit.MINUTES.toMillis(10);
 
     public static BrokerInterceptor buildBrokerInterceptor(Mode mode, Map<String, ?> configs) {
         if (mode == Mode.CLIENT)

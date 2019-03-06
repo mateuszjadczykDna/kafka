@@ -60,10 +60,6 @@ public class PhysicalCluster {
   private final Map<String, LogicalCluster> logicalClusters;
   private final int numberOfBrokers;
 
-  public PhysicalCluster(Properties props) {
-    this(DEFAULT_NUMBER_OF_BROKERS, props);
-  }
-
   public PhysicalCluster(int brokers, Properties props) {
     kafkaCluster = new EmbeddedKafkaCluster();
     random = new Random();

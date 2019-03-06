@@ -3,9 +3,11 @@
 package io.confluent.kafka.multitenant;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.util.Date;
 import java.util.Objects;
 
 import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
@@ -37,6 +39,8 @@ public class LogicalClusterMetadata {
   private final Long consumerByteRate;
   private final Double requestPercentage;
   private final Integer networkQuotaOverhead;
+  private final LifecycleMetadata lifecycleMetadata;
+
 
   @JsonCreator
   public LogicalClusterMetadata(
@@ -50,7 +54,8 @@ public class LogicalClusterMetadata {
       @JsonProperty("network_ingress_byte_rate") Long producerByteRate,
       @JsonProperty("network_egress_byte_rate") Long consumerByteRate,
       @JsonProperty("request_percentage") Long requestPercentage,
-      @JsonProperty("network_quota_overhead") Integer networkQuotaOverhead
+      @JsonProperty("network_quota_overhead") Integer networkQuotaOverhead,
+      @JsonProperty("metadata") LifecycleMetadata lifecycleMetadata
   ) {
     this.logicalClusterId = logicalClusterId;
     this.physicalClusterId = physicalClusterId;
@@ -69,6 +74,7 @@ public class LogicalClusterMetadata {
                              DEFAULT_REQUEST_PERCENTAGE : requestPercentage;
     this.networkQuotaOverhead = networkQuotaOverhead == null ?
                                 DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE : networkQuotaOverhead;
+    this.lifecycleMetadata = lifecycleMetadata;
   }
 
   @JsonProperty
@@ -126,6 +132,11 @@ public class LogicalClusterMetadata {
     return networkQuotaOverhead;
   }
 
+  @JsonProperty
+  public LifecycleMetadata lifecycleMetadata() {
+     return lifecycleMetadata;
+  }
+
   /**
    * Returns true if metadata values are valid
    */
@@ -154,7 +165,8 @@ public class LogicalClusterMetadata {
            Objects.equals(producerByteRate, that.producerByteRate) &&
            Objects.equals(consumerByteRate, that.consumerByteRate) &&
            Objects.equals(requestPercentage, that.requestPercentage) &&
-           Objects.equals(networkQuotaOverhead, that.networkQuotaOverhead);
+           Objects.equals(networkQuotaOverhead, that.networkQuotaOverhead) &&
+           Objects.equals(lifecycleMetadata, that.lifecycleMetadata);
   }
 
   @Override
@@ -162,7 +174,7 @@ public class LogicalClusterMetadata {
     return Objects.hash(
         logicalClusterId, physicalClusterId, logicalClusterName, accountId, k8sClusterId,
         logicalClusterType, storageBytes, producerByteRate, consumerByteRate, requestPercentage,
-        networkQuotaOverhead
+        networkQuotaOverhead, lifecycleMetadata
     );
   }
 
@@ -176,6 +188,77 @@ public class LogicalClusterMetadata {
            ", producerByteRate=" + producerByteRate + ", consumerByteRate=" + consumerByteRate +
            ", requestPercentage=" + requestPercentage +
            ", networkQuotaOverhead=" + networkQuotaOverhead +
+           ", lifecycleMetadata=" + lifecycleMetadata +
            ')';
+  }
+
+  public static class LifecycleMetadata {
+
+    private final String logicalClusterName;
+    private final String physicalK8sNamespace;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    private final Date creationDate;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    private final Date deletionDate;
+
+    @JsonCreator
+    public LifecycleMetadata(
+            @JsonProperty("name") String logicalClusterName,
+            @JsonProperty("namespace") String physicalK8sNamespace,
+            @JsonProperty("creationTimestamp") Date creationDate,
+            @JsonProperty("deletionTimestamp") Date deletionDate
+    ) {
+      this.logicalClusterName = logicalClusterName;
+      this.physicalK8sNamespace = physicalK8sNamespace;
+      this.creationDate = creationDate;
+      this.deletionDate = deletionDate;
+    }
+
+    @JsonProperty
+    String logicalClusterName() {
+      return logicalClusterName;
+    }
+
+    @JsonProperty
+    String physicalK8sNamespace() {
+      return physicalK8sNamespace;
+    }
+
+    @JsonProperty
+    Date creationDate() {
+      return creationDate;
+    }
+
+    @JsonProperty
+    Date deletionDate() {
+      return deletionDate;
+    }
+
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      LifecycleMetadata that = (LifecycleMetadata) o;
+      return  Objects.equals(logicalClusterName, that.logicalClusterName) &&
+              Objects.equals(physicalK8sNamespace, that.physicalK8sNamespace) &&
+              Objects.equals(creationDate, that.creationDate) &&
+              Objects.equals(deletionDate, that.deletionDate);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(logicalClusterName, physicalK8sNamespace, creationDate, deletionDate);
+    }
+
+    @Override
+    public String toString() {
+      return "LifecycleMetadata{" +
+              "logicalClusterName='" + logicalClusterName + '\'' +
+              ", physicalK8sNamespace='" + physicalK8sNamespace + '\'' +
+              ", creationDate=" + creationDate +
+              ", deletionDate=" + deletionDate +
+              '}';
+    }
   }
 }
