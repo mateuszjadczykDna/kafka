@@ -67,11 +67,19 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     if (!TenantContext.isTenantPrefixed(reqMetadata.topic())) {
       return;
     }
-    if (reqMetadata.numPartitions() == null) {
+
+    Integer numPartitionsPassed = reqMetadata.numPartitions();
+    if (!reqMetadata.replicasAssignments().isEmpty()) {
+      numPartitionsPassed = reqMetadata.replicasAssignments().keySet().size();
+    }
+    if (numPartitionsPassed == null) {
       throw new PolicyViolationException("Must specify number of partitions.");
     }
 
     Short repFactorPassed = reqMetadata.replicationFactor();
+    if (!reqMetadata.replicasAssignments().isEmpty()) {
+      repFactorPassed = (short) reqMetadata.replicasAssignments().values().iterator().next().size();
+    }
     if (repFactorPassed != null && repFactorPassed != requiredRepFactor) {
       throw new PolicyViolationException("Topic replication factor must be " + requiredRepFactor);
     }
@@ -84,7 +92,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
       ensureValidPartitionCount(
               adminClient,
               TenantContext.extractTenantPrefix(reqMetadata.topic()),
-              reqMetadata.numPartitions()
+              numPartitionsPassed
       );
     }
   }

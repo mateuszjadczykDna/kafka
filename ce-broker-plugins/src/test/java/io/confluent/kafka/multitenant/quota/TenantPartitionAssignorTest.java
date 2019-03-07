@@ -65,6 +65,21 @@ public class TenantPartitionAssignorTest {
     verifyAssignmentsAreBalanced(0, 0, 0);
   }
 
+  @Test
+  public void testRackUnawareAssignmentOneNodeCluster() {
+    String topic = "tenant1_topicA";
+    addNodes(1, 0);
+    createTopic(topic, 5, 1);
+    List<List<Integer>> expectedAssignment = Arrays.asList(
+        Collections.singletonList(0),
+        Collections.singletonList(0),
+        Collections.singletonList(0),
+        Collections.singletonList(0),
+        Collections.singletonList(0)
+    );
+    verifyAssignment(expectedAssignment, testCluster.cluster().partitionsForTopic(topic));
+  }
+
   /**
    * Basic test of rack-aware assignment. This is the example from the javadoc.
    * Verify that we generate similar assignment if there are no other existing topics.

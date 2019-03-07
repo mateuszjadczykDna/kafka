@@ -5,6 +5,7 @@ import io.confluent.kafka.clients.multitenant.auth.oauth.OAuthBearerLoginCallbac
 import io.confluent.kafka.multitenant.PhysicalClusterMetadata;
 import io.confluent.kafka.multitenant.Utils;
 import io.confluent.kafka.multitenant.integration.cluster.PhysicalCluster;
+import io.confluent.kafka.multitenant.quota.TenantQuotaCallback;
 import io.confluent.kafka.server.plugins.auth.oauth.OAuthBearerServerLoginCallbackHandler;
 import io.confluent.kafka.server.plugins.auth.oauth.OAuthBearerValidatorCallbackHandler;
 import io.confluent.kafka.server.plugins.auth.oauth.OAuthUtils;
@@ -107,6 +108,7 @@ public class AdminClientIntegrationTest {
             "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required " +
                     "publicKeyPath=\"" +
                     jwsContainer.getPublicKeyFile().toPath() +  "\";");
+    props.put("client.quota.callback.class", TenantQuotaCallback.class.getName());
     return props;
   }
 

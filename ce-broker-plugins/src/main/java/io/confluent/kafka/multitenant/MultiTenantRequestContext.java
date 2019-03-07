@@ -275,6 +275,10 @@ public class MultiTenantRequestContext extends RequestContext {
                   .setBrokerIds(assignment.get(i)));
         }
         topicDetails.setAssignments(newAssignments);
+        if (!newAssignments.isEmpty()) {
+          topicDetails.setNumPartitions(CreateTopicsRequest.NO_NUM_PARTITIONS);
+          topicDetails.setReplicationFactor(CreateTopicsRequest.NO_REPLICATION_FACTOR);
+        }
       }
     }
 

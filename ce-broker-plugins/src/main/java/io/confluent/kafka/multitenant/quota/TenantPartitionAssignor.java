@@ -370,6 +370,11 @@ public class TenantPartitionAssignor {
     List<List<Integer>> assignment =
         allocateLeaders(numNewPartitions, replicationFactor, leaderCounts, nodesOrderedByLeaders);
 
+    if (replicationFactor <= 1) {
+      // no followers
+      return assignment;
+    }
+
     // Allocate followers in batches of `numBrokers`. First batch contains the remainder if number
     // of partitions being allocated is not a multiple of `numBrokers`. Least loaded nodes by
     // follower count are assigned for the remainder to reduce any imbalance.

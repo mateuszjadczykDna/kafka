@@ -701,6 +701,12 @@ public class MultiTenantRequestContextTest {
       assertEquals(transformedTestConfigs(),
               intercepted.data().topics().find("tenant_foo").configs());
 
+      // if assignment is set, verify number of partitions and replication factor is not set
+      assertEquals(CreateTopicsRequest.NO_NUM_PARTITIONS,
+                   intercepted.data().topics().find("tenant_foo").numPartitions());
+      assertEquals(CreateTopicsRequest.NO_REPLICATION_FACTOR,
+                   intercepted.data().topics().find("tenant_foo").replicationFactor());
+
       assertEquals(2, intercepted.data().topics().find("tenant_bar").assignments().size());
       assertNotEquals(unbalancedAssignments,
               intercepted.data().topics().find("tenant_invalid").assignments());

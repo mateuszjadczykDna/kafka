@@ -1,6 +1,7 @@
 // (Copyright) [2017 - 2017] Confluent, Inc.
 package io.confluent.kafka.server.plugins.policy;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import java.util.Optional;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
@@ -128,7 +130,7 @@ public class CreateTopicPolicyTest {
   // will throw exception because of failure to use AdminClient without kafka cluster
   @Test(expected = RuntimeException.class)
   public void validateParamsSetOk() throws Exception {
-    policy.validate(requestMetadata);
+    validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
   }
 
   // will throw exception because of failure to use AdminClient without kafka cluster
@@ -139,7 +141,7 @@ public class CreateTopicPolicyTest {
     when(requestMetadata.replicationFactor()).thenReturn(null);
     when(requestMetadata.numPartitions()).thenReturn(10);
     when(requestMetadata.configs()).thenReturn(topicConfigs);
-    policy.validate(requestMetadata);
+    validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
   }
 
   // will throw exception because of failure to use AdminClient without kafka cluster
@@ -153,11 +155,42 @@ public class CreateTopicPolicyTest {
         .put(TopicConfig.MIN_COMPACTION_LAG_MS_CONFIG, "100")
         .put(TopicConfig.RETENTION_BYTES_CONFIG, "100")
         .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")
-        .put(TopicConfig.SEGMENT_MS_CONFIG, "600")
+        .put(TopicConfig.SEGMENT_MS_CONFIG, "600000")
         .build();
     when(requestMetadata.replicationFactor()).thenReturn(null);
     when(requestMetadata.numPartitions()).thenReturn(10);
     when(requestMetadata.configs()).thenReturn(topicConfigs);
+    validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
+  }
+
+  // will throw exception because of failure to use AdminClient without kafka cluster
+  @Test(expected = RuntimeException.class)
+  public void validateValidPartitionAssignmentOk() throws Exception {
+    when(requestMetadata.replicationFactor()).thenReturn(null);
+    when(requestMetadata.numPartitions()).thenReturn(null);
+    when(requestMetadata.replicasAssignments()).thenReturn(
+        ImmutableMap.of(0, ImmutableList.of(0, 1, 2, 3, 4),
+                        1, ImmutableList.of(1, 2, 3, 4, 5)));
+    validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void validatePartitionAssignmentWithInvalidNumberOfReplicasNotOk() throws Exception {
+    when(requestMetadata.replicationFactor()).thenReturn(null);
+    when(requestMetadata.numPartitions()).thenReturn(null);
+    when(requestMetadata.replicasAssignments()).thenReturn(
+        ImmutableMap.of(0, ImmutableList.of(0, 1, 2, 3, 4, 5),
+                        1, ImmutableList.of(1, 2, 3, 4, 5, 0)));
+    policy.validate(requestMetadata);
+  }
+
+  @Test(expected = PolicyViolationException.class)
+  public void validatePartitionAssignmentWithNoReplicasNotOk() throws Exception {
+    when(requestMetadata.replicationFactor()).thenReturn(null);
+    when(requestMetadata.numPartitions()).thenReturn(null);
+    when(requestMetadata.replicasAssignments()).thenReturn(
+        ImmutableMap.of(0, Collections.emptyList(),
+                        1, Collections.emptyList()));
     policy.validate(requestMetadata);
   }
 
@@ -360,6 +393,20 @@ public class CreateTopicPolicyTest {
 
     CreateTopicPolicy topicPolicy = new CreateTopicPolicy();
     topicPolicy.configure(config);
+  }
+
+  /**
+   * Use this method to validate policy if expected test behavior is to throw RuntimeException
+   * (because of failure to use AdminClient). Since PolicyViolationException extends
+   * RuntimeException, make sure to catch it first to catch test failure.
+   */
+  private static void validatePolicyAndEnsurePolicyNotViolated(CreateTopicPolicy policy,
+                                                               RequestMetadata reqMetadata) {
+    try {
+      policy.validate(reqMetadata);
+    } catch (PolicyViolationException pve) {
+      fail("Unexpected PolicyViolationException: " + pve.getMessage());
+    }
   }
 
   private static AdminClientUnitTestEnv getAdminClientEnv(int numBrokers,
