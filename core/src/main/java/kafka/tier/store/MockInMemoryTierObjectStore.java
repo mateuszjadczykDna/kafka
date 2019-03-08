@@ -7,6 +7,7 @@ package kafka.tier.store;
 import kafka.tier.domain.TierObjectMetadata;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -15,17 +16,16 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseable {
-    private final String bucketName;
+    private final TierObjectStoreConfig config;
     private final ConcurrentHashMap<String, byte[]> keyToBlob;
 
-    public MockInMemoryTierObjectStore(String bucketName) {
-        this.bucketName = bucketName;
+    public MockInMemoryTierObjectStore(TierObjectStoreConfig config) {
+        this.config = config;
         this.keyToBlob = new ConcurrentHashMap<>();
     }
 
-    @Override
-    public void close() throws Exception {
-
+    public ConcurrentHashMap<String, byte[]> getStored() {
+        return keyToBlob;
     }
 
     @Override
@@ -35,44 +35,28 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
             throws IOException {
         String key = keyPath(objectMetadata, objectFileType);
         byte[] blob = keyToBlob.get(key);
-        if (blob == null) {
+        if (blob == null)
             throw new IOException(String.format("No bytes for key %s", key));
-        }
-        ByteArrayInputStream bis = new ByteArrayInputStream(blob);
-        if (byteOffset != null) {
-            bis.skip(byteOffset);
-        }
-        return new MockInMemoryTierObjectStoreResponse(bis, blob.length);
+        int start = byteOffset == null ? 0 : byteOffset;
+        int end = byteOffsetEnd == null ? blob.length : byteOffsetEnd;
+        int byteBufferSize = Math.min(end - start, blob.length);
+        ByteBuffer buf = ByteBuffer.allocate(byteBufferSize);
+        buf.put(blob, start, byteBufferSize);
+        buf.flip();
+
+        return new MockInMemoryTierObjectStoreResponse(new ByteArrayInputStream(blob), byteBufferSize);
     }
 
     @Override
-    public TierObjectStoreResponse getObjectWithSignedUrl(
-            String signedUrl, TierObjectStoreFileType objectFileType,
-            Integer byteOffset, Integer byteOffsetEnd) throws IOException {
-        String key = signedUrl;
-        byte[] blob = keyToBlob.get(key);
-        if (blob == null) {
-            throw new IOException(String.format("No bytes for key %s", key));
-        }
-        ByteArrayInputStream bis = new ByteArrayInputStream(blob);
-        if (byteOffset != null) {
-            bis.skip(byteOffset);
-        }
-        return new MockInMemoryTierObjectStoreResponse(bis, blob.length);
-    }
-
-    @Override
-    public String getSignedUrl(TierObjectMetadata objectMetadata,
-                               TierObjectStoreFileType objectFileType) {
-        return keyPath(objectMetadata, objectFileType);
+    public void close() {
     }
 
     @Override
     public TierObjectMetadata putSegment(
-            TierObjectMetadata objectMetadata, FileChannel segmentData,
-            FileChannel offsetIndexData, FileChannel timestampIndexData,
-            FileChannel producerStateSnapshotData, FileChannel transactionIndexData,
-            Optional<FileChannel> epochState) throws IOException {
+            TierObjectMetadata objectMetadata, File segmentData,
+            File offsetIndexData, File timestampIndexData,
+            File producerStateSnapshotData, File transactionIndexData,
+            Optional<File> epochState) throws IOException {
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.SEGMENT),
                 segmentData);
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.OFFSET_INDEX),
@@ -83,27 +67,29 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
                 producerStateSnapshotData);
         this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.TRANSACTION_INDEX),
                 transactionIndexData);
-        this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.EPOCH_STATE),
-                epochState.get());
+        if (epochState.isPresent())
+            this.writeFileToArray(keyPath(objectMetadata, TierObjectStoreFileType.EPOCH_STATE),
+                    epochState.get());
         return objectMetadata;
     }
 
     private String keyPath(TierObjectMetadata objectMetadata, TierObjectStoreFileType fileType) {
-        return String.format("%s/topic=%s/partition=%d/%d/%d+%d_%d.%s",
-                bucketName,
+        return String.format("%s/topic=%s/partition=%d/%s/%020d_%d.%s",
+                config.s3bucket,
                 objectMetadata.topicPartition().topic(),
                 objectMetadata.topicPartition().partition(),
-                objectMetadata.lastModifiedTime(),
+                objectMetadata.messageId(),
                 objectMetadata.startOffset(),
-                objectMetadata.endOffsetDelta(),
                 objectMetadata.tierEpoch(),
                 fileType.getSuffix());
     }
 
-    private void writeFileToArray(String filePath, FileChannel fileChannel) throws IOException {
-        ByteBuffer buf = ByteBuffer.allocate((int) fileChannel.size());
-        fileChannel.read(buf);
-        keyToBlob.put(filePath, buf.array());
+    private void writeFileToArray(String filePath, File file) throws IOException {
+        try (FileChannel sourceChan = FileChannel.open(file.toPath())) {
+            ByteBuffer buf = ByteBuffer.allocate((int) sourceChan.size());
+            sourceChan.read(buf);
+            keyToBlob.put(filePath, buf.array());
+        }
     }
 
     private static class MockInMemoryTierObjectStoreResponse implements TierObjectStoreResponse {
@@ -126,8 +112,10 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
         }
 
         @Override
-        public void close() throws Exception {
-            inputStream.close();
+        public void close() {
+            try {
+                inputStream.close();
+            } catch (IOException ignored) { }
         }
     }
 

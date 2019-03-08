@@ -52,7 +52,7 @@ public class MemoryRecords extends AbstractRecords {
     private int validBytes = -1;
 
     // Construct a writable memory records
-    private MemoryRecords(ByteBuffer buffer) {
+    public MemoryRecords(ByteBuffer buffer) {
         Objects.requireNonNull(buffer, "buffer should not be null");
         this.buffer = buffer;
     }

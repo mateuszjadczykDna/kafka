@@ -2,7 +2,7 @@
  Copyright 2018 Confluent Inc.
  */
 
-package kafka.tier
+package kafka.tier.fetcher
 
 import kafka.tier.domain.TierObjectMetadata
 

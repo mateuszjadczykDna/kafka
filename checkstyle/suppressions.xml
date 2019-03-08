@@ -254,6 +254,8 @@
     <suppress checks="ClassFanOutComplexity" files="MultiTenantRequestContextTest.java"/>
     <suppress checks="ClassDataAbstractionCoupling" files="MiniKdcWithLdapService.java"/>
 
+    <suppress checks="ImportControl" files="TierFetcherTest.java|TierSegmentWindowTest.java"/>
+
     <!-- Suppress checks for copy of Apache Kafka class PatternType.java -->
     <suppress checks="[a-zA-Z0-9]*" files="PatternType" />
 

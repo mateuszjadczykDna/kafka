@@ -29,8 +29,8 @@ public class TierTopicInitLeader extends AbstractTierMetadata {
         final FlatBufferBuilder builder = new FlatBufferBuilder(INITIAL_BUFFER_SIZE)
                 .forceDefaults(true);
         InitLeader.startInitLeader(builder);
-        int messageIdId = kafka.tier.serdes.UUID.createUUID(builder, messageId.getMostSignificantBits(), messageId.getLeastSignificantBits());
-        InitLeader.addMessageId(builder, messageIdId);
+        int messageIdOffset = kafka.tier.serdes.UUID.createUUID(builder, messageId.getMostSignificantBits(), messageId.getLeastSignificantBits());
+        InitLeader.addMessageId(builder, messageIdOffset);
         InitLeader.addTierEpoch(builder, tierEpoch);
         InitLeader.addBrokerId(builder, brokerId);
         InitLeader.addVersion(builder, CURRENT_VERSION);

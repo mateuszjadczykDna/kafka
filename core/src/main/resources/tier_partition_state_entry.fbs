@@ -13,13 +13,18 @@ namespace kafka.tier.serdes;
 
 enum State:byte { DELETED = 0, AVAILABLE = 1 }
 
+struct UUID {
+  mostSignificantBits: long;
+  leastSignificantBits: long;
+}
+
 table ObjectMetadata {
   tierEpoch:int (id: 0);
   startOffset:long (id: 1);
   endOffsetDelta: int (id: 2);
   lastStableOffset: long (id: 3);
   maxTimestamp: long (id: 4);
-  lastModifiedTime: long (id: 5);
+  messageId:UUID (id: 5);
   size: int (id: 6);
   hasEpochState: bool (id: 7);
   hasAborts: bool (id: 8);

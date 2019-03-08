@@ -42,7 +42,6 @@ class TierPartitionStatePropertyTest {
                            endOffsetDelta,
                            lastStableOffset,
                            maxTimestamp,
-                           lastModifiedTime,
                            size,
                            hasTierState,
                            hasAborts,

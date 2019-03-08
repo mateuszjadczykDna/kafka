@@ -17,7 +17,8 @@
 package kafka.server
 
 import java.io.File
-import java.util.Optional
+import java.util
+import java.util.{Optional, UUID}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.Lock
@@ -32,6 +33,7 @@ import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils._
 import kafka.zk.KafkaZkClient
+import kafka.tier.fetcher.{TierFetchResult, TierFetcher}
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.metrics.Metrics
@@ -49,6 +51,8 @@ import org.apache.kafka.common.record.FileRecords.TimestampAndOffset
 import org.apache.kafka.common.requests.TierListOffsetRequest.OffsetType
 
 import scala.collection.JavaConverters._
+import scala.compat.java8.FunctionConverters._
+import scala.compat.java8.OptionConverters._
 import scala.collection._
 
 /*
@@ -172,6 +176,7 @@ class ReplicaManager(val config: KafkaConfig,
                      val delayedFetchPurgatory: DelayedOperationPurgatory[DelayedFetch],
                      val delayedDeleteRecordsPurgatory: DelayedOperationPurgatory[DelayedDeleteRecords],
                      val delayedElectPreferredLeaderPurgatory: DelayedOperationPurgatory[DelayedElectPreferredLeader],
+                     val tierFetcher: Option[TierFetcher],
                      threadNamePrefix: Option[String]) extends Logging with KafkaMetricsGroup {
 
   def this(config: KafkaConfig,
@@ -185,6 +190,7 @@ class ReplicaManager(val config: KafkaConfig,
            brokerTopicStats: BrokerTopicStats,
            metadataCache: MetadataCache,
            logDirFailureChannel: LogDirFailureChannel,
+           tierFetcher: Option[TierFetcher] = None,
            threadNamePrefix: Option[String] = None) {
     this(config, metrics, time, zkClient, scheduler, logManager, isShuttingDown,
       quotaManagers, brokerTopicStats, metadataCache, logDirFailureChannel,
@@ -199,6 +205,7 @@ class ReplicaManager(val config: KafkaConfig,
         purgeInterval = config.deleteRecordsPurgatoryPurgeIntervalRequests),
       DelayedOperationPurgatory[DelayedElectPreferredLeader](
         purgatoryName = "ElectPreferredLeader", brokerId = config.brokerId),
+      tierFetcher,
       threadNamePrefix)
   }
 
@@ -885,13 +892,21 @@ class ReplicaManager(val config: KafkaConfig,
     // check if this fetch request can be satisfied right away
     var localReadableBytes: Long = 0
     var errorReadingData = false
-    val logReadResultMap = new mutable.HashMap[TopicPartition, LogReadResult]
+    val localLogReadResultMap = new mutable.HashMap[TopicPartition, LogReadResult]
     localReadResults.foreach { case (topicPartition, logReadResult) =>
       if (logReadResult.error != Errors.NONE)
         errorReadingData = true
       localReadableBytes = localReadableBytes + logReadResult.info.records.sizeInBytes
-      logReadResultMap.put(topicPartition, logReadResult)
+      localLogReadResultMap.put(topicPartition, logReadResult)
     }
+
+    val tierLogReadResultMap = new mutable.HashMap[TopicPartition, TierLogReadResult]
+    tierReadResults.foreach { case (topicPartition, tierLogReadResult: TierLogReadResult) => {
+      if (tierLogReadResult.error != Errors.NONE)
+        errorReadingData = true
+      tierLogReadResultMap.put(topicPartition, tierLogReadResult)
+    }}
+
 
     // respond immediately if 1) fetch request does not want to wait
     //                        2) fetch request does not require any data
@@ -903,28 +918,61 @@ class ReplicaManager(val config: KafkaConfig,
           result.lastStableOffset, result.info.abortedTransactions)
       }
       responseCallback(fetchPartitionData)
-    } else if (tierReadResults.isEmpty) {
+    } else {
       // construct the fetch results from the read results
-      val fetchPartitionStatus = new mutable.ArrayBuffer[(TopicPartition, FetchPartitionStatus)]
+      val unifiedFetchPartitionStatusList = new mutable.ArrayBuffer[(TopicPartition, UnifiedFetchPartitionStatus)]
       fetchInfos.foreach { case (topicPartition, partitionData) =>
-        logReadResultMap.get(topicPartition).foreach(logReadResult => {
+        localLogReadResultMap.get(topicPartition).foreach(logReadResult => {
           val logOffsetMetadata = logReadResult.info.fetchOffsetMetadata
-          fetchPartitionStatus += (topicPartition -> FetchPartitionStatus(logOffsetMetadata, partitionData))
+          unifiedFetchPartitionStatusList += (topicPartition -> FetchPartitionStatus(logOffsetMetadata, partitionData))
+        })
+        // Tier log read results just contain empty records and partition metadata (HWM, LSO etc...)
+        tierLogReadResultMap.get(topicPartition).foreach(_ => {
+          unifiedFetchPartitionStatusList += (topicPartition -> TierFetchPartitionStatus(partitionData))
         })
       }
-      val fetchMetadata = FetchMetadata(fetchMinBytes, fetchMaxBytes, hardMaxBytesLimit, fetchOnlyFromLeader,
-        fetchIsolation, isFromFollower, replicaId, fetchPartitionStatus)
-      val delayedFetch = new DelayedFetch(timeout, fetchMetadata, this, quota, responseCallback)
 
-      // create a list of (topic, partition) pairs to use as keys for this delayed fetch operation
-      val delayedFetchKeys = fetchPartitionStatus.map { case (tp, _) => new TopicPartitionOperationKey(tp) }
+      if (tierReadResults.isEmpty) {
+        val fetchMetadata = FetchMetadata(fetchMinBytes, fetchMaxBytes, hardMaxBytesLimit, fetchOnlyFromLeader,
+          fetchIsolation, isFromFollower, replicaId, unifiedFetchPartitionStatusList)
 
-      // try to complete the request immediately, otherwise put it into the purgatory;
-      // this is because while the delayed fetch operation is being created, new requests
-      // may arrive and hence make this operation completable.
-      delayedFetchPurgatory.tryCompleteElseWatch(delayedFetch, delayedFetchKeys)
-    } else {
-      // TODO: handle fetch with tiered data
+        val delayedFetch = new DelayedFetch(timeout, fetchMetadata, this, quota, None, responseCallback)
+
+        // create a list of (topic, partition) pairs to use as keys for this delayed fetch operation
+        val delayedFetchKeys = unifiedFetchPartitionStatusList.map { case (tp, _) => new TopicPartitionOperationKey(tp) }
+
+        // try to complete the request immediately, otherwise put it into the purgatory;
+        // this is because while the delayed fetch operation is being created, new requests
+        // may arrive and hence make this operation completable.
+        delayedFetchPurgatory.tryCompleteElseWatch(delayedFetch, delayedFetchKeys)
+      } else {
+        val tierFetchMetadataList = tierReadResults
+          .collect({ case (_, tierLogReadResult: TierLogReadResult) => tierLogReadResult.info.fetchMetadata })
+
+        val localFetchMetadata = FetchMetadata(fetchMinBytes, fetchMaxBytes, hardMaxBytesLimit, fetchOnlyFromLeader,
+          fetchIsolation, isFromFollower, replicaId, unifiedFetchPartitionStatusList)
+
+
+
+        val requestId = UUID.randomUUID()
+        val completionCallback: DelayedOperationKey => Unit = (delayedOperationKey: DelayedOperationKey) => this.tryCompleteDelayedFetch(delayedOperationKey)
+        val tierFetchKeys = tierFetcher.get.fetch(requestId, tierFetchMetadataList.asJava, completionCallback.asJava)
+
+        // Create TopicPartitionOperationKey's for all local partitions included in this fetch. Merge the resulting
+        // set of keys with the list of TierFetchOperationKeys returned from initiating the tier fetch.
+        val delayedFetchKeys = unifiedFetchPartitionStatusList
+          .filter { case (tp, unifiedFetchPartitionStatus: UnifiedFetchPartitionStatus) => unifiedFetchPartitionStatus.isInstanceOf[FetchPartitionStatus] }
+          .map { case (tp, _: FetchPartitionStatus) => new TopicPartitionOperationKey(tp) } ++ tierFetchKeys.asScala
+
+        // For tiered fetches, we set the lower bound on the fetch timeout to 15s, which is half of the default request
+        // timeout. This forces all requests with max.wait < 15000 to wait for the tier fetch to complete, or the 15000
+        // to elapse. This is only temporary until a solution is found for caching segment data between requests.
+        val boundedTimeout = Math.max(timeout, 15000)
+
+        val delayedFetch = new DelayedFetch(boundedTimeout, localFetchMetadata, this, quota, Some(requestId), responseCallback)
+        // Gather up all of the fetchInfos
+        delayedFetchPurgatory.tryCompleteElseWatch(delayedFetch, delayedFetchKeys)
+      }
     }
   }
 
@@ -1623,5 +1671,20 @@ class ReplicaManager(val config: KafkaConfig,
     }
 
     controller.electPreferredLeaders(partitions, electionCallback)
+  }
+
+  def tierFetchIsComplete(requestId: UUID): Option[Boolean] = {
+    tierFetcher.flatMap(_.isComplete(requestId).asScala.map(_.booleanValue()))
+  }
+
+  /**
+    * Cancel and return all ongoing tier fetches.
+    */
+  def getTierFetchResults(requestId: UUID): Option[util.Map[TopicPartition, TierFetchResult]] = {
+    tierFetcher.flatMap(_.getFetchResultsAndRemove(requestId).asScala)
+  }
+
+  def cancelTierFetch(requestId: UUID): Unit = {
+    tierFetcher.foreach(_.cancel(requestId))
   }
 }

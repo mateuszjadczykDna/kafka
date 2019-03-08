@@ -15,7 +15,7 @@ import kafka.tier.domain.TierObjectMetadata
 import kafka.tier.serdes.State
 import kafka.tier.state.FileTierPartitionStateFactory
 import kafka.tier.state.TierPartitionState.AppendResult
-import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.store.{MockInMemoryTierObjectStore, TierObjectStoreConfig}
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
 import org.junit.Assert._
@@ -25,11 +25,12 @@ class TierTopicManagerTest {
   val tierTopicName = "__tier_topic"
   val tierTopicNumPartitions = 1.toShort
   val clusterId = "mycluster"
+  val objectStoreConfig = new TierObjectStoreConfig()
   val tempDir = TestUtils.tempDir()
   val logDir = tempDir.getAbsolutePath
   val logDirs = new util.ArrayList(util.Collections.singleton(logDir))
   val tierMetadataManager = new TierMetadataManager(new FileTierPartitionStateFactory(),
-    Some(new MockInMemoryTierObjectStore("myBucket")),
+    Some(new MockInMemoryTierObjectStore(objectStoreConfig)),
     new LogDirFailureChannel(1),
     true)
 
@@ -75,7 +76,6 @@ class TierTopicManagerTest {
           15000L,
           16000L,
           1000,
-          1000,
           true,
           false,
           State.AVAILABLE))
@@ -92,7 +92,6 @@ class TierTopicManagerTest {
           1000,
           15000L,
           16000L,
-          2000L,
           1000,
           true,
           true,
@@ -111,7 +110,6 @@ class TierTopicManagerTest {
           1001,
           15000L,
           16000L,
-          2000L,
           1000,
           true,
           false,

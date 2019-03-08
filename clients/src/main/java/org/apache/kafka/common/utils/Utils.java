@@ -951,19 +951,37 @@ public final class Utils {
      * @throws IOException If an I/O error occurs
      */
     public static final void readFully(InputStream inputStream, ByteBuffer destinationBuffer) throws IOException {
-        if (!destinationBuffer.hasArray())
-            throw new IllegalArgumentException("destinationBuffer must be backed by an array");
-        int initialOffset = destinationBuffer.arrayOffset() + destinationBuffer.position();
-        byte[] array = destinationBuffer.array();
-        int length = destinationBuffer.remaining();
+        final int length = destinationBuffer.remaining();
+        readBytes(inputStream, destinationBuffer, length);
+    }
+
+    public static final int readFully(InputStream inputStream, byte[] destinationByteArray) throws IOException {
+        final int byteArrayLength = destinationByteArray.length;
         int totalBytesRead = 0;
         do {
-            int bytesRead = inputStream.read(array, initialOffset + totalBytesRead, length - totalBytesRead);
+            final int bytesRead = inputStream.read(destinationByteArray, totalBytesRead, byteArrayLength - totalBytesRead);
             if (bytesRead == -1)
                 break;
             totalBytesRead += bytesRead;
-        } while (length > totalBytesRead);
+        } while (totalBytesRead < byteArrayLength);
+        return totalBytesRead;
+    }
+
+    public static final int readBytes(InputStream inputStream, ByteBuffer destinationBuffer, int length) throws IOException {
+        if (!destinationBuffer.hasArray())
+            throw new IllegalArgumentException("destinationBuffer must be backed by an array");
+        final int boundedLength = Math.min(destinationBuffer.remaining(), length);
+        final int initialOffset = destinationBuffer.arrayOffset() + destinationBuffer.position();
+        final byte[] array = destinationBuffer.array();
+        int totalBytesRead = 0;
+        do {
+            int bytesRead = inputStream.read(array, initialOffset + totalBytesRead, boundedLength - totalBytesRead);
+            if (bytesRead == -1)
+                break;
+            totalBytesRead += bytesRead;
+        } while (boundedLength > totalBytesRead);
         destinationBuffer.position(destinationBuffer.position() + totalBytesRead);
+        return totalBytesRead;
     }
 
     public static void writeFully(FileChannel channel, ByteBuffer sourceBuffer) throws IOException {

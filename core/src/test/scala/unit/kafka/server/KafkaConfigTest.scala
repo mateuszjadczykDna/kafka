@@ -695,6 +695,14 @@ class KafkaConfigTest {
         case KafkaConfig.TierMetadataNamespaceProp =>
         case KafkaConfig.TierMetadataNumPartitionsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
         case KafkaConfig.TierMetadataReplicationFactorProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
+        case KafkaConfig.TierS3RegionProp => // ignore string
+        case KafkaConfig.TierS3BucketProp => // ignore string
+        case KafkaConfig.TierS3AwsAccessKeyIdProp => // ignore string
+        case KafkaConfig.TierS3AwsSecretAccessKeyProp => // ignore string
+        case KafkaConfig.TierS3EndpointOverrideProp => // ignore string
+        case KafkaConfig.TierS3SignerOverrideProp => // ignore string
+        case KafkaConfig.TierBackendProp => assertPropertyInvalid(getBaseProperties(), name, "notanimplementation")
+        case KafkaConfig.TierFetcherNumThreadsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
 
         case KafkaConfig.ProducerQuotaBytesPerSecondDefaultProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0")
         case KafkaConfig.ConsumerQuotaBytesPerSecondDefaultProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0")

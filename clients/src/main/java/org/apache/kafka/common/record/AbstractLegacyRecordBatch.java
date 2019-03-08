@@ -450,11 +450,11 @@ public abstract class AbstractLegacyRecordBatch extends AbstractRecordBatch impl
         }
     }
 
-    static class ByteBufferLegacyRecordBatch extends AbstractLegacyRecordBatch implements MutableRecordBatch {
+    public static class ByteBufferLegacyRecordBatch extends AbstractLegacyRecordBatch implements MutableRecordBatch {
         private final ByteBuffer buffer;
         private final LegacyRecord record;
 
-        ByteBufferLegacyRecordBatch(ByteBuffer buffer) {
+        public ByteBufferLegacyRecordBatch(ByteBuffer buffer) {
             this.buffer = buffer;
             buffer.position(LOG_OVERHEAD);
             this.record = new LegacyRecord(buffer.slice());

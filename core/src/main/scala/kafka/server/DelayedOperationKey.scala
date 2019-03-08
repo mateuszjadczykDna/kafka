@@ -17,6 +17,7 @@
 
 package kafka.server
 
+import java.util.UUID
 import org.apache.kafka.common.TopicPartition
 
 /**
@@ -54,4 +55,9 @@ case class GroupKey(groupId: String) extends DelayedOperationKey {
 case class TopicKey(topic: String) extends DelayedOperationKey {
 
   override def keyLabel = topic
+}
+
+case class TierFetcherOperationKey(topic: String, partition: Int, id: UUID) extends DelayedOperationKey {
+  def this(topicPartition: TopicPartition, id: UUID) = this(topicPartition.topic, topicPartition.partition, id)
+  override def keyLabel: String = "%s-%d-%s".format(topic, partition, id)
 }

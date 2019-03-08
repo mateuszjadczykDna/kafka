@@ -40,7 +40,7 @@ import com.sun.management.UnixOperatingSystemMXBean
 import kafka.controller.LeaderIsrAndControllerEpoch
 import kafka.tier.TierMetadataManager
 import kafka.tier.state.MemoryTierPartitionStateFactory
-import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.store.{MockInMemoryTierObjectStore, TierObjectStoreConfig}
 import kafka.zk._
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, AlterConfigsResult, Config, ConfigEntry}
@@ -965,7 +965,7 @@ object TestUtils extends Logging {
 
   def createTierMetadataManager(logDirs: Seq[File]): TierMetadataManager =
     new TierMetadataManager(new MemoryTierPartitionStateFactory,
-      Some(new MockInMemoryTierObjectStore("myBucket")),
+      Some(new MockInMemoryTierObjectStore(new TierObjectStoreConfig())),
       new LogDirFailureChannel(logDirs.size),
       false)
 

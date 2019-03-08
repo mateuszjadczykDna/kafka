@@ -4,12 +4,11 @@
 
 package kafka.tier.archiver
 
-import java.util.Comparator
 import java.util.concurrent._
 import java.util.function.Predicate
 
 import kafka.server.ReplicaManager
-import kafka.tier.archiver.TierArchiverState.BeforeLeader
+import kafka.tier.archiver.TierArchiverState.{BeforeLeader, TierArchiverStateComparator}
 import kafka.tier.exceptions.{TierArchiverFatalException, TierArchiverFencedException}
 import kafka.tier.store.TierObjectStore
 import kafka.tier.{TierMetadataManager, TierTopicManager}
@@ -84,12 +83,9 @@ class TierArchiver(config: TierArchiverConfig,
     while (!immigrationEmigrationQueue.isEmpty) {
         immigrationEmigrationQueue.poll() match {
         case immigrationEvent: ImmigratingTopicPartition =>
-          val topicPartition = immigrationEvent.topicPartition
-          val log = replicaManager
-            .getLog(topicPartition)
-            .getOrElse(throw new TierArchiverFatalException(s"No log found for topic partition: $immigrationEvent.topicPartition"))
-
-          val state = BeforeLeader(log, tierTopicManager, tierObjectStore, immigrationEvent.topicPartition, immigrationEvent.leaderEpoch, blockingTaskExecutor, config)
+          val state = BeforeLeader(replicaManager, tierTopicManager, tierObjectStore,
+            immigrationEvent.topicPartition, immigrationEvent.leaderEpoch,
+            blockingTaskExecutor, config)
           pausedStates.put(state)
           didWork = true
         case emigrationEvent: EmigratingTopicPartition =>
@@ -181,9 +177,3 @@ private[tier] case class ImmigratingTopicPartition(topicPartition: TopicPartitio
 
 private[tier] case class EmigratingTopicPartition(topicPartition: TopicPartition)
   extends ImmigratingOrEmigratingTopicPartitions
-
-private[tier] object TierArchiverStateComparator extends Comparator[TierArchiverState] with Serializable {
-  override def compare(a: TierArchiverState, b: TierArchiverState): Int = {
-    a.relativePriority(b)
-  }
-}

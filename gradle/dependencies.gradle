@@ -48,6 +48,7 @@ versions["baseScala"] = versions.scala.substring(0, versions.scala.lastIndexOf("
 
 versions += [
   activation: "1.1.1",
+  amazons3client: "1.11.475",
   apacheda: "1.0.2",
   apachedaLdapCodec: "1.0.0",
   apacheds: "2.0.0-M24",
@@ -102,6 +103,7 @@ versions += [
 ]
 
 libs += [
+  amazons3client: "com.amazonaws:aws-java-sdk-s3:$versions.amazons3client",
   activation: "javax.activation:activation:$versions.activation",
   apacheda: "org.apache.directory.api:api-all:$versions.apacheda",
   apachedaLdapCodec: "org.apache.directory.api:api-ldap-codec-standalone:$versions.apachedaLdapCodec",

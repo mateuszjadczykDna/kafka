@@ -4,9 +4,7 @@
 
 package kafka.tier.exceptions;
 
-import java.util.concurrent.CompletionException;
-
-public class TierMetadataFatalException extends CompletionException {
+public class TierMetadataFatalException extends RuntimeException {
 
     public TierMetadataFatalException(final String message) {
         super(message);

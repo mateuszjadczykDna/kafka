@@ -6,16 +6,16 @@ package kafka.log
 
 import java.util.concurrent.{ConcurrentNavigableMap, ConcurrentSkipListMap, TimeUnit}
 
-import kafka.server.{BrokerTopicStats, FetchDataInfo, KafkaConfig, LogDirFailureChannel, TierFetchDataInfo}
+import kafka.server.{BrokerTopicStats, FetchDataInfo, LogDirFailureChannel, TierFetchDataInfo}
 import kafka.tier.TierMetadataManager
 import kafka.tier.domain.{TierObjectMetadata, TierTopicInitLeader}
 import kafka.tier.state.FileTierPartitionStateFactory
 import kafka.tier.state.TierPartitionState.AppendResult
-import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.store.{MockInMemoryTierObjectStore, TierObjectStoreConfig}
 import kafka.utils.{MockTime, Scheduler, TestUtils}
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.junit.Assert.{assertEquals, fail}
-import org.junit.{After, Before, Test}
+import org.junit.{After, Test}
 
 import scala.collection.JavaConverters._
 
@@ -25,7 +25,7 @@ class MergedLogTest {
   val logDir = TestUtils.randomPartitionLogDir(tmpDir)
   val mockTime = new MockTime()
   val tierMetadataManager = new TierMetadataManager(new FileTierPartitionStateFactory(),
-    Some(new MockInMemoryTierObjectStore("myBucket")),
+    Some(new MockInMemoryTierObjectStore(new TierObjectStoreConfig())),
     new LogDirFailureChannel(1),
     true)
   val props = TestUtils.createBrokerConfig(0, "127.0.0.1:1", port = -1)
@@ -194,7 +194,6 @@ class MergedLogTest {
         (segment.readNextOffset - segment.baseOffset - 1).toInt,
         segment.readNextOffset,
         segment.largestTimestamp,
-        segment.lastModified,
         segment.size,
         true,
         false,
@@ -280,7 +279,6 @@ class MergedLogTest {
         (segment.readNextOffset - segment.baseOffset - 1).toInt,
         segment.readNextOffset,
         segment.largestTimestamp,
-        segment.lastModified,
         segment.size,
         true,
         false,

@@ -6,6 +6,7 @@ package kafka.tier;
 
 import kafka.log.LogConfig;
 import kafka.server.LogDirFailureChannel;
+import kafka.tier.store.TierObjectStoreConfig;
 import kafka.tier.state.FileTierPartitionStateFactory;
 import kafka.tier.state.TierPartitionState;
 import kafka.tier.store.MockInMemoryTierObjectStore;
@@ -30,7 +31,7 @@ import static org.junit.Assert.fail;
 
 public class TierMetadataManagerTest {
     private static final TopicPartition TOPIC_PARTITION = new TopicPartition("myTopic", 0);
-    private static final String BUCKET = "myBucket";
+    private static final TierObjectStoreConfig OBJECT_STORE_CONFIG = new TierObjectStoreConfig();
     private final File dir = TestUtils.tempDirectory();
     private int onBecomeLeader = 0;
     private int onBecomeFollower = 0;
@@ -46,7 +47,7 @@ public class TierMetadataManagerTest {
         LogConfig config = config(true, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
@@ -66,7 +67,7 @@ public class TierMetadataManagerTest {
         LogConfig config = config(false, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
@@ -86,7 +87,7 @@ public class TierMetadataManagerTest {
         LogConfig config = config(true, true);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
@@ -107,7 +108,7 @@ public class TierMetadataManagerTest {
         LogConfig config = config(false, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 false);
         addListener(metadataManager);
@@ -127,7 +128,7 @@ public class TierMetadataManagerTest {
         LogConfig oldConfig = config(false, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
@@ -158,7 +159,7 @@ public class TierMetadataManagerTest {
         LogConfig oldConfig = config(false, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
@@ -189,7 +190,7 @@ public class TierMetadataManagerTest {
         LogConfig oldConfig = config(true, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
@@ -213,7 +214,7 @@ public class TierMetadataManagerTest {
         LogConfig config = config(true, false);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
-                Option.apply(new MockInMemoryTierObjectStore(BUCKET)),
+                Option.apply(new MockInMemoryTierObjectStore(OBJECT_STORE_CONFIG)),
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);

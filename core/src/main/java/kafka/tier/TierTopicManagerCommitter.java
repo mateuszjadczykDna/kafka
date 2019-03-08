@@ -194,7 +194,8 @@ public class TierTopicManagerCommitter implements Runnable {
                 }
             }
         } catch (FileNotFoundException fnf) {
-            log.info("TierTopicManager offsets not found.", fnf);
+            log.info("TierTopicManager offsets not found. Expected if this is the first time "
+                    + "starting up with tiered storage.", fnf);
         } catch (IOException ioe) {
             log.error("Error loading TierTopicManager offsets. Ignoring.", ioe);
         }

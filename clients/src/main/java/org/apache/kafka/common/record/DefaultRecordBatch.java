@@ -98,7 +98,7 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     static final int LENGTH_OFFSET = BASE_OFFSET_OFFSET + BASE_OFFSET_LENGTH;
     static final int LENGTH_LENGTH = 4;
     static final int PARTITION_LEADER_EPOCH_OFFSET = LENGTH_OFFSET + LENGTH_LENGTH;
-    static final int PARTITION_LEADER_EPOCH_LENGTH = 4;
+    public static final int PARTITION_LEADER_EPOCH_LENGTH = 4;
     static final int MAGIC_OFFSET = PARTITION_LEADER_EPOCH_OFFSET + PARTITION_LEADER_EPOCH_LENGTH;
     static final int MAGIC_LENGTH = 1;
     static final int CRC_OFFSET = MAGIC_OFFSET + MAGIC_LENGTH;
@@ -129,7 +129,7 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     private final ByteBuffer buffer;
 
-    DefaultRecordBatch(ByteBuffer buffer) {
+    public DefaultRecordBatch(ByteBuffer buffer) {
         this.buffer = buffer;
     }
 

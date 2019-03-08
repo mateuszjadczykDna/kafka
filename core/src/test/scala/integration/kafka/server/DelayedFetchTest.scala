@@ -56,6 +56,7 @@ class DelayedFetchTest extends EasyMockSupport {
       fetchMetadata = fetchMetadata,
       replicaManager = replicaManager,
       quota = replicaQuota,
+      None,
       responseCallback = callback)
 
     val partition: Partition = mock(classOf[Partition])

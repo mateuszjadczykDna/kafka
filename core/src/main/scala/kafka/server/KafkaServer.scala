@@ -36,8 +36,9 @@ import kafka.network.SocketServer
 import kafka.security.CredentialProvider
 import kafka.security.auth.{Authorizer, AuthorizerWithKafkaStore}
 import kafka.tier.archiver.{TierArchiver, TierArchiverConfig}
+import kafka.tier.fetcher.{TierFetcher, TierFetcherConfig}
 import kafka.tier.state.FileTierPartitionStateFactory
-import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.store.{MockInMemoryTierObjectStore, S3TierObjectStore, TierObjectStore, TierObjectStoreConfig}
 import kafka.tier.{TierMetadataManager, TierTopicManager, TierTopicManagerConfig}
 import kafka.utils._
 import kafka.zk.{BrokerInfo, KafkaZkClient}
@@ -146,7 +147,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
   var tierMetadataManager: TierMetadataManager = null
   var tierTopicManager: TierTopicManager = null
-  var tierObjectStore: Option[MockInMemoryTierObjectStore] = None
+  var tierFetcher: Option[TierFetcher] = None
+  var tierObjectStore: Option[TierObjectStore] = None
   var tierArchiver: TierArchiver = null
 
   var kafkaController: KafkaController = null
@@ -249,8 +251,17 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
         logDirFailureChannel = new LogDirFailureChannel(config.logDirs.size)
 
-        if (config.tierFeature)
-          tierObjectStore = Some(new MockInMemoryTierObjectStore("testbucket"))
+        if (config.tierFeature) {
+          val objectStoreConfig = new TierObjectStoreConfig(config)
+          tierObjectStore = config.tierBackend match {
+            case "S3" => Some(new S3TierObjectStore(objectStoreConfig))
+            case "mock" => Some(new MockInMemoryTierObjectStore(objectStoreConfig))
+            case v => throw new IllegalStateException(s"Unknown TierObjectStore type: %s".format(v))
+          }
+
+          tierFetcher = Some(new TierFetcher(new TierFetcherConfig(config), tierObjectStore.get, metrics, logContext))
+        }
+
         tierMetadataManager = new TierMetadataManager(new FileTierPartitionStateFactory(), tierObjectStore, logDirFailureChannel, config.tierFeature)
 
         /* start log manager */
@@ -390,9 +401,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
     clusterResourceListeners.onUpdate(new ClusterResource(clusterId))
   }
 
-  protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager =
+  protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager = {
     new ReplicaManager(config, metrics, time, zkClient, kafkaScheduler, logManager, isShuttingDown, quotaManagers,
-      brokerTopicStats, metadataCache, logDirFailureChannel)
+      brokerTopicStats, metadataCache, logDirFailureChannel, tierFetcher, None)
+  }
 
   private def initZkClient(time: Time): Unit = {
     info(s"Connecting to zookeeper on ${config.zkConnect}")
@@ -633,6 +645,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
         if (tierObjectStore.isDefined)
           CoreUtils.swallow(tierObjectStore.get.close(), this)
+
+        if (tierFetcher.isDefined)
+          CoreUtils.swallow(tierFetcher.get.close(), this)
 
         if (dynamicConfigManager != null)
           CoreUtils.swallow(dynamicConfigManager.shutdown(), this)

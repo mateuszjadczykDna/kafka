@@ -113,7 +113,6 @@ class TierPartitionStateConcurrencyTest {
             1,
             i,
             i,
-            i,
             true,
             false,
             State.AVAILABLE))

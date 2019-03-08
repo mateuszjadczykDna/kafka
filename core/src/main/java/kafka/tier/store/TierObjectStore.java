@@ -6,8 +6,9 @@ package kafka.tier.store;
 
 import kafka.tier.domain.TierObjectMetadata;
 
+import java.io.File;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
+import kafka.tier.exceptions.TierObjectStoreRetriableException;
 import java.util.Optional;
 
 public interface TierObjectStore {
@@ -18,7 +19,7 @@ public interface TierObjectStore {
         TIMESTAMP_INDEX("timestamp-index"),
         TRANSACTION_INDEX("transaction-index"),
         PRODUCER_STATE("producer-status"),
-        EPOCH_STATE("epoch_state");
+        EPOCH_STATE("epoch-state");
 
         private final String suffix;
 
@@ -33,24 +34,30 @@ public interface TierObjectStore {
 
     TierObjectStoreResponse getObject(TierObjectMetadata objectMetadata,
                                       TierObjectStoreFileType objectFileType,
-                                      Integer byteOffset, Integer byteOffsetEnd)
+                                      Integer byteOffsetStart, Integer byteOffsetEnd)
             throws IOException;
 
-    TierObjectStoreResponse getObjectWithSignedUrl(
-            String signedUrl,
-            TierObjectStoreFileType objectFileType,
-            Integer byteOffset, Integer byteOffsetEnd)
-            throws IOException;
+    default TierObjectStoreResponse getObject(TierObjectMetadata objectMetadata,
+                                      TierObjectStoreFileType objectFileType,
+                                      Integer byteOffsetStart)
+            throws IOException {
+        return getObject(objectMetadata, objectFileType, byteOffsetStart, null);
+    }
 
-    String getSignedUrl(TierObjectMetadata objectMetadata,
-                        TierObjectStoreFileType objectFileType);
+    default TierObjectStoreResponse getObject(TierObjectMetadata objectMetadata,
+                                      TierObjectStoreFileType objectFileType)
+            throws IOException {
+        return getObject(objectMetadata, objectFileType, null);
+    }
 
     TierObjectMetadata putSegment(TierObjectMetadata objectMetadata,
-                                  FileChannel segmentData,
-                                  FileChannel offsetIndexData,
-                                  FileChannel timestampIndexData,
-                                  FileChannel producerStateSnapshotData,
-                                  FileChannel transactionIndexData,
-                                  Optional<FileChannel> epochState)
-            throws IOException;
+                                  File segmentData,
+                                  File offsetIndexData,
+                                  File timestampIndexData,
+                                  File producerStateSnapshotData,
+                                  File transactionIndexData,
+                                  Optional<File> epochState)
+            throws TierObjectStoreRetriableException, IOException;
+
+    void close();
 }

@@ -18,6 +18,7 @@ class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
   overridingProps.setProperty("tier.feature", "true")
   overridingProps.setProperty("tier.metadata.num.partitions", "2")
   overridingProps.setProperty("tier.metadata.replication.factor", "1")
+  overridingProps.setProperty("tier.backend", "mock")
   val logDir = TestUtils.tempDir()
 
   override def generateConfigs =
@@ -56,7 +57,6 @@ class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
           1000,
           15000L,
           16000L,
-          17000,
           100,
           true,
           true,
@@ -75,7 +75,6 @@ class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
         1000,
         15000L,
         16000L,
-        16001L,
         200,
         true,
         false,

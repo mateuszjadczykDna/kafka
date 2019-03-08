@@ -186,6 +186,14 @@ object Defaults {
   val TierMetadataNamespace = null
   val TierMetadataNumPartitions = 10:Short
   val TierMetadataReplicationFactor = 3:Short
+  val TierS3Bucket = null
+  val TierS3Region = null
+  val TierBackend = ""
+  val TierS3AwsAccessKeyId = null
+  val TierS3AwsSecretAccessKey = null
+  val TierS3EndpointOverride = null
+  val TierS3SignerOverride = null
+  val TierFetcherNumThreads = 2:Integer
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlots = 1000
@@ -413,12 +421,21 @@ object KafkaConfig {
   /** ********* Tier management configuration ***********/
   val TierFeatureProp = "tier.feature"
   val TierEnableProp = "tier.enable"
+  val TierBackendProp = "tier.backend"
   val TierMetadataBootstrapServersProp = "tier.metadata.bootstrap.servers"
   val TierMetadataMaxPollMsProp = "tier.metadata.max.poll.ms"
   val TierMetadataRequestTimeoutMsProp = "tier.metadata.request.timeout.ms"
   val TierMetadataNamespaceProp = "tier.metadata.namespace"
   val TierMetadataNumPartitionsProp = "tier.metadata.num.partitions"
   val TierMetadataReplicationFactorProp = "tier.metadata.replication.factor"
+
+  val TierS3BucketProp = "tier.s3.bucket"
+  val TierS3RegionProp = "tier.s3.region"
+  val TierS3AwsAccessKeyIdProp = "tier.s3.aws.access.key.id"
+  val TierS3AwsSecretAccessKeyProp = "tier.s3.aws.secret.access.key"
+  val TierS3EndpointOverrideProp = "tier.s3.aws.endpoint.override"
+  val TierS3SignerOverrideProp = "tier.s3.aws.signer.override"
+  val TierFetcherNumThreadsProp = "tier.fetcher.num.threads"
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlots = "max.incremental.fetch.session.cache.slots"
@@ -747,9 +764,17 @@ object KafkaConfig {
   val TierMetadataMaxPollMsDoc = "The maximum delay before invocations of poll of the tier topic."
   val TierMetadataRequestTimeoutMsDoc = "request.timeout.ms passed through to the backing producer. After this timeout the producer will retry the request."
   val TierEnableDoc = "Enable topic tiering on all topics broker wide."
+  val TierBackendDoc = "Tiered storage backend (S3 only for now)."
   val TierMetadataNamespaceDoc = "Namespace of the tier topic name e.g. namespace mycluster will be translated into __tier_topic_mycluster."
   val TierMetadataNumPartitionsDoc = "The number of partitions for the tier topic (should not change after deployment)."
   val TierMetadataReplicationFactorDoc = "The replication factor for the Tier Topic (set higher to ensure availability)."
+  val TierS3BucketDoc = "The S3 bucket to use for tiered storage."
+  val TierS3RegionDoc = "The S3 region to use for tiered storage."
+  val TierS3AwsAccessKeyIdDoc = "The S3 AWS access key id directly via the Kafka configuration. If not set, the access key id will be supplied via the AWS default provider chain e.g. AWS_ACCESS_KEY_ID environment variable, ~/.aws/config, etc"
+  val TierS3AwsSecretAccessKeyDoc = "The S3 AWS secret access key directly via the Kafka configuration. If not set, the secret access key will be supplied via the AWS default provider chain e.g. AWS_SECRET_ACCESS_KEY environment variable, ~/.aws/config, etc"
+  val TierS3EndpointOverrideDoc = "Override picking an S3 endpoint. Normally this is performed automatically by the client."
+  val TierS3SignerOverrideDoc = "Set the name of the signature algorithm used for signing S3 requests"
+  val TierFetcherNumThreadsDoc = "The size of the threadpool used by the TierFetcher. Roughly corresponds to # of concurrent fetch requests."
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlotsDoc = "The maximum number of incremental fetch sessions that we will maintain."
@@ -1022,12 +1047,20 @@ object KafkaConfig {
       /** ********* Tier management configuration ***********/
       .defineInternal(TierFeatureProp, BOOLEAN, Defaults.TierFeature, MEDIUM, TierFeatureDoc)
       .defineInternal(TierEnableProp, BOOLEAN, Defaults.TierEnable, MEDIUM, TierEnableDoc)
+      .defineInternal(TierBackendProp, STRING, Defaults.TierBackend, in("S3", "mock", ""), MEDIUM, TierBackendDoc)
       .defineInternal(TierMetadataBootstrapServersProp, STRING, Defaults.TierMetadataBootstrapServers, MEDIUM, TierMetadataBootstrapServersDoc)
       .defineInternal(TierMetadataMaxPollMsProp, LONG, Defaults.TierMetadataMaxPollMs, atLeast(1), MEDIUM, TierMetadataMaxPollMsDoc)
       .defineInternal(TierMetadataRequestTimeoutMsProp, INT, Defaults.TierMetadataRequestTimeoutMs, atLeast(1), MEDIUM, TierMetadataRequestTimeoutMsDoc)
       .defineInternal(TierMetadataNamespaceProp, STRING, Defaults.TierMetadataNamespace, MEDIUM, TierMetadataNamespaceDoc)
       .defineInternal(TierMetadataNumPartitionsProp, SHORT, Defaults.TierMetadataNumPartitions, atLeast(1), HIGH, TierMetadataNumPartitionsDoc)
       .defineInternal(TierMetadataReplicationFactorProp, SHORT, Defaults.TierMetadataReplicationFactor, atLeast(1), HIGH, TierMetadataReplicationFactorDoc)
+      .defineInternal(TierS3BucketProp, STRING, Defaults.TierS3Bucket, HIGH, TierS3BucketDoc)
+      .defineInternal(TierS3RegionProp, STRING, Defaults.TierS3Region, HIGH, TierS3RegionDoc)
+      .defineInternal(TierS3AwsAccessKeyIdProp, STRING, Defaults.TierS3AwsAccessKeyId, MEDIUM, TierS3AwsAccessKeyIdDoc)
+      .defineInternal(TierS3AwsSecretAccessKeyProp, STRING, Defaults.TierS3AwsSecretAccessKey, MEDIUM, TierS3AwsSecretAccessKeyDoc)
+      .defineInternal(TierS3EndpointOverrideProp, STRING, Defaults.TierS3EndpointOverride, LOW, TierS3EndpointOverrideDoc)
+      .defineInternal(TierS3SignerOverrideProp, STRING, Defaults.TierS3SignerOverride, LOW, TierS3SignerOverrideDoc)
+      .defineInternal(TierFetcherNumThreadsProp, INT, Defaults.TierFetcherNumThreads, atLeast(1), MEDIUM, TierFetcherNumThreadsDoc)
 
     /** ********* Fetch Session Configuration **************/
       .define(MaxIncrementalFetchSessionCacheSlots, INT, Defaults.MaxIncrementalFetchSessionCacheSlots, atLeast(0), MEDIUM, MaxIncrementalFetchSessionCacheSlotsDoc)
@@ -1337,12 +1370,20 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   /** ********* Tier management configuration ***********/
   val tierFeature = getBoolean(KafkaConfig.TierFeatureProp)
   val tierEnable = getBoolean(KafkaConfig.TierEnableProp)
+  val tierBackend = getString(KafkaConfig.TierBackendProp)
   val tierMetadataBootstrapServers = getString(KafkaConfig.TierMetadataBootstrapServersProp)
   val tierMetadataMaxPollMs = getLong(KafkaConfig.TierMetadataMaxPollMsProp)
   val tierMetadataRequestTimeoutMs = getInt(KafkaConfig.TierMetadataRequestTimeoutMsProp)
   val tierMetadataNamespace = getString(KafkaConfig.TierMetadataNamespaceProp)
   val tierMetadataNumPartitions = getShort(KafkaConfig.TierMetadataNumPartitionsProp)
   val tierMetadataReplicationFactor = getShort(KafkaConfig.TierMetadataReplicationFactorProp)
+  val tierS3Bucket = getString(KafkaConfig.TierS3BucketProp)
+  val tierS3Region = getString(KafkaConfig.TierS3RegionProp)
+  val tierS3AwsAccessKeyId = getString(KafkaConfig.TierS3AwsAccessKeyIdProp)
+  val tierS3AwsSecretAccessKey = getString(KafkaConfig.TierS3AwsSecretAccessKeyProp)
+  val tierS3EndpointOverride = getString(KafkaConfig.TierS3EndpointOverrideProp)
+  val tierS3SignerOverride = getString(KafkaConfig.TierS3SignerOverrideProp)
+  val tierFetcherNumThreads = getInt(KafkaConfig.TierFetcherNumThreadsProp)
 
   /** ********* Metric Configuration **************/
   val metricNumSamples = getInt(KafkaConfig.MetricNumSamplesProp)
@@ -1585,7 +1626,29 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
     if (connectionsMaxIdleMs >= 0)
       require(failedAuthenticationDelayMs < connectionsMaxIdleMs,
         s"${KafkaConfig.FailedAuthenticationDelayMsProp}=$failedAuthenticationDelayMs should always be less than" +
-        s" ${KafkaConfig.ConnectionsMaxIdleMsProp}=$connectionsMaxIdleMs to prevent failed" +
-        s" authentication responses from timing out")
+          s" ${KafkaConfig.ConnectionsMaxIdleMsProp}=$connectionsMaxIdleMs to prevent failed" +
+          s" authentication responses from timing out")
+
+    /* Begin tiered storage checks */
+    if (tierFeature.booleanValue()) {
+      if (tierBackend == null)
+        throw new IllegalArgumentException(s"${KafkaConfig.TierBackendProp} must be set if ${KafkaConfig.TierFeatureProp} property is set.")
+
+      if (tierBackend == "S3" && tierS3Region == null)
+        throw new IllegalArgumentException(s"${KafkaConfig.TierS3RegionProp} must be set if ${KafkaConfig.TierBackendProp} property is set to $tierBackend.")
+
+      if (tierBackend == "S3" && tierS3Bucket == null)
+        throw new IllegalArgumentException(s"${KafkaConfig.TierS3BucketProp} must be set if ${KafkaConfig.TierBackendProp} property is set to $tierBackend.")
+
+      if (tierBackend == "S3" && tierS3EndpointOverride != null && tierS3Region == null)
+        throw new IllegalArgumentException(s"${KafkaConfig.TierS3RegionProp} must be set if ${KafkaConfig.TierS3EndpointOverrideProp} is set.")
+
+      if (tierS3AwsAccessKeyId == null && tierS3AwsSecretAccessKey != null)
+        throw new IllegalArgumentException(s"${KafkaConfig.TierS3AwsAccessKeyIdProp} must be set if ${KafkaConfig.TierS3AwsSecretAccessKeyProp} is set.")
+
+      if (tierS3AwsAccessKeyId != null && tierS3AwsSecretAccessKey == null)
+        throw new IllegalArgumentException(s"${KafkaConfig.TierS3AwsSecretAccessKeyProp} must be set if ${KafkaConfig.TierS3AwsAccessKeyIdProp} is set.")
+    }
+    /* End tiered storage checks */
   }
 }

@@ -53,15 +53,36 @@
     <allow pkg="kafka.tier.serdes" />
     <allow pkg="kafka.tier.store" />
     <allow pkg="kafka.tier.topic" />
+    <allow pkg="kafka.tier.fetcher" />
+    <allow class="kafka.server.TierFetchDataInfo" />
+    <allow class="kafka.server.TierLogReadResult" />
+    <allow class="kafka.server.DelayedFetch" />
+    <allow class="kafka.server.FetchDataInfo" />
+    <allow class="kafka.server.LogReadResult"/>
     <allow pkg="org.apache.kafka.clients.admin" />
     <allow pkg="org.apache.kafka.clients.consumer" />
     <allow pkg="org.apache.kafka.clients.producer" />
     <allow class="kafka.server.KafkaConfig" />
+    <allow class="kafka.server.Defaults"/>
     <allow class="kafka.log.LogConfig" />
+    <allow class="kafka.log.OffsetPosition" />
+    <allow class="kafka.log.IndexEntry" />
     <allow class="kafka.server.LogDirFailureChannel" />
     <allow class="org.apache.kafka.test.TestUtils" />
+    <allow class="kafka.log.OffsetIndex"/>
+    <allow class="kafka.log.TimeIndex"/>
+    <allow class="kafka.log.LogSegment"/>
+    <allow class="kafka.server.DelayedOperationKey"/>
+    <allow class="kafka.server.TierFetcherOperationKey"/>
     <subpackage name="client">
       <allow pkg="kafka.tier" />
+    </subpackage>
+    <subpackage name="fetcher">
+      <allow class="kafka.server.DelayedOperation" />
+    </subpackage>
+    <subpackage name="store">
+      <allow pkg="com.amazonaws" />
+      <allow class="kafka.log.LogSegment" />
     </subpackage>
   </subpackage>
 

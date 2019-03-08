@@ -11,11 +11,11 @@ import java.util.{Collections, OptionalLong}
 
 import kafka.log._
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel, ReplicaManager}
-import kafka.tier.archiver.TierArchiverState.BeforeUpload
+import kafka.tier.archiver.TierArchiverState.{BeforeUpload, TierArchiverStateComparator}
 import kafka.tier.archiver._
 import kafka.tier.client.{MockConsumerBuilder, MockProducerBuilder}
 import kafka.tier.state.{MemoryTierPartitionStateFactory, TierPartitionStatus}
-import kafka.tier.store.MockInMemoryTierObjectStore
+import kafka.tier.store.{MockInMemoryTierObjectStore, TierObjectStoreConfig}
 import kafka.tier.store.TierObjectStore.TierObjectStoreFileType
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
@@ -56,7 +56,7 @@ class TierIntegrationTest {
   val maxWaitTimeMs = 2000L
 
   def setup(numLogs: Integer = 2, maxConcurrentUploads: Integer = 10): Unit = {
-    val tierObjectStore = new MockInMemoryTierObjectStore("somebucket")
+    val tierObjectStore = new MockInMemoryTierObjectStore(new TierObjectStoreConfig())
     val tierMetadataManager = new TierMetadataManager(new MemoryTierPartitionStateFactory(),
       Some(tierObjectStore), new LogDirFailureChannel(1), true)
     val (tierTopicManager, consumerBuilder) = setupTierTopicManager(tierMetadataManager)

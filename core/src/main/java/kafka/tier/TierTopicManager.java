@@ -13,7 +13,7 @@ import kafka.tier.domain.TierObjectMetadata;
 import kafka.tier.domain.TierTopicInitLeader;
 import kafka.tier.exceptions.TierMetadataDeserializationException;
 import kafka.tier.exceptions.TierMetadataFatalException;
-import kafka.tier.exceptions.TierMetadataRetryableException;
+import kafka.tier.exceptions.TierMetadataRetriableException;
 import kafka.tier.state.TierPartitionState;
 import kafka.tier.state.TierPartitionState.AppendResult;
 import kafka.tier.state.TierPartitionStatus;
@@ -206,10 +206,10 @@ public class TierTopicManager implements Runnable {
                         entry.serializeValue()),
                 (recordMetadata, exception) -> {
                     if (exception != null) {
-                        if (retryable(exception)) {
+                        if (retriable(exception)) {
                             result.completeExceptionally(
-                                    new TierMetadataRetryableException(
-                                            "Retryable exception sending tier metadata.",
+                                    new TierMetadataRetriableException(
+                                            "Retriable exception sending tier metadata.",
                                             exception));
                         } else {
                             result.completeExceptionally(
@@ -346,7 +346,8 @@ public class TierTopicManager implements Runnable {
     /**
      * work cycle
      */
-    boolean doWork() throws TierMetadataDeserializationException, IOException {
+    // public for testing
+    public boolean doWork() throws TierMetadataDeserializationException, IOException {
         processMigrations();
         checkCatchingUpComplete();
         final boolean primaryProcessed = pollConsumer(primaryConsumer, TierPartitionStatus.ONLINE);
@@ -361,7 +362,8 @@ public class TierTopicManager implements Runnable {
      * Ensure tier topic has been created and setup the backing consumer
      * and producer before signalling ready.
      */
-    void becomeReady() {
+    // pubic for testing
+    public void becomeReady() {
         primaryConsumer = consumerBuilder.setupConsumer(committer, topicName, "primary");
         primaryConsumer.assign(partitions());
         for (Map.Entry<Integer, Long> entry : committer.positions().entrySet()) {
@@ -587,12 +589,12 @@ public class TierTopicManager implements Runnable {
     }
 
     /**
-     * Determine whether tiering is retryable or whether hard exit should occur
+     * Determine whether tiering is retriable or whether hard exit should occur
      *
      * @param e The exception
-     * @return true if retryable, false otherwise.
+     * @return true if retriable, false otherwise.
      */
-    private static boolean retryable(Exception e) {
+    private static boolean retriable(Exception e) {
         return e instanceof RetriableException;
     }
 
