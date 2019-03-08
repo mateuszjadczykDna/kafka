@@ -3,7 +3,7 @@ package soak_clients
 import (
 	"fmt"
 	logutil "github.com/confluentinc/cc-utils/log"
-	"github.com/confluentinc/ce-kafka/cc-services/trogdor"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/spf13/viper"

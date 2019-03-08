@@ -1,7 +1,7 @@
 package soak_clients
 
 import (
-	"github.com/confluentinc/ce-kafka/cc-services/trogdor"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"github.com/pkg/errors"
 	"testing"
 )

@@ -3,7 +3,7 @@ package soak_clients
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/confluentinc/ce-kafka/cc-services/trogdor"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"github.com/jinzhu/copier"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
@@ -144,35 +144,38 @@ func TestConsecutiveTasks(t *testing.T) {
 		NumPartitions:     16,
 		ReplicationFactor: 3,
 	}
-	startConfig := &SoakScenarioConfig{
-		scenarioId: trogdor.TaskId{
+	startConfig := trogdor.ScenarioConfig{
+		ScenarioID: trogdor.TaskId{
 			TaskType: "ShortLivedConsume",
 			Desc:     "MediumTopic",
 		},
-		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
-		agentCount:         3,
-		topic:              mediumTopic,
-		throughputMbPerSec: 7.5,
-		consumerOptions: trogdor.ConsumerOptions{
+		Class:            trogdor.CONSUME_BENCH_SPEC_CLASS,
+		DurationMs:       5,
+		TaskCount:        3,
+		TopicSpec:        mediumTopic,
+		BootstrapServers: bootstrapServers,
+		StartMs:          10,
+		MessagesPerSec:   750,
+		AdminConf:        adminConfig,
+		ConsumerOptions: trogdor.ConsumerOptions{
 			ConsumerGroup: "cg-1",
 		},
-		startMs:    10,
-		durationMs: 5,
+		ClientNodes: shuffleSlice(clientNodes),
 	}
-	firstConfig := SoakScenarioConfig{}
+	firstConfig := trogdor.ScenarioConfig{}
 	copier.Copy(&firstConfig, &startConfig)
-	secondConfig := SoakScenarioConfig{}
+	secondConfig := trogdor.ScenarioConfig{}
 	copier.Copy(&secondConfig, &startConfig)
-	secondConfig.startMs = 15
-	secondConfig.scenarioId = trogdor.TaskId{
+	secondConfig.StartMs = 15
+	secondConfig.ScenarioID = trogdor.TaskId{
 		TaskType: "ShortLivedConsume",
 		Desc:     "MediumTopic",
 		StartMs:  15,
 	}
-	thirdConfig := SoakScenarioConfig{}
+	thirdConfig := trogdor.ScenarioConfig{}
 	copier.Copy(&thirdConfig, &startConfig)
-	thirdConfig.startMs = 20
-	thirdConfig.scenarioId = trogdor.TaskId{
+	thirdConfig.StartMs = 20
+	thirdConfig.ScenarioID = trogdor.TaskId{
 		TaskType: "ShortLivedConsume",
 		Desc:     "MediumTopic",
 		StartMs:  20,
@@ -180,12 +183,12 @@ func TestConsecutiveTasks(t *testing.T) {
 
 	// should return 3 scenario configs
 	expectedConfigs := []trogdor.ScenarioConfig{
-		scenarioConfig(&firstConfig, clientNodes),
-		scenarioConfig(&secondConfig, clientNodes),
-		scenarioConfig(&thirdConfig, clientNodes),
+		firstConfig,
+		secondConfig,
+		thirdConfig,
 	}
 
-	actualConfigs, err := consecutiveTasks(startConfig, 25, clientNodes)
+	actualConfigs, err := consecutiveTasks(startConfig, 25)
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -197,22 +200,36 @@ func TestConsecutiveTasksFailsIfStartMsIsZero(t *testing.T) {
 		NumPartitions:     16,
 		ReplicationFactor: 3,
 	}
-	startConfig := &SoakScenarioConfig{
-		scenarioId: trogdor.TaskId{
+	startConfig := &trogdor.ScenarioConfig{
+		ScenarioID: trogdor.TaskId{
 			TaskType: "ShortLivedConsume",
 			Desc:     "MediumTopic",
 		},
-		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
-		agentCount:         3,
-		topic:              mediumTopic,
-		throughputMbPerSec: 7.5,
-		consumerOptions: trogdor.ConsumerOptions{
+		Class:          trogdor.CONSUME_BENCH_SPEC_CLASS,
+		TaskCount:      3,
+		TopicSpec:      mediumTopic,
+		MessagesPerSec: 75,
+		ConsumerOptions: trogdor.ConsumerOptions{
 			ConsumerGroup: "cg-1",
 		},
-		durationMs: 5,
+		DurationMs:       5,
+		BootstrapServers: bootstrapServers,
 	}
-	_, err := consecutiveTasks(startConfig, 25, clientNodes)
+	_, err := consecutiveTasks(*startConfig, 25)
 	assert.Error(t, err)
+}
+
+func TestMessagesPerSec(t *testing.T) {
+	keyGen, valueGen := trogdor.KeyGeneratorSpec{Size: 100}, trogdor.ValueGeneratorSpec{Size: 900}
+	expectedMessagesPerSec := uint64(1000) // 1000 messages of size 0.01mb per second equal 1mb/s throughput
+
+	assert.Equal(t,
+		expectedMessagesPerSec,
+		messagesPerSec(1.00, trogdor.ProducerOptions{
+			ValueGenerator:       valueGen,
+			TransactionGenerator: trogdor.DefaultTransactionGeneratorSpec,
+			KeyGenerator:         keyGen,
+		}))
 }
 
 func TestCalculateClientCounts(t *testing.T) {

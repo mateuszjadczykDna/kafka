@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	logutil "github.com/confluentinc/cc-utils/log"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"strings"
 
-	"github.com/confluentinc/ce-kafka/cc-services/trogdor"
 	"github.com/dariubs/percent"
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
@@ -33,8 +33,8 @@ func (t *SoakTestConfig) parseConfig(configPath string) error {
 	}
 
 	topicNames := make([]string, len(t.Topics))
-	for _, topicConfig := range t.Topics {
-		topicNames = append(topicNames, topicConfig.Name)
+	for i, topicConfig := range t.Topics {
+		topicNames[i] = topicConfig.Name
 	}
 	logutil.Info(logger, fmt.Sprintf("Loaded configuration for topics %s", strings.Join(topicNames, ",")))
 	return nil
@@ -115,39 +115,47 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 	}
 	nowMs := uint64(time.Now().UnixNano() / int64(time.Millisecond))
 
-	longLivingProducersScenarioConfig := scenarioConfig(&SoakScenarioConfig{
-		scenarioId: trogdor.TaskId{
+	longLivingProducersScenarioConfig := trogdor.ScenarioConfig{
+		ScenarioID: trogdor.TaskId{
 			TaskType: "LongLivedProduce",
 			Desc:     topic.TopicName,
 			StartMs:  nowMs,
 		},
-		class:              trogdor.PRODUCE_BENCH_SPEC_CLASS,
-		durationMs:         longLivedMs,
-		agentCount:         clientCounts.LongLivedProducersCount,
-		topic:              topic,
-		throughputMbPerSec: topicConfig.ProduceMBsThroughput * calculatePercentage(clientCounts.LongLivedProducersCount, topicConfig.ProduceCount),
-		producerOptions:    producerOptions,
-		adminConfig:        producerAdminConfig,
-	}, shuffleSlice(clientNodes)) // shuffle the clientNodes order to ensure random distribution of tasks
+		Class:            trogdor.PRODUCE_BENCH_SPEC_CLASS,
+		TaskCount:        clientCounts.LongLivedProducersCount,
+		TopicSpec:        topic,
+		DurationMs:       longLivedMs,
+		StartMs:          0, // start immediately
+		BootstrapServers: bootstrapServers,
+		MessagesPerSec:   messagesPerSec(topicConfig.ProduceMBsThroughput*calculatePercentage(clientCounts.LongLivedProducersCount, topicConfig.ProduceCount), producerOptions),
+		AdminConf:        producerAdminConfig,
+		ProducerOptions:  producerOptions,
+		ClientNodes:      shuffleSlice(clientNodes),
+	}
 	logutil.Debug(logger, "longLivingProducersScenarioConfig: %+v", longLivingProducersScenarioConfig)
 	longLivingProducersScenario := &trogdor.ScenarioSpec{
 		UsedNames: existingTaskIDs,
 	}
 	longLivingProducersScenario.CreateScenario(longLivingProducersScenarioConfig)
-	longLivingConsumersScenarioConfig := scenarioConfig(&SoakScenarioConfig{
-		scenarioId: trogdor.TaskId{
+
+	longLivingConsumersScenarioConfig := trogdor.ScenarioConfig{
+		ScenarioID: trogdor.TaskId{
 			TaskType: "LongLivedConsume",
 			Desc:     topic.TopicName,
 			StartMs:  nowMs,
 		},
-		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
-		durationMs:         longLivedMs,
-		agentCount:         clientCounts.LongLivedConsumersCount,
-		topic:              topic,
-		throughputMbPerSec: topicConfig.ConsumeMBsThroughput * calculatePercentage(clientCounts.LongLivedConsumersCount, topicConfig.ConsumeCount),
-		consumerOptions:    consumerOptions,
-		adminConfig:        adminConfig,
-	}, shuffleSlice(clientNodes))
+		Class:            trogdor.CONSUME_BENCH_SPEC_CLASS,
+		TaskCount:        clientCounts.LongLivedConsumersCount,
+		TopicSpec:        topic,
+		DurationMs:       longLivedMs,
+		StartMs:          0, // start immediately
+		BootstrapServers: bootstrapServers,
+		MessagesPerSec:   messagesPerSec(topicConfig.ConsumeMBsThroughput*calculatePercentage(clientCounts.LongLivedConsumersCount, topicConfig.ConsumeCount), producerOptions),
+		AdminConf:        adminConfig,
+		ConsumerOptions:  consumerOptions,
+		ClientNodes:      shuffleSlice(clientNodes),
+	}
+
 	logutil.Debug(logger, "longLivingConsumersScenarioConfig: %+v", longLivingConsumersScenarioConfig)
 	longLivingConsumersScenario := &trogdor.ScenarioSpec{
 		UsedNames: existingTaskIDs,
@@ -156,24 +164,27 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 	tasks = append(tasks, longLivingProducersScenario.TaskSpecs...)
 	tasks = append(tasks, longLivingConsumersScenario.TaskSpecs...)
 
-	// schedule short-lived produce/consume tasks one week in advance
-	shortLivedProducersSoakConfig := &SoakScenarioConfig{
-		scenarioId: trogdor.TaskId{
+	// schedule short-lived produce/consume tasks for one week in advance
+	shortLivedProducersScenarioConfig := trogdor.ScenarioConfig{
+		ScenarioID: trogdor.TaskId{
 			TaskType: "ShortLivedProduce",
 			Desc:     topic.TopicName,
 			StartMs:  nowMs,
 		},
-		class:              trogdor.PRODUCE_BENCH_SPEC_CLASS,
-		durationMs:         shortLivedMs,
-		agentCount:         clientCounts.ShortLivedProducersCount,
-		topic:              topic,
-		throughputMbPerSec: topicConfig.ProduceMBsThroughput * calculatePercentage(clientCounts.ShortLivedProducersCount, topicConfig.ProduceCount),
-		producerOptions:    producerOptions,
-		startMs:            nowMs,
-		adminConfig:        producerAdminConfig,
+		Class:            trogdor.PRODUCE_BENCH_SPEC_CLASS,
+		DurationMs:       shortLivedMs,
+		TaskCount:        clientCounts.ShortLivedProducersCount,
+		TopicSpec:        topic,
+		StartMs:          nowMs,
+		BootstrapServers: bootstrapServers,
+		MessagesPerSec:   messagesPerSec(topicConfig.ProduceMBsThroughput*calculatePercentage(clientCounts.ShortLivedProducersCount, topicConfig.ProduceCount), producerOptions),
+		AdminConf:        producerAdminConfig,
+		ProducerOptions:  producerOptions,
+		ClientNodes:      shuffleSlice(clientNodes),
 	}
-	logutil.Debug(logger, "initial shortLivedProducersSoakConfig: %+v", shortLivedProducersSoakConfig)
-	producerTasks, err := consecutiveTasks(shortLivedProducersSoakConfig, nowMs+longLivedMs, shuffleSlice(clientNodes))
+
+	logutil.Debug(logger, "initial shortLivedProducersScenarioConfig: %+v", shortLivedProducersScenarioConfig)
+	producerTasks, err := consecutiveTasks(shortLivedProducersScenarioConfig, nowMs+longLivedMs)
 	if err != nil {
 		panic(err)
 	}
@@ -184,23 +195,27 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 		shortLivedProducersScenario.CreateScenario(config)
 		tasks = append(tasks, shortLivedProducersScenario.TaskSpecs...)
 	}
-	shortLivedConsumersSoakConfig := &SoakScenarioConfig{
-		scenarioId: trogdor.TaskId{
+
+	shortLivedConsumersScenarioConfig := trogdor.ScenarioConfig{
+		ScenarioID: trogdor.TaskId{
 			TaskType: "ShortLivedConsume",
 			Desc:     topic.TopicName,
 			StartMs:  nowMs,
 		},
-		class:              trogdor.CONSUME_BENCH_SPEC_CLASS,
-		durationMs:         shortLivedMs,
-		agentCount:         clientCounts.ShortLivedConsumersCount,
-		topic:              topic,
-		throughputMbPerSec: topicConfig.ConsumeMBsThroughput * calculatePercentage(clientCounts.ShortLivedConsumersCount, topicConfig.ConsumeCount),
-		consumerOptions:    consumerOptions,
-		startMs:            nowMs,
-		adminConfig:        adminConfig,
+		Class:            trogdor.CONSUME_BENCH_SPEC_CLASS,
+		DurationMs:       shortLivedMs,
+		TaskCount:        clientCounts.ShortLivedConsumersCount,
+		TopicSpec:        topic,
+		StartMs:          nowMs,
+		BootstrapServers: bootstrapServers,
+		MessagesPerSec:   messagesPerSec(topicConfig.ConsumeMBsThroughput*calculatePercentage(clientCounts.ShortLivedConsumersCount, topicConfig.ConsumeCount), producerOptions),
+		AdminConf:        adminConfig,
+		ConsumerOptions:  consumerOptions,
+		ClientNodes:      shuffleSlice(clientNodes),
 	}
-	logutil.Debug(logger, "initial shortLivedConsumersSoakConfig: %+v", shortLivedConsumersSoakConfig)
-	consumerTasks, err := consecutiveTasks(shortLivedConsumersSoakConfig, nowMs+longLivedMs, shuffleSlice(clientNodes))
+
+	logutil.Debug(logger, "initial shortLivedConsumersScenarioConfig: %+v", shortLivedConsumersScenarioConfig)
+	consumerTasks, err := consecutiveTasks(shortLivedConsumersScenarioConfig, nowMs+longLivedMs)
 	if err != nil {
 		panic(err)
 	}
@@ -215,65 +230,42 @@ func createTopicTasks(topicConfig TopicConfiguration, longLivedMs uint64, shortL
 	return tasks
 }
 
-func consecutiveTasks(soakConfig *SoakScenarioConfig, endMs uint64, clientNodes []string) ([]trogdor.ScenarioConfig, error) {
+func consecutiveTasks(initialScenario trogdor.ScenarioConfig, endMs uint64) ([]trogdor.ScenarioConfig, error) {
 	var configs []trogdor.ScenarioConfig
-	if soakConfig.startMs == 0 {
+	if initialScenario.StartMs == 0 {
 		return configs, errors.New("StartMs cannot be 0")
 	}
-	originalId := soakConfig.scenarioId
+	originalId := initialScenario.ScenarioID
+	durationMs := initialScenario.DurationMs
+	nextScenario := trogdor.ScenarioConfig{
+		StartMs: initialScenario.StartMs,
+	}
+	copier.Copy(&nextScenario, &initialScenario)
+
 	for {
-		if soakConfig.startMs >= endMs {
+		if nextScenario.StartMs >= endMs {
 			break
 		}
-		configs = append(configs, scenarioConfig(soakConfig, clientNodes))
-
-		newStartMs := soakConfig.startMs + soakConfig.durationMs
-		soakConfig.startMs = newStartMs
+		configs = append(configs, nextScenario)
 
 		taskId := trogdor.TaskId{}
+		newStartMs := nextScenario.StartMs + durationMs
+
 		copier.Copy(&taskId, &originalId)
+		copier.Copy(&nextScenario, &initialScenario)
+
 		taskId.StartMs = newStartMs
-		soakConfig.scenarioId = taskId
+		nextScenario.StartMs = newStartMs
+		nextScenario.ScenarioID = taskId
 	}
 	return configs, nil
 }
 
-type SoakScenarioConfig struct {
-	scenarioId         trogdor.TaskId
-	class              string
-	durationMs         uint64
-	agentCount         int
-	startMs            uint64
-	topic              trogdor.TopicSpec
-	throughputMbPerSec float32
-	adminConfig        trogdor.AdminConf
-	producerOptions    trogdor.ProducerOptions
-	consumerOptions    trogdor.ConsumerOptions
-}
-
-func scenarioConfig(config *SoakScenarioConfig, clientNodes []string) trogdor.ScenarioConfig {
-	// message sizes are approximately 1000 bytes using the default value generator
-	messageSizeBytes := 1000
-	throughputBytesPerSec := float64(config.throughputMbPerSec * 1000000)
-	messagesStepPerLoop := uint64(throughputBytesPerSec / float64(messageSizeBytes))
-
-	return trogdor.ScenarioConfig{
-		ScenarioID:              config.scenarioId,
-		Class:                   config.class,
-		AgentCount:              config.agentCount,
-		TopicSpec:               config.topic,
-		LoopDurationMs:          config.durationMs,
-		NumberOfLoops:           0,
-		StartMs:                 config.startMs, // start immediately if not specified
-		LoopCoolDownMs:          0,
-		BootstrapServers:        bootstrapServers,
-		MinimumMessagesPerAgent: 0,
-		MessagesStepPerLoop:     messagesStepPerLoop,
-		AdminConf:               config.adminConfig,
-		ProducerOptions:         config.producerOptions,
-		ConsumerOptions:         config.consumerOptions,
-		ClientNodes:             clientNodes,
-	}
+// Returns the number of messages per second we would need in order to achieve the desired throughput in MBs
+func messagesPerSec(throughputMbPerSec float32, producerOptions trogdor.ProducerOptions) uint64 {
+	messageSizeBytes := producerOptions.KeyGenerator.Size + producerOptions.ValueGenerator.Size
+	throughputBytesPerSec := float64(throughputMbPerSec * 1000000)
+	return uint64(throughputBytesPerSec / float64(messageSizeBytes))
 }
 
 type ClientCounts struct {

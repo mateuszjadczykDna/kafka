@@ -1,7 +1,7 @@
 # Cloud
 
 Here we store CCloud utilities (written in Go) that are closely tied to Kafka.
-Currently we have a Trogdor client, performance tests that leverage Trogdor and Soak cluster clients.
+Currently we have code orchestrating the Kafka Core Soak cluster's clients via Trogdor under the `soak_cluster `package. It is responsible for creating Trogdor tasks in accordance to a given configuration consisting of desired soak testing length, throughput and etc.
 
 # Soak Testing
 

@@ -10,14 +10,6 @@
   version = "v0.4.0"
 
 [[projects]]
-  branch = "CPKAFKA-2205-task-naming"
-  digest = "1:f4deb4e6b690634f1e5743d5036b7102e945d43fd3cba1e7ecce933895b636b5"
-  name = "github.com/confluentinc/ce-kafka"
-  packages = ["cc-services/trogdor"]
-  pruneopts = "UT"
-  revision = "8bd4df481097a78f3ee099aad8a2601c07d0f607"
-
-[[projects]]
   branch = "master"
   digest = "1:a67bad6dd2ae540680df82cc80b7933686ab3a714678f54bf8cd7478f089eba3"
   name = "github.com/dariubs/percent"
@@ -217,7 +209,7 @@
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = "UT"
-  revision = "153ac476189d567564fda94622d7a8c0fb338f6b"
+  revision = "b4e8571b14e03cc164df06f72b640ebce3899579"
 
 [[projects]]
   digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
@@ -247,7 +239,6 @@
   analyzer-version = 1
   input-imports = [
     "github.com/confluentinc/cc-utils/log",
-    "github.com/confluentinc/ce-kafka/cc-services/trogdor",
     "github.com/dariubs/percent",
     "github.com/go-kit/kit/log",
     "github.com/go-kit/kit/log/level",

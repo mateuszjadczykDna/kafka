@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	logutil "github.com/confluentinc/cc-utils/log"
-	"github.com/confluentinc/ce-kafka/cc-services/trogdor"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"time"
 )
 

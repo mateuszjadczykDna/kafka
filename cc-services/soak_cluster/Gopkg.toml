@@ -30,10 +30,6 @@
   version = "0.4.0"
 
 [[constraint]]
-  name = "github.com/confluentinc/ce-kafka"
-  branch = "CPKAFKA-2205-task-naming"
-
-[[constraint]]
   branch = "master"
   name = "github.com/dariubs/percent"
 

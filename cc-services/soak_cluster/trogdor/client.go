@@ -86,7 +86,7 @@ type TaskId struct {
 	Desc              string // arbitrary task identifier
 	agentId           string
 	loadLoopIteration int
-	duplicateId       int    // increasing number to avoid duplicate names
+	duplicateId       int // increasing number to avoid duplicate names
 }
 
 // Returns the name of this Task in the following form:
@@ -108,7 +108,7 @@ func (t *TaskId) Name() string {
 	optionalSuffix := fmt.Sprintf("%s%s%s", description, loadLoop, duplicateId)
 
 	return fmt.Sprintf("%s.%s.%s%s", t.TaskType,
-		time.Unix(int64(t.StartMs / 1000), 0).UTC().Format(time.RFC3339), t.agentId, optionalSuffix)
+		time.Unix(int64(t.StartMs/1000), 0).UTC().Format(time.RFC3339), t.agentId, optionalSuffix)
 }
 
 type TaskSpec struct {
@@ -199,23 +199,20 @@ type ProducerOptions struct {
 	KeyGenerator         KeyGeneratorSpec
 }
 
+// a Scenario is a composition of multiple identical Trogdor tasks split across multiple Trogdor agents
 type ScenarioConfig struct {
-	ScenarioID              TaskId
-	Class                   string
-	AgentCount              int
-	TotalTopics             uint64
-	TopicSpec               TopicSpec
-	LoopDurationMs          uint64
-	StartMs                 uint64
-	NumberOfLoops           int // setting this to 0 means that we will run one single loop with 1x loop multiplier
-	LoopCoolDownMs          uint64
-	BootstrapServers        string
-	MinimumMessagesPerAgent uint64 // the minimum amount of messages we want each task to consume/produce
-	MessagesStepPerLoop     uint64
-	AdminConf               AdminConf
-	ProducerOptions         ProducerOptions
-	ConsumerOptions         ConsumerOptions
-	ClientNodes             []string // all the configured trogdor nodes
+	ScenarioID       TaskId
+	Class            string
+	TaskCount        int
+	TopicSpec        TopicSpec
+	DurationMs       uint64
+	StartMs          uint64
+	BootstrapServers string
+	MessagesPerSec   uint64
+	AdminConf        AdminConf
+	ProducerOptions  ProducerOptions
+	ConsumerOptions  ConsumerOptions
+	ClientNodes      []string // all the configured trogdor nodes
 }
 
 const PRODUCE_BENCH_SPEC_CLASS = "org.apache.kafka.trogdor.workload.ProduceBenchSpec"
@@ -241,53 +238,26 @@ func (r *TopicSpec) ReturnTopicSpecRawJson() json.RawMessage {
 	return raw
 }
 
-func (r *ScenarioSpec) createAgentTasks(scenarioConfig ScenarioConfig, scenario []TaskSpec, loadLoop int) []TaskSpec {
+func (r *ScenarioSpec) createAgentTasks(scenarioConfig ScenarioConfig, scenario []TaskSpec) []TaskSpec {
 	rawSpec := json.RawMessage{}
 
 	clientNodesCount := len(scenarioConfig.ClientNodes)
-	for agentIdx := 0; agentIdx < scenarioConfig.AgentCount; agentIdx++ {
-
-		messagesStepPerAgent := (scenarioConfig.MessagesStepPerLoop * uint64(loadLoop)) / uint64(scenarioConfig.AgentCount)
-		messagesPerSec := scenarioConfig.MinimumMessagesPerAgent + messagesStepPerAgent
-		durationSeconds := uint64(scenarioConfig.LoopDurationMs) / 1000
+	for agentIdx := 0; agentIdx < scenarioConfig.TaskCount; agentIdx++ {
+		durationSeconds := uint64(scenarioConfig.DurationMs) / 1000
+		messagesPerSec := scenarioConfig.MessagesPerSec / uint64(scenarioConfig.TaskCount)
 		maxMessages := durationSeconds * messagesPerSec
 
 		clientNode := scenarioConfig.ClientNodes[agentIdx%clientNodesCount]
 		switch class := scenarioConfig.Class; class {
 
-		case "org.apache.kafka.trogdor.workload.RoundTripWorkloadSpec":
-			{
-				//Due to roundTrip wanting dedicated topics per agent and loop.
-				scenarioConfig.TopicSpec.TopicName = fmt.Sprintf("TrogdorTopicLoop%dClientNode%s[1-1]", loadLoop, clientNode)
-				activeTopics := scenarioConfig.TopicSpec.ReturnTopicSpecRawJson()
-
-				roundTripWorkloadSpecData := roundTripSpec{
-					Class:                scenarioConfig.Class,
-					StartMs:              scenarioConfig.StartMs,
-					DurationMs:           scenarioConfig.LoopDurationMs,
-					ClientNode:           clientNode,
-					BootstrapServers:     scenarioConfig.BootstrapServers,
-					TargetMessagesPerSec: messagesPerSec,
-					MaxMessages:          maxMessages,
-					ValueGenerator:       scenarioConfig.ProducerOptions.ValueGenerator,
-					CommonClientConf:     &scenarioConfig.AdminConf,
-					ActiveTopics:         activeTopics,
-				}
-				rawSpec, _ = json.Marshal(roundTripWorkloadSpecData)
-
-			}
-
 		case PRODUCE_BENCH_SPEC_CLASS:
 			{
-				if scenarioConfig.TopicSpec.TopicName == "" {
-					scenarioConfig.TopicSpec.TopicName = "TrogdorTopic[1-1]"
-				}
 				activeTopics := scenarioConfig.TopicSpec.ReturnTopicSpecRawJson()
 
 				produceBenchSpecData := producerSpec{
 					Class:                scenarioConfig.Class,
 					StartMs:              scenarioConfig.StartMs,
-					DurationMs:           scenarioConfig.LoopDurationMs,
+					DurationMs:           scenarioConfig.DurationMs,
 					ProducerNode:         clientNode,
 					BootstrapServers:     scenarioConfig.BootstrapServers,
 					TargetMessagesPerSec: messagesPerSec,
@@ -305,14 +275,10 @@ func (r *ScenarioSpec) createAgentTasks(scenarioConfig ScenarioConfig, scenario 
 
 		case CONSUME_BENCH_SPEC_CLASS:
 			{
-				if scenarioConfig.TopicSpec.TopicName == "" {
-					scenarioConfig.TopicSpec.TopicName = "TrogdorTopic[1-1]"
-				}
-
 				consumeBenchSpecData := consumerSpec{
 					Class:                scenarioConfig.Class,
 					StartMs:              scenarioConfig.StartMs,
-					DurationMs:           scenarioConfig.LoopDurationMs,
+					DurationMs:           scenarioConfig.DurationMs,
 					ConsumerNode:         clientNode,
 					BootstrapServers:     scenarioConfig.BootstrapServers,
 					TargetMessagesPerSec: messagesPerSec,
@@ -326,9 +292,6 @@ func (r *ScenarioSpec) createAgentTasks(scenarioConfig ScenarioConfig, scenario 
 		}
 
 		scenarioConfig.ScenarioID.agentId = clientNode
-		if loadLoop > 1 {
-			scenarioConfig.ScenarioID.loadLoopIteration = loadLoop
-		}
 		SpecData := TaskSpec{
 			ID:   r.generateUniqueName(&scenarioConfig.ScenarioID),
 			Spec: rawSpec,
@@ -353,19 +316,7 @@ func (r *ScenarioSpec) generateUniqueName(taskName *TaskId) string {
 }
 
 func (r *ScenarioSpec) CreateScenario(scenarioConfig ScenarioConfig) {
-	var scenario []TaskSpec
-
-	if scenarioConfig.NumberOfLoops > 0 {
-		for loadLoop := 0; loadLoop < scenarioConfig.NumberOfLoops; loadLoop++ {
-			scenario = r.createAgentTasks(scenarioConfig, scenario, loadLoop)
-			// increment startMs for the next tasks
-			scenarioConfig.StartMs = scenarioConfig.StartMs + scenarioConfig.LoopCoolDownMs + scenarioConfig.LoopDurationMs
-		}
-	} else { // single iteration
-		scenario = r.createAgentTasks(scenarioConfig, scenario, 1)
-	}
-
-	r.TaskSpecs = scenario
+	r.TaskSpecs = r.createAgentTasks(scenarioConfig, []TaskSpec{})
 }
 
 // Returns all the Trogdor Tasks from the coordinator that match the filter
