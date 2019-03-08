@@ -173,7 +173,7 @@ public class MultiTenantApis {
           break;
 
         case DESCRIBE_GROUPS:
-          if (field != null && field.name.equals("group_ids")) {
+          if (field != null && field.name.equals("groups")) {
             return Optional.<TransformableType<TenantContext>>some(
                 new ArrayTenantTransformer(type, TenantContext.ValueType.GROUP,
                     TenantTransform.ADD_PREFIX));
@@ -298,6 +298,13 @@ public class MultiTenantApis {
             if (field.name.equals("error_message")) {
               return Optional.some(new ErrorMessageSanitizer(type));
             }
+          }
+          break;
+
+        case DESCRIBE_GROUPS:
+          if ((field != null) && field.name.equals("group_id")) {
+            return Optional.some(
+                new StringTenantTransformer(type, TenantContext.ValueType.GROUP, TenantTransform.REMOVE_PREFIX));
           }
           break;
 

@@ -27,6 +27,8 @@ import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicCo
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicSet;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignment;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignmentSet;
+import org.apache.kafka.common.message.DescribeGroupsRequestData;
+import org.apache.kafka.common.message.DescribeGroupsResponseData;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.metrics.KafkaMetric;
@@ -573,9 +575,11 @@ public class MultiTenantRequestContextTest {
   public void testDescribeGroupsRequest() {
     for (short ver = ApiKeys.DESCRIBE_GROUPS.oldestVersion(); ver <= ApiKeys.DESCRIBE_GROUPS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DESCRIBE_GROUPS, ver);
-      DescribeGroupsRequest inbound = new DescribeGroupsRequest.Builder(Arrays.asList("foo", "bar")).build();
+      DescribeGroupsRequestData describeGroupsRequestData = new DescribeGroupsRequestData();
+      describeGroupsRequestData.setGroups(Arrays.asList("foo", "bar"));
+      DescribeGroupsRequest inbound = new DescribeGroupsRequest.Builder(describeGroupsRequestData).build(ver);
       DescribeGroupsRequest intercepted = (DescribeGroupsRequest) parseRequest(context, inbound);
-      assertEquals(Arrays.asList("tenant_foo", "tenant_bar"), intercepted.groupIds());
+      assertEquals(Arrays.asList("tenant_foo", "tenant_bar"), intercepted.data().groups());
       verifyRequestMetrics(ApiKeys.DESCRIBE_GROUPS);
     }
   }
@@ -584,15 +588,21 @@ public class MultiTenantRequestContextTest {
   public void testDescribeGroupsResponse() throws IOException {
     for (short ver = ApiKeys.DESCRIBE_GROUPS.oldestVersion(); ver <= ApiKeys.DESCRIBE_GROUPS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DESCRIBE_GROUPS, ver);
-      Map<String, DescribeGroupsResponse.GroupMetadata> groupMetadata = new HashMap<>();
-      groupMetadata.put("tenant_foo", new DescribeGroupsResponse.GroupMetadata(Errors.NONE,
-          "EMPTY", "consumer", "range", Collections.<DescribeGroupsResponse.GroupMember>emptyList()));
-      groupMetadata.put("tenant_bar", new DescribeGroupsResponse.GroupMetadata(Errors.NONE,
-          "EMPTY", "consumer", "range", Collections.<DescribeGroupsResponse.GroupMember>emptyList()));
-      DescribeGroupsResponse outbound = new DescribeGroupsResponse(0, groupMetadata);
+      DescribeGroupsResponseData describeGroupsResponseData = new DescribeGroupsResponseData();
+      describeGroupsResponseData.groups().add(DescribeGroupsResponse.groupMetadata("tenant_foo", Errors.NONE,
+              "EMPTY", "consumer", "range", Collections.emptyList(), Collections.emptySet()));
+      describeGroupsResponseData.groups().add(DescribeGroupsResponse.groupMetadata("tenant_bar", Errors.NONE,
+              "EMPTY", "consumer", "range", Collections.emptyList(), Collections.emptySet()));
+
+      DescribeGroupsResponse outbound = new DescribeGroupsResponse(describeGroupsResponseData);
       Struct struct = parseResponse(ApiKeys.DESCRIBE_GROUPS, ver, context.buildResponse(outbound));
-      DescribeGroupsResponse intercepted = new DescribeGroupsResponse(struct);
-      assertEquals(mkSet("foo", "bar"), intercepted.groups().keySet());
+      DescribeGroupsResponse intercepted = new DescribeGroupsResponse(struct, ver);
+      assertEquals(mkSet("foo", "bar"), intercepted
+              .data()
+              .groups()
+              .stream()
+              .map(DescribeGroupsResponseData.DescribedGroup::groupId)
+              .collect(Collectors.toSet()));
       verifyResponseMetrics(ApiKeys.DESCRIBE_GROUPS, Errors.NONE);
     }
   }

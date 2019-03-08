@@ -701,7 +701,7 @@ class ReplicaManager(val config: KafkaConfig,
     localReplica(topicPartition) match {
       case Some(replica) =>
         if (isFuture)
-          replica.logEndOffset.messageOffset - logEndOffset
+          replica.logEndOffset - logEndOffset
         else
           math.max(replica.highWatermark.messageOffset - logEndOffset, 0)
       case None =>
@@ -1117,7 +1117,7 @@ class ReplicaManager(val config: KafkaConfig,
     val isReplicaInSync = nonOfflinePartition(topicPartition).exists { partition =>
       partition.getReplica(replicaId).exists(partition.inSyncReplicas.contains)
     }
-    quota.isThrottled(topicPartition) && quota.isQuotaExceeded && !isReplicaInSync
+    !isReplicaInSync && quota.isThrottled(topicPartition) && quota.isQuotaExceeded
   }
 
   def getLogConfig(topicPartition: TopicPartition): Option[LogConfig] = localReplica(topicPartition).flatMap(_.log.map(_.config))
@@ -1523,7 +1523,7 @@ class ReplicaManager(val config: KafkaConfig,
     nonOfflinePartitionsIterator.filter(_.leaderReplicaIfLocal.isDefined)
 
   def getLogEndOffset(topicPartition: TopicPartition): Option[Long] =
-    nonOfflinePartition(topicPartition).flatMap(_.leaderReplicaIfLocal.map(_.logEndOffset.messageOffset))
+    nonOfflinePartition(topicPartition).flatMap(_.leaderReplicaIfLocal.map(_.logEndOffset))
 
   // Flushes the highwatermark value for all partitions to the highwatermark file
   def checkpointHighWatermarks() {

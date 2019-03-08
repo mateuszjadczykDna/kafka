@@ -19,7 +19,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.{ConfluentTopicConfig, TopicConfig}
 import org.junit.Assert.{assertEquals, assertTrue}
-import org.junit.{Before, Test}
+import org.junit.{Before, Ignore, Test}
 
 import scala.collection.JavaConverters._
 
@@ -72,6 +72,7 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
   }
 
   @Test
+  @Ignore
   def testArchiveAndFetch(): Unit = {
     val producer = createProducer()
 
