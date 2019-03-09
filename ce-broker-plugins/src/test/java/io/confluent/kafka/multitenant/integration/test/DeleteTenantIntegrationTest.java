@@ -61,6 +61,7 @@ public class DeleteTenantIntegrationTest {
     private PhysicalClusterMetadata metadata;
     private List<NewTopic> sampleTopics = Collections.singletonList(new NewTopic("abcd", 3, (short) 1));
     private String internalBootstrap;
+    private int adminUserId = 100;
 
     @Rule
     public TemporaryFolder tempFolder = new TemporaryFolder();
@@ -69,24 +70,13 @@ public class DeleteTenantIntegrationTest {
     public void setUp() throws Exception {
 
         testHarness = new IntegrationTestHarness();
-        int adminUserId = 100;
 
         PhysicalCluster physicalCluster = testHarness.start(brokerProps());
 
         lc1 = physicalCluster.createLogicalCluster(LC_META_ABC.logicalClusterId(), adminUserId, 9, 11, 12);
         lc2 = physicalCluster.createLogicalCluster(LC_META_XYZ.logicalClusterId(), adminUserId, 9, 11, 12);
 
-        metadata =
-                (PhysicalClusterMetadata) physicalCluster.kafkaCluster().brokers().get(0).multitenantMetadata();
-
-
-        Map<String, Object> configs = new HashMap<>();
-        internalBootstrap =
-                "INTERNAL://" + physicalCluster.kafkaCluster().kafkas().get(0).brokerConnect("INTERNAL");
-        configs.put(KafkaConfig.AdvertisedListenersProp(), internalBootstrap);
-        configs.put(TopicPolicyConfig.INTERNAL_LISTENER_CONFIG,
-                TopicPolicyConfig.DEFAULT_INTERNAL_LISTENER);
-        metadata.updateAdminClient(configs);
+        metadata = updatePhysicalClusterMetadata(physicalCluster);
 
         Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
         Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
@@ -217,9 +207,41 @@ public class DeleteTenantIntegrationTest {
         )).values().get();
 
         assertTrue("ACLs should exist", describedAcls.size() > 0);
-
-
     }
+
+    @Test
+    public void testHandleACLsDisabledCase() throws Exception {
+
+        // we need a new physical cluster where ACLs are disabled
+
+        Properties props = new Properties();
+        props.put(KafkaConfig.BrokerIdProp(), 100);
+        props.put(ConfluentConfigs.MULTITENANT_METADATA_DIR_CONFIG,
+                tempFolder.getRoot().getCanonicalPath());
+        props.put(ConfluentConfigs.MULTITENANT_METADATA_CLASS_CONFIG,
+                "io.confluent.kafka.multitenant.PhysicalClusterMetadata");
+        props.put(KafkaConfig$.MODULE$.AuthorizerClassNameProp(), MultiTenantAuthorizer.class.getName());
+        props.put(ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_CONFIG,
+                TEST_CACHE_RELOAD_DELAY_MS);
+
+        testHarness.shutdown();
+
+        PhysicalCluster physicalCluster = testHarness.start(props);
+        PhysicalClusterMetadata metadata = updatePhysicalClusterMetadata(physicalCluster);
+
+        lc1 = physicalCluster.createLogicalCluster(LC_META_ABC.logicalClusterId(), adminUserId, 9, 11, 12);
+        Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
+
+        // delete the cluster
+        LogicalClusterMetadata deleted = getDeleteLogicalCluster();
+
+        // make sure it is completely deleted
+        TestUtils.waitForCondition(
+                () -> metadata.fullyDeletedClusters().contains(deleted.logicalClusterId()),
+                TEST_MAX_WAIT_MS,
+                "Expect that the tenant is gone");
+    }
+
 
     // We "delete" tenants by generating new metadata with a delete date
     private LogicalClusterMetadata getDeleteLogicalCluster() throws IOException {
@@ -234,4 +256,21 @@ public class DeleteTenantIntegrationTest {
         Utils.updateLogicalClusterFile(deleted, tempFolder);
         return deleted;
     }
+
+    // Update the metadata plugin with a valid internal listener configuration
+    private PhysicalClusterMetadata updatePhysicalClusterMetadata(PhysicalCluster physicalCluster) {
+        PhysicalClusterMetadata metadata =
+                (PhysicalClusterMetadata) physicalCluster.kafkaCluster().brokers().get(0).multitenantMetadata();
+
+        Map<String, Object> configs = new HashMap<>();
+        internalBootstrap =
+                "INTERNAL://" + physicalCluster.kafkaCluster().kafkas().get(0).brokerConnect("INTERNAL");
+        configs.put(KafkaConfig.AdvertisedListenersProp(), internalBootstrap);
+        configs.put(TopicPolicyConfig.INTERNAL_LISTENER_CONFIG,
+                TopicPolicyConfig.DEFAULT_INTERNAL_LISTENER);
+        metadata.updateAdminClient(configs);
+
+        return metadata;
+    }
+
 }

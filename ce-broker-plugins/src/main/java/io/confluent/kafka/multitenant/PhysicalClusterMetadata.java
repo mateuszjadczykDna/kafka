@@ -18,6 +18,7 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.ConfluentConfigs;
+import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
@@ -357,6 +358,15 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   }
 
   /**
+   * Return all logical clusters that are considered deleted and we won't try to delete again
+   * @return
+   */
+  public Set<String> fullyDeletedClusters() {
+    ensureOpen();
+    return deletedClusters;
+  }
+
+  /**
    * Returns metadata of a given logical cluster ID
    * @param logicalClusterId logical cluster ID
    * @return logical cluster metadata or null if logical cluster does not exist or its metadata
@@ -608,9 +618,16 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
         else
           aclFiltersToDelete.add(tenantFilter);
       } catch (Exception e) {
-        LOG.error("Failed to get ACLs for tenants {}. We'll try again next time",
-                deleteInProgressClusters, e);
-        return;
+        if (e.getCause() instanceof InvalidRequestException) {
+          LOG.error("Failed to get ACLs for tenants {} because this operation isn't supporting on "
+                  + "this physical cluster. We won't retry and will consider deletion of ACLs "
+                  + "for all tenants in list complete.", deleteInProgressClusters, e);
+          tenantsWithNoACLs.addAll(deleteInProgressClusters);
+        } else {
+          LOG.error("Failed to get ACLs for tenants {}. We'll try again next time",
+                  deleteInProgressClusters, e);
+          return;
+        }
       }
     }
 
