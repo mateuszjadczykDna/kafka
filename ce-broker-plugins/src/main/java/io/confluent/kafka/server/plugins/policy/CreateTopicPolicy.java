@@ -69,7 +69,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     }
 
     Integer numPartitionsPassed = reqMetadata.numPartitions();
-    if (!reqMetadata.replicasAssignments().isEmpty()) {
+    if (reqMetadata.replicasAssignments() != null && !reqMetadata.replicasAssignments().isEmpty()) {
       numPartitionsPassed = reqMetadata.replicasAssignments().keySet().size();
     }
     if (numPartitionsPassed == null) {
@@ -77,7 +77,7 @@ public class CreateTopicPolicy implements org.apache.kafka.server.policy.CreateT
     }
 
     Short repFactorPassed = reqMetadata.replicationFactor();
-    if (!reqMetadata.replicasAssignments().isEmpty()) {
+    if (reqMetadata.replicasAssignments() != null && !reqMetadata.replicasAssignments().isEmpty()) {
       repFactorPassed = (short) reqMetadata.replicasAssignments().values().iterator().next().size();
     }
     if (repFactorPassed != null && repFactorPassed != requiredRepFactor) {

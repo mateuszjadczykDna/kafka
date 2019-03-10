@@ -32,8 +32,6 @@ import java.util.Set;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class CreateTopicPolicyTest {
 
@@ -47,7 +45,7 @@ public class CreateTopicPolicyTest {
   private static final int MAX_MESSAGE_BYTES = 4242;
 
   private CreateTopicPolicy policy;
-  private RequestMetadata requestMetadata;
+  private Map<String, String> topicConfigs;
 
   @Before
   public void setUp() throws Exception {
@@ -62,15 +60,10 @@ public class CreateTopicPolicyTest {
     policy = new CreateTopicPolicy();
     policy.configure(config);
 
-    Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
+    topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.MAX_MESSAGE_BYTES_CONFIG, String.valueOf(MAX_MESSAGE_BYTES))
         .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, String.valueOf(MIN_IN_SYNC_REPLICAS))
         .build();
-    requestMetadata = mock(RequestMetadata.class);
-    when(requestMetadata.topic()).thenReturn(TOPIC);
-    when(requestMetadata.replicationFactor()).thenReturn(REPLICATION_FACTOR);
-    when(requestMetadata.numPartitions()).thenReturn(MAX_PARTITIONS);
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
   }
 
   @Test
@@ -130,6 +123,8 @@ public class CreateTopicPolicyTest {
   // will throw exception because of failure to use AdminClient without kafka cluster
   @Test(expected = RuntimeException.class)
   public void validateParamsSetOk() throws Exception {
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, REPLICATION_FACTOR, null, topicConfigs);
     validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
   }
 
@@ -138,9 +133,7 @@ public class CreateTopicPolicyTest {
   public void validateNoReplicationNoTopicConfigGivenOk() throws Exception {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .build();
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(10);
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(TOPIC, 10, null, null, topicConfigs);
     validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
   }
 
@@ -157,40 +150,43 @@ public class CreateTopicPolicyTest {
         .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")
         .put(TopicConfig.SEGMENT_MS_CONFIG, "600000")
         .build();
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(10);
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(TOPIC, 10, null, null, topicConfigs);
     validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
   }
 
   // will throw exception because of failure to use AdminClient without kafka cluster
   @Test(expected = RuntimeException.class)
   public void validateValidPartitionAssignmentOk() throws Exception {
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(null);
-    when(requestMetadata.replicasAssignments()).thenReturn(
-        ImmutableMap.of(0, ImmutableList.of(0, 1, 2, 3, 4),
-                        1, ImmutableList.of(1, 2, 3, 4, 5)));
+    List<Integer> part0Assignment = ImmutableList.of(0, 1, 2, 3, 4);
+    List<Integer> part1Assignment = ImmutableList.of(1, 2, 3, 4, 5);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, null, null,
+        ImmutableMap.of(0, part0Assignment,
+                        1, part1Assignment),
+        topicConfigs);
     validatePolicyAndEnsurePolicyNotViolated(policy, requestMetadata);
   }
 
   @Test(expected = PolicyViolationException.class)
   public void validatePartitionAssignmentWithInvalidNumberOfReplicasNotOk() throws Exception {
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(null);
-    when(requestMetadata.replicasAssignments()).thenReturn(
-        ImmutableMap.of(0, ImmutableList.of(0, 1, 2, 3, 4, 5),
-                        1, ImmutableList.of(1, 2, 3, 4, 5, 0)));
+    List<Integer> part0Assignment = ImmutableList.of(0, 1, 2, 3, 4, 5);
+    List<Integer> part1Assignment = ImmutableList.of(1, 2, 3, 4, 5, 6);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, null, null,
+        ImmutableMap.of(0, part0Assignment,
+                        1, part1Assignment),
+        topicConfigs);
     policy.validate(requestMetadata);
   }
 
   @Test(expected = PolicyViolationException.class)
   public void validatePartitionAssignmentWithNoReplicasNotOk() throws Exception {
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(null);
-    when(requestMetadata.replicasAssignments()).thenReturn(
-        ImmutableMap.of(0, Collections.emptyList(),
-                        1, Collections.emptyList()));
+    List<Integer> emptyAssignment = Collections.emptyList();
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, null, null,
+        ImmutableMap.of(0, emptyAssignment,
+                        1, emptyAssignment),
+        topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -201,9 +197,7 @@ public class CreateTopicPolicyTest {
         .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "5")  // disallowed
         .put(TopicConfig.RETENTION_MS_CONFIG, "135217728")  // allowed
         .build();
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(10);
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(TOPIC, 10, null, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -211,15 +205,14 @@ public class CreateTopicPolicyTest {
   public void rejectsNoPartitionCountGiven() throws Exception {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .build();
-    when(requestMetadata.replicationFactor()).thenReturn(null);
-    when(requestMetadata.numPartitions()).thenReturn(null);
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(TOPIC, null, null, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
   @Test(expected = PolicyViolationException.class)
   public void rejectsBadRepFactor() throws Exception {
-    when(requestMetadata.replicationFactor()).thenReturn((short) 6);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, (short) 6, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -228,13 +221,15 @@ public class CreateTopicPolicyTest {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "3")
         .build();
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, REPLICATION_FACTOR, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
   @Test(expected = RuntimeException.class)
   public void rejectsBadNumPartitions() throws Exception {
-    when(requestMetadata.numPartitions()).thenReturn(22);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, 22, REPLICATION_FACTOR, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -243,7 +238,8 @@ public class CreateTopicPolicyTest {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.DELETE_RETENTION_MS_CONFIG, "60566400001")
         .build();
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, REPLICATION_FACTOR, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -252,7 +248,8 @@ public class CreateTopicPolicyTest {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.SEGMENT_BYTES_CONFIG, "" + (50 * 1024 * 1024 - 1))
         .build();
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, REPLICATION_FACTOR, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -261,7 +258,8 @@ public class CreateTopicPolicyTest {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
         .put(TopicConfig.SEGMENT_BYTES_CONFIG, "1073741825")
         .build();
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, REPLICATION_FACTOR, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -270,7 +268,8 @@ public class CreateTopicPolicyTest {
     Map<String, String> topicConfigs = ImmutableMap.<String, String>builder()
             .put(TopicConfig.SEGMENT_MS_CONFIG, "" + (500 * 1000))
             .build();
-    when(requestMetadata.configs()).thenReturn(topicConfigs);
+    RequestMetadata requestMetadata = new RequestMetadata(
+        TOPIC, MAX_PARTITIONS, REPLICATION_FACTOR, null, topicConfigs);
     policy.validate(requestMetadata);
   }
 
@@ -406,6 +405,8 @@ public class CreateTopicPolicyTest {
       policy.validate(reqMetadata);
     } catch (PolicyViolationException pve) {
       fail("Unexpected PolicyViolationException: " + pve.getMessage());
+    } catch (NullPointerException npe) {
+      fail("Unexpected NullPointerException");
     }
   }
 
