@@ -81,7 +81,7 @@ public class KafkaAuthStore implements AuthStore, ConsumerListener<AuthKey, Auth
 
   @Override
   public CompletionStage<Void> startReader() {
-    return reader.start(() -> createAdminClient(clientConfig.writerConfigs()),
+    return reader.start(() -> createAdminClient(clientConfig.adminClientConfigs(true)),
         clientConfig.topicCreateTimeout);
   }
 
@@ -98,7 +98,7 @@ public class KafkaAuthStore implements AuthStore, ConsumerListener<AuthKey, Auth
         AUTH_TOPIC,
         clientConfig,
         createProducer(clientConfig.writerConfigs()),
-        () -> createAdminClient(clientConfig.writerConfigs()),
+        () -> createAdminClient(clientConfig.adminClientConfigs(false)),
         authCache,
         time);
 

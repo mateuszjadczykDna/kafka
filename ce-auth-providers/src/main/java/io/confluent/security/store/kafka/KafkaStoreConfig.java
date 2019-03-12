@@ -125,6 +125,15 @@ public class KafkaStoreConfig extends AbstractConfig {
     return configs;
   }
 
+  public Map<String, Object> adminClientConfigs(boolean reader) {
+    Map<String, Object> configs = baseConfigs();
+    String clientType = reader ? "reader" : "writer";
+    configs.putAll(originalsWithPrefix(PREFIX + clientType + "."));
+    configs.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+    configs.put(ConsumerConfig.CLIENT_ID_CONFIG, "__metadata_admin_" + clientType);
+    return configs;
+  }
+
   // Allow inheritance of security configs for reader/writer/coordinator
   private Map<String, Object> baseConfigs() {
     Map<String, Object> configs = originals();

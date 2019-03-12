@@ -157,8 +157,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
       throw new InterruptException(e);
     } finally {
       externalAuthStores.values().forEach(store -> store.stop(generationId));
-      if (partitionWriters != null)
-        partitionWriters.values().forEach(p -> p.stop(generationId));
+      partitionWriters.values().forEach(p -> p.stop(generationId));
 
       isMasterWriter.set(false);
     }
@@ -252,7 +251,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
   @Override
   public void onConsumerRecord(ConsumerRecord<AuthKey, AuthValue> record, AuthValue oldValue) {
     // If writing is not enabled yet, we can ignore the record.
-    if (partitionWriters == null)
+    if (partitionWriters.isEmpty() || !partitionWriters.containsKey(record.partition()))
       return;
 
     KafkaPartitionWriter<AuthKey, AuthValue> partitionWriter = partitionWriter(record.partition());
