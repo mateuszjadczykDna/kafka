@@ -3,14 +3,15 @@ package io.confluent.kafka.multitenant.schema;
 
 import io.confluent.kafka.multitenant.utils.Optional;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.message.DescribeGroupsRequestData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.CommonFields;
 import org.apache.kafka.common.protocol.types.Field;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.protocol.types.Type;
+import org.apache.kafka.common.requests.DescribeGroupsRequest;
 import org.apache.kafka.common.requests.FetchRequest;
-import org.apache.kafka.common.requests.MetadataRequest;
 import org.apache.kafka.common.requests.RequestInternals;
 import org.junit.Test;
 
@@ -27,14 +28,14 @@ public class TransformableSchemaTest {
 
   @Test
   public void testReadAndTransformPrimitiveArray() throws IOException {
-    short metadataVersion = ApiKeys.METADATA.latestVersion();
-    Schema metadataSchema = ApiKeys.METADATA.requestSchema(metadataVersion);
+    short describeGroupVersion = ApiKeys.DESCRIBE_GROUPS.latestVersion();
+    Schema describeGroupSchema = ApiKeys.DESCRIBE_GROUPS.requestSchema(describeGroupVersion);
 
-    TransformableType<TransformContext> transformSchema = TransformableSchema.transformSchema(metadataSchema,
+    TransformableType<TransformContext> transformSchema = TransformableSchema.transformSchema(describeGroupSchema,
         new TransformableSchema.FieldSelector<TransformContext>() {
           @Override
           public Optional<TransformableType<TransformContext>> maybeAddTransformableType(Field field, final Type type) {
-            if (field != null && field.name.equals("topics")) {
+            if (field != null && field.name.equals("groups")) {
               return Optional.<TransformableType<TransformContext>>some(new AbstractTransformableType<TransformContext>(type) {
                 @Override
                 public Object transform(Object value, TransformContext ctx) {
@@ -51,26 +52,28 @@ public class TransformableSchemaTest {
           }
         });
 
-    MetadataRequest request = new MetadataRequest.Builder(Arrays.asList("a", "b"), true).build(metadataVersion);
+    DescribeGroupsRequestData describeGroupsRequestData = new DescribeGroupsRequestData();
+    describeGroupsRequestData.setGroups(Arrays.asList("a", "b"));
+    DescribeGroupsRequest request = new DescribeGroupsRequest.Builder(describeGroupsRequestData).build(describeGroupVersion);
     Struct originalStruct = RequestInternals.toStruct(request);
     ByteBuffer serializedRequest = toByteBuffer(originalStruct);
 
     Struct transformedStruct = (Struct) transformSchema.read(serializedRequest, null);
-    MetadataRequest transformedRequest = new MetadataRequest(transformedStruct, metadataVersion);
-    assertEquals(Arrays.asList("foo.a", "foo.b"), transformedRequest.topics());
+    DescribeGroupsRequest transformedRequest = new DescribeGroupsRequest(transformedStruct, describeGroupVersion);
+    assertEquals(Arrays.asList("foo.a", "foo.b"), transformedRequest.data().groups());
     assertEquals(transformedStruct.sizeOf(), transformSchema.sizeOf(originalStruct, null));
   }
 
   @Test
   public void testWriteAndTransformPrimitiveArray() throws IOException {
-    short metadataVersion = ApiKeys.METADATA.latestVersion();
-    Schema metadataSchema = ApiKeys.METADATA.requestSchema(metadataVersion);
+    short describeGroupVersion = ApiKeys.DESCRIBE_GROUPS.latestVersion();
+    Schema describeGroupSchema = ApiKeys.DESCRIBE_GROUPS.requestSchema(describeGroupVersion);
 
-    TransformableType<TransformContext> transformSchema = TransformableSchema.transformSchema(metadataSchema,
+    TransformableType<TransformContext> transformSchema = TransformableSchema.transformSchema(describeGroupSchema,
         new TransformableSchema.FieldSelector<TransformContext>() {
           @Override
           public Optional<TransformableType<TransformContext>> maybeAddTransformableType(Field field, final Type type) {
-            if (field != null && field.name.equals("topics")) {
+            if (field != null && field.name.equals("groups")) {
               return Optional.<TransformableType<TransformContext>>some(new AbstractTransformableType<TransformContext>(type) {
                 @Override
                 public Object transform(Object value, TransformContext ctx) {
@@ -87,16 +90,18 @@ public class TransformableSchemaTest {
           }
         });
 
-    MetadataRequest request = new MetadataRequest.Builder(Arrays.asList("foo.a", "foo.b"), true).build(metadataVersion);
+    DescribeGroupsRequestData describeGroupsRequestData = new DescribeGroupsRequestData();
+    describeGroupsRequestData.setGroups(Arrays.asList("foo.a", "foo.b"));
+    DescribeGroupsRequest request = new DescribeGroupsRequest.Builder(describeGroupsRequestData).build(describeGroupVersion);
     Struct originalStruct = RequestInternals.toStruct(request);
 
     int transformedSize = transformSchema.sizeOf(originalStruct, null);
     ByteBuffer buf = ByteBuffer.allocate(transformedSize);
     transformSchema.write(buf, originalStruct, null);
     buf.flip();
-    Struct transformedStruct = metadataSchema.read(buf);
-    MetadataRequest transformedRequest = new MetadataRequest(transformedStruct, metadataVersion);
-    assertEquals(Arrays.asList("a", "b"), transformedRequest.topics());
+    Struct transformedStruct = describeGroupSchema.read(buf);
+    DescribeGroupsRequest transformedRequest = new DescribeGroupsRequest(transformedStruct, describeGroupVersion);
+    assertEquals(Arrays.asList("a", "b"), transformedRequest.data().groups());
     assertEquals(transformedSize, transformedStruct.sizeOf());
   }
 

@@ -29,6 +29,7 @@ import org.apache.kafka.clients.MockClient;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient;
 import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.internals.ClusterResourceListeners;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
@@ -69,7 +70,7 @@ public class MetadataServiceCoordinatorTest {
     coordinatorId = "2";
 
     LogContext logContext = new LogContext("test");
-    Metadata metadata = new Metadata(10, 60 * 60 * 1000L, true);
+    Metadata metadata = new Metadata(10, 60 * 60 * 1000L, new LogContext(), new ClusterResourceListeners());
     mockClient = new MockClient(time, metadata);
     mockClient.updateMetadata(TestUtils.metadataUpdateWith(5, Collections.emptyMap()));
     coordinatorClient = new ConsumerNetworkClient(logContext,

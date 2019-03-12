@@ -164,6 +164,13 @@ public class MultiTenantApis {
         Field field, Type type) {
       switch (api) {
         case METADATA:
+          if (field != null && field.name.equals("name")) {
+            return Optional.some(
+                new StringTenantTransformer(type, TenantContext.ValueType.TOPIC,
+                    TenantTransform.ADD_PREFIX));
+          }
+          break;
+
         case DELETE_TOPICS:
           if (field != null && field.name.equals("topics")) {
             return Optional.<TransformableType<TenantContext>>some(
@@ -269,6 +276,12 @@ public class MultiTenantApis {
             return Optional.some(
                 new ClusterIdSubstitution(type));
           }
+          if (field != null && field.name.equals("name")) {
+            return Optional.some(
+                new StringTenantTransformer(type, TenantContext.ValueType.TOPIC,
+                    TenantTransform.REMOVE_PREFIX));
+          }
+
           break;
 
         case DESCRIBE_CONFIGS:

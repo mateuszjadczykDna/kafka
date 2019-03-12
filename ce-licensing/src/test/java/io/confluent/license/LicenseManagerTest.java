@@ -1071,7 +1071,7 @@ public class LicenseManagerTest extends EasyMockSupport {
     assertTrue(events.isEmpty());
   }
 
-  protected static class MockTime implements Time {
+  protected static class MockTime extends org.apache.kafka.common.utils.MockTime {
 
     private long nowMillis = 0;
 
@@ -1094,6 +1094,7 @@ public class LicenseManagerTest extends EasyMockSupport {
     public void sleep(long ms) {
       nowMillis += ms;
     }
+    
   }
 
   protected static void addClusterClients(LicenseManager manager, int...brokerCounts) {

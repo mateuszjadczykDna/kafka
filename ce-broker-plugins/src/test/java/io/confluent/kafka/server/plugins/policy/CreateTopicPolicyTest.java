@@ -447,11 +447,14 @@ public class CreateTopicPolicyTest {
     // each CreateTopicPolicy.ensureValidPartitionCount calls 3 admin client methods which expect
     // a response
     clientEnv.kafkaClient().prepareResponse(
-        new MetadataResponse(clientEnv.cluster().nodes(), CLUSTER_ID, clientEnv.cluster().controller().id(), topicMetadataList));
+            MetadataResponse.prepareResponse(clientEnv.cluster().nodes(), CLUSTER_ID,
+                    clientEnv.cluster().controller().id(), topicMetadataList));
     clientEnv.kafkaClient().prepareResponse(
-        new MetadataResponse(clientEnv.cluster().nodes(), CLUSTER_ID, clientEnv.cluster().controller().id(), topicMetadataList));
+            MetadataResponse.prepareResponse(clientEnv.cluster().nodes(), CLUSTER_ID,
+                    clientEnv.cluster().controller().id(), topicMetadataList));
     clientEnv.kafkaClient().prepareResponse(
-        new MetadataResponse(clientEnv.cluster().nodes(), CLUSTER_ID, clientEnv.cluster().controller().id(), topicMetadataList));
+            MetadataResponse.prepareResponse(clientEnv.cluster().nodes(), CLUSTER_ID,
+                    clientEnv.cluster().controller().id(), topicMetadataList));
   }
 
   private static void prepareForOneValidateCall(AdminClientUnitTestEnv clientEnv,

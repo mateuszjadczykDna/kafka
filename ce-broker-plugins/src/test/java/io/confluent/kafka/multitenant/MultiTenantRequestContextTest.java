@@ -31,6 +31,8 @@ import org.apache.kafka.common.message.DescribeGroupsRequestData;
 import org.apache.kafka.common.message.DescribeGroupsResponseData;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
+import org.apache.kafka.common.message.MetadataRequestData;
+import org.apache.kafka.common.message.MetadataRequestData.MetadataRequestTopic;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
@@ -352,7 +354,11 @@ public class MultiTenantRequestContextTest {
   public void testMetadataRequest() {
     for (short ver = 0; ver <= ApiKeys.METADATA.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.METADATA, ver);
-      MetadataRequest inbound = new MetadataRequest(Arrays.asList("foo", "bar"), true, ver);
+      MetadataRequestData data = new MetadataRequestData();
+      data.setAllowAutoTopicCreation(true);
+      data.setTopics(Stream.of("foo", "bar").map(t -> new MetadataRequestTopic().setName(t))
+          .collect(toList()));
+      MetadataRequest inbound = new MetadataRequest(data, ver);
       MetadataRequest intercepted = (MetadataRequest) parseRequest(context, inbound);
       assertEquals(Arrays.asList("tenant_foo", "tenant_bar"), intercepted.topics());
       verifyRequestMetrics(ApiKeys.METADATA);
@@ -375,10 +381,10 @@ public class MultiTenantRequestContextTest {
               Optional.empty(), Collections.singletonList(node), Collections.singletonList(node),
               Collections.<Node>emptyList()))));
 
-      MetadataResponse outbound = new MetadataResponse(0, Collections.singletonList(node),
-          "231412341", 1, topicMetadata);
+      MetadataResponse outbound = MetadataResponse.prepareResponse(0, Collections.singletonList(node),
+              "231412341", 1, topicMetadata);
       Struct struct = parseResponse(ApiKeys.METADATA, ver, context.buildResponse(outbound));
-      MetadataResponse intercepted = new MetadataResponse(struct);
+      MetadataResponse intercepted = new MetadataResponse(struct, ver);
       if (ver < 2)
         assertNull(intercepted.clusterId());
       else
@@ -398,8 +404,10 @@ public class MultiTenantRequestContextTest {
   public void testMetadataFetchAllTopics() throws IOException {
     for (short ver = 0; ver <= ApiKeys.METADATA.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.METADATA, ver);
-      List<String> allTopicsQuery = ver == 0 ? Collections.emptyList() : null;
-      MetadataRequest inbound = new MetadataRequest(allTopicsQuery, true, ver);
+
+      MetadataRequestData data = new MetadataRequestData().setAllowAutoTopicCreation(true)
+          .setTopics(ver == 0 ? Collections.emptyList() : null);
+      MetadataRequest inbound = new MetadataRequest(data, ver);
       MetadataRequest interceptedInbound = (MetadataRequest) parseRequest(context, inbound);
       assertTrue(interceptedInbound.isAllTopics());
 
@@ -422,10 +430,9 @@ public class MultiTenantRequestContextTest {
               Optional.empty(), Collections.singletonList(node), Collections.singletonList(node),
               Collections.<Node>emptyList()))));
 
-      MetadataResponse outbound = new MetadataResponse(0, Collections.singletonList(node),
-          "clusterId", 1, topicMetadata);
+      MetadataResponse outbound = MetadataResponse.prepareResponse(0, Collections.singletonList(node), "clusterId", 1, topicMetadata);
       Struct struct = parseResponse(ApiKeys.METADATA, ver, context.buildResponse(outbound));
-      MetadataResponse interceptedOutbound = new MetadataResponse(struct);
+      MetadataResponse interceptedOutbound = new MetadataResponse(struct, ver);
 
       Iterator<MetadataResponse.TopicMetadata> iterator = interceptedOutbound.topicMetadata().iterator();
       assertTrue(iterator.hasNext());

@@ -28,6 +28,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.internals.ClusterResourceListeners;
 import org.apache.kafka.common.metrics.JmxReporter;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
@@ -88,9 +89,10 @@ public class MetadataNodeManager extends Thread implements MetadataServiceRebala
     this.log = logContext.logger(MetadataNodeManager.class);
 
     Metadata metadata = new Metadata(
-        coordinatorConfig.getLong(CommonClientConfigs.RETRY_BACKOFF_MS_CONFIG),
-        coordinatorConfig.getLong(CommonClientConfigs.METADATA_MAX_AGE_CONFIG),
-        false); // no auto-topic-create
+            coordinatorConfig.getLong(CommonClientConfigs.RETRY_BACKOFF_MS_CONFIG),
+            coordinatorConfig.getLong(CommonClientConfigs.METADATA_MAX_AGE_CONFIG),
+            logContext,
+            new ClusterResourceListeners());
     List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(
         coordinatorConfig.getList(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG),
         coordinatorConfig.getString(CommonClientConfigs.CLIENT_DNS_LOOKUP_CONFIG));
