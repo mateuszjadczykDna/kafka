@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kafka.api.{ApiVersion, Request}
 import kafka.common.UnexpectedAppendOffsetException
 import kafka.log.{Defaults => _, _}
+import kafka.server.QuotaFactory.QuotaManagers
 import kafka.server._
 import kafka.tier.fetcher.TierFetcher
 import kafka.utils._
@@ -58,6 +59,7 @@ class PartitionTest {
   var replicaManager: ReplicaManager = _
   var logManager: LogManager = _
   var logConfig: LogConfig = _
+  var quotaManagers: QuotaManagers = _
 
   @Before
   def setup(): Unit = {
@@ -76,9 +78,10 @@ class PartitionTest {
     val brokerConfig = KafkaConfig.fromProps(brokerProps)
     val kafkaZkClient: KafkaZkClient = EasyMock.createMock(classOf[KafkaZkClient])
     val tierFetcher: TierFetcher = EasyMock.createMock(classOf[TierFetcher])
+    quotaManagers = QuotaFactory.instantiate(brokerConfig, metrics, time, "")
     replicaManager = new ReplicaManager(
       config = brokerConfig, metrics, time, zkClient = kafkaZkClient, new MockScheduler(time),
-      logManager, new AtomicBoolean(false), QuotaFactory.instantiate(brokerConfig, metrics, time, ""),
+      logManager, new AtomicBoolean(false), quotaManagers,
       brokerTopicStats, new MetadataCache(brokerId), new LogDirFailureChannel(brokerConfig.logDirs.size), Some(tierFetcher), None)
 
     EasyMock.expect(kafkaZkClient.getEntityConfigs(EasyMock.anyString(), EasyMock.anyString())).andReturn(logProps).anyTimes()
@@ -105,6 +108,7 @@ class PartitionTest {
     Utils.delete(tmpDir)
     logManager.liveLogDirs.foreach(Utils.delete)
     replicaManager.shutdown(checkpointHW = false)
+    quotaManagers.shutdown()
   }
 
   @Test
@@ -998,7 +1002,7 @@ class PartitionTest {
           (1 to 10000).foreach { _ => partition.appendRecordsToLeader(createRecords(baseOffset = 0), isFromClient = true) }
         })
       }
-      futures.foreach(_.get(10, TimeUnit.SECONDS))
+      futures.foreach(_.get(15, TimeUnit.SECONDS))
       done.set(true)
     } catch {
       case e: TimeoutException =>
