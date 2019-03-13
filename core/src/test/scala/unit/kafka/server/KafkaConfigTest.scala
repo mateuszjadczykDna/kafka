@@ -689,6 +689,7 @@ class KafkaConfigTest {
         case KafkaConfig.TransactionsTopicSegmentBytesProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
         case KafkaConfig.TransactionsTopicReplicationFactorProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
 
+        // Tiered storage configs
         case KafkaConfig.TierEnableProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_boolean", "0")
         case KafkaConfig.TierMetadataBootstrapServersProp =>
         case KafkaConfig.TierMetadataMaxPollMsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
@@ -703,6 +704,8 @@ class KafkaConfigTest {
         case KafkaConfig.TierS3SignerOverrideProp => // ignore string
         case KafkaConfig.TierBackendProp => assertPropertyInvalid(getBaseProperties(), name, "notanimplementation")
         case KafkaConfig.TierFetcherNumThreadsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0", "-2")
+        case KafkaConfig.TierLocalHotsetBytesProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "-1.2", "3.4")
+        case KafkaConfig.TierLocalHotsetMsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "-1.2", "3.4")
 
         case KafkaConfig.ProducerQuotaBytesPerSecondDefaultProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0")
         case KafkaConfig.ConsumerQuotaBytesPerSecondDefaultProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0")

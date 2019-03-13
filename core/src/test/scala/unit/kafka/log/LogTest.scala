@@ -3733,7 +3733,9 @@ object LogTest {
                       segmentIndexBytes: Int = Defaults.MaxIndexSize,
                       messageFormatVersion: String = Defaults.MessageFormatVersion,
                       fileDeleteDelayMs: Long = Defaults.FileDeleteDelayMs,
-                      tierEnable: Boolean = Defaults.TierEnable): LogConfig = {
+                      tierEnable: Boolean = Defaults.TierEnable,
+                      tierLocalHotsetBytes: Long = Defaults.TierLocalHotsetBytes,
+                      tierLocalHotsetMs: Long = Defaults.TierLocalHotsetMs): LogConfig = {
     val logProps = new Properties()
 
     logProps.put(LogConfig.SegmentMsProp, segmentMs: java.lang.Long)
@@ -3748,6 +3750,8 @@ object LogTest {
     logProps.put(LogConfig.MessageFormatVersionProp, messageFormatVersion)
     logProps.put(LogConfig.FileDeleteDelayMsProp, fileDeleteDelayMs: java.lang.Long)
     logProps.put(LogConfig.TierEnableProp, tierEnable: java.lang.Boolean)
+    logProps.put(LogConfig.TierLocalHotsetBytesProp, tierLocalHotsetBytes: java.lang.Long)
+    logProps.put(LogConfig.TierLocalHotsetMsProp, tierLocalHotsetMs: java.lang.Long)
     LogConfig(logProps)
   }
 

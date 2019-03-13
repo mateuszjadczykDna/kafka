@@ -13,6 +13,7 @@ import kafka.tier.state.FileTierPartitionStateFactory
 import kafka.tier.state.TierPartitionState.AppendResult
 import kafka.tier.store.{MockInMemoryTierObjectStore, TierObjectStoreConfig}
 import kafka.utils.{MockTime, Scheduler, TestUtils}
+import org.apache.kafka.common.record.MemoryRecords
 import org.apache.kafka.common.utils.{Time, Utils}
 import org.junit.Assert.{assertEquals, fail}
 import org.junit.{After, Test}
@@ -29,6 +30,7 @@ class MergedLogTest {
     new LogDirFailureChannel(1),
     true)
   val props = TestUtils.createBrokerConfig(0, "127.0.0.1:1", port = -1)
+  val messagesPerSegment = 20
 
   @After
   def tearDown() {
@@ -38,7 +40,7 @@ class MergedLogTest {
 
   @Test
   def testReadFromTieredRegion(): Unit = {
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
     val log = createLogWithOverlap(30, 50, 10, logConfig)
     val tierPartitionState = tierMetadataManager.tierPartitionState(log.topicPartition).get
     val ranges = logRanges(log)
@@ -64,14 +66,13 @@ class MergedLogTest {
 
   @Test
   def testCannotUploadPastRecoveryPoint(): Unit = {
-
     val noopScheduler = new Scheduler { // noopScheduler allows us to roll segments without scheduling a background flush
       override def startup(): Unit = ()
       override def shutdown(): Unit = ()
       override def isStarted: Boolean = true
       override def schedule(name: String, fun: () => Unit, delay: Long, period: Long, unit: TimeUnit): Unit = ()
     }
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
     val log = createMergedLog(logConfig, scheduler = noopScheduler)
     val messagesToWrite = 10
     for (_ <- 0 until messagesToWrite) {
@@ -94,12 +95,11 @@ class MergedLogTest {
 
     assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment - 1 segment",
       log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector, Vector(0, 1, 2, 3, 4, 5, 6))
-
   }
 
   @Test
   def testReadFromOverlap(): Unit = {
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
     val log = createLogWithOverlap(30, 50, 10, logConfig)
     val ranges = logRanges(log)
 
@@ -120,7 +120,7 @@ class MergedLogTest {
 
   @Test
   def testReadAboveOverlap(): Unit = {
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
     val log = createLogWithOverlap(30, 50, 10, logConfig)
     val ranges = logRanges(log)
 
@@ -141,7 +141,7 @@ class MergedLogTest {
 
   @Test
   def testIncrementLogStartOffset(): Unit = {
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
     val log = createLogWithOverlap(30, 50, 10, logConfig)
     val ranges = logRanges(log)
     val offsets = List(ranges.firstOverlapOffset.get - 1,
@@ -177,48 +177,50 @@ class MergedLogTest {
   }
 
   @Test
-  def testRetentionOnLocalSegments(): Unit = {
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
-    val log = createLogWithOverlap(30, 50, 10, logConfig)
-    val ranges = logRanges(log)
-    val epoch = 0
-    val tierPartitionState = tierMetadataManager.tierPartitionState(log.topicPartition).get
+  def testRetentionOnHotsetSegments(): Unit = {
+    val numTieredSegments = 30
+    val numHotsetSegments = 10
+    val numUntieredSegments = 1   // this will be the active segment, with no data
 
-    // tier couple of segments
-    val tierEndOffset = tierPartitionState.endOffset.getAsLong
-    val segmentsToTier = log.localLogSegments(tierEndOffset + 1, Long.MaxValue).take(2)
-    segmentsToTier.foreach { segment =>
-      val tierObjectMetadata = new TierObjectMetadata(log.topicPartition,
-        epoch,
-        segment.baseOffset,
-        (segment.readNextOffset - segment.baseOffset - 1).toInt,
-        segment.readNextOffset,
-        segment.largestTimestamp,
-        segment.size,
-        true,
-        false,
-        0.toByte)
-      val appendResult = tierPartitionState.append(tierObjectMetadata)
-      assertEquals(AppendResult.ACCEPTED, appendResult)
-    }
+    val numHotsetSegmentsToRetain = 2
 
-    val numOverlapSegments = log.localLogSegments(ranges.firstOverlapOffset.get, ranges.lastOverlapOffset.get).size
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = segmentSize * numHotsetSegmentsToRetain)
+    val log = createLogWithOverlap(numTieredSegments, numUntieredSegments, numHotsetSegments, logConfig)
+
+    // All segments have been tiered, except the active segment. We should thus only retain `numHotsetSegmentsToRetain` segments + the active segment.
     val numDeleted = log.deleteOldSegments()
-    assertEquals(numOverlapSegments + segmentsToTier.size, numDeleted)
-    assertEquals(ranges.firstTieredOffset, log.logStartOffset)
-    assertEquals(log.localLogSegments.head.baseOffset, segmentsToTier.last.readNextOffset)
+    assertEquals(numHotsetSegments - numHotsetSegmentsToRetain, numDeleted)
+    assertEquals(numHotsetSegmentsToRetain + 1, log.localLogSegments.size)    // "+ 1" to account for the empty active segment
 
-    // read from one of the tiered segments
-    val result = log.read(tierEndOffset + 1, Int.MaxValue, None, true, false)
-    result match {
-      case tierResult: TierFetchDataInfo => assertEquals(tierEndOffset + 1, tierResult.fetchMetadata.segmentBaseOffset)
-      case _ => fail(s"Unexpected $result")
-    }
+    // attempting deletion again is a NOOP
+    assertEquals(0, log.deleteOldSegments())
+    log.close()
+  }
+
+  @Test
+  def testRetentionOnUntieredSegments(): Unit = {
+    val numTieredSegments = 30
+    val numHotsetSegments = 10
+    val numUntieredSegments = 5
+
+    val numHotsetSegmentsToRetain = 2
+
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = segmentSize * numHotsetSegmentsToRetain)
+    val log = createLogWithOverlap(numTieredSegments, numUntieredSegments, numHotsetSegments, logConfig)
+
+    // all hotset segments are deleted, and untiered segments are retained
+    val numDeleted = log.deleteOldSegments()
+    assertEquals(numHotsetSegments, numDeleted)
+    assertEquals(numUntieredSegments, log.localLogSegments.size)
+
+    // attempting deletion again is a NOOP
+    assertEquals(0, log.deleteOldSegments())
+    log.close()
   }
 
   @Test
   def testSizeOfLogWithOverlap(): Unit = {
-    val logConfig = LogTest.createLogConfig(retentionBytes = 1, segmentBytes = Int.MaxValue, tierEnable = true)
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
     val numTieredSegments = 30
     val numLocalSegments = 50
     val numOverlapSegments = 10
@@ -243,22 +245,25 @@ class MergedLogTest {
       LogRanges(firstTieredOffset, lastTieredOffset, firstLocalOffset, lastLocalOffset, None, None)
   }
 
+  private def createRecords(segmentIdx: Int, messageIdx: Int): MemoryRecords = {
+    val segmentStr = "%06d".format(segmentIdx)
+    val messageStr = "%06d".format(messageIdx)
+    TestUtils.singletonRecords(("test" + segmentStr + messageStr).getBytes)
+  }
+
+  private def segmentSize: Long = createRecords(0, 0).sizeInBytes * messagesPerSegment
+
   private def createLogWithOverlap(numTieredSegments: Int, numLocalSegments: Int, numOverlap: Int, logConfig: LogConfig): MergedLog = {
     var log = createMergedLog(logConfig)
     var tierPartitionState = tierMetadataManager.tierPartitionState(log.topicPartition).get
     tierPartitionState.onCatchUpComplete()
 
-    val messagesPerSegment = 20
     val epoch = 0
 
     // create all segments as local initially
     for (segment <- 0 until (numTieredSegments + numLocalSegments - 1)) {
-      for (message <- 0 until messagesPerSegment) {
-        val segmentStr = "%06d".format(segment)
-        val messageStr = "%06d".format(message)
-        def createRecords = TestUtils.singletonRecords(("test" + segmentStr + messageStr).getBytes)
-        log.appendAsLeader(createRecords, leaderEpoch = 0)
-      }
+      for (message <- 0 until messagesPerSegment)
+        log.appendAsLeader(createRecords(segment, message), leaderEpoch = 0)
       log.roll(None)
     }
     log.onHighWatermarkIncremented(log.logEndOffset)
@@ -288,7 +293,7 @@ class MergedLogTest {
     }
 
     val localSegmentsToDelete = segmentsToTier.take(numTieredSegments - numOverlap)
-    log.localLog.deleteOldSegments(Some(localSegmentsToDelete.last.readNextOffset), log.size)
+    log.localLog.deleteOldSegments(Some(localSegmentsToDelete.last.readNextOffset))
 
     // close the log
     log.close()

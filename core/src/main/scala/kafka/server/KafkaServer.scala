@@ -88,6 +88,8 @@ object KafkaServer {
     logProps.put(LogConfig.MessageTimestampDifferenceMaxMsProp, kafkaConfig.logMessageTimestampDifferenceMaxMs: java.lang.Long)
     logProps.put(LogConfig.MessageDownConversionEnableProp, kafkaConfig.logMessageDownConversionEnable: java.lang.Boolean)
     logProps.put(LogConfig.TierEnableProp, kafkaConfig.tierEnable: java.lang.Boolean)
+    logProps.put(LogConfig.TierLocalHotsetBytesProp, kafkaConfig.tierLocalHotsetBytes: java.lang.Long)
+    logProps.put(LogConfig.TierLocalHotsetMsProp, kafkaConfig.tierLocalHotsetMs: java.lang.Long)
     logProps
   }
 
