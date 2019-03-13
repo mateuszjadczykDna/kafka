@@ -1,4 +1,2 @@
 ---
-# agentReplicaCount must be at least as much as the biggest producer_count
-# (or consumer_count) defined in the topics.json configmap
 agentReplicaCount: 6
