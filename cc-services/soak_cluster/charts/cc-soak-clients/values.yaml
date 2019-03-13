@@ -7,6 +7,7 @@ trogdorCoordinatorPort: 9002
 apiKey: "null"
 apiSecret: "null"
 bootstrapServer: "null"
+topicConfigPath: "/mnt/config/topic/enterprise-topics.json"
 shortLivedTaskMs: "900000"
 shortLivedTaskMinutes: "15"
 longLivedTaskMs: "604800000"
