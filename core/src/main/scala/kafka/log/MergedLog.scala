@@ -190,9 +190,9 @@ class MergedLog(private[log] val localLog: Log,
     // tiered segments only. Local segments that have not been tiered yet must not be deleted.
     val deleted =
       if (!config.tierEnable)
-        localLog.deleteOldSegments(None, size)
+        localLog.deleteOldSegments(None)
       else if (!tieredOffsets.isEmpty)
-        localLog.deleteOldSegments(Some(firstUntieredOffset), size)   // do not delete any untiered segments
+        localLog.deleteOldSegments(Some(firstUntieredOffset))   // do not delete any untiered segments
       else
         0
     if (deleted > 0) {

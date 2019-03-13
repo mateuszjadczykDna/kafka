@@ -65,6 +65,8 @@ object Defaults {
   val MaxIdMapSnapshots = kafka.server.Defaults.MaxIdMapSnapshots
   val MessageDownConversionEnable = kafka.server.Defaults.MessageDownConversionEnable
   val TierEnable = kafka.server.Defaults.TierEnable
+  val TierLocalHotsetBytes = kafka.server.Defaults.TierLocalHotsetBytes
+  val TierLocalHotsetMs = kafka.server.Defaults.TierLocalHotsetMs
 }
 
 case class LogConfig(props: java.util.Map[_, _], overriddenConfigs: Set[String] = Set.empty)
@@ -100,6 +102,8 @@ case class LogConfig(props: java.util.Map[_, _], overriddenConfigs: Set[String] 
   val FollowerReplicationThrottledReplicas = getList(LogConfig.FollowerReplicationThrottledReplicasProp)
   val messageDownConversionEnable = getBoolean(LogConfig.MessageDownConversionEnableProp)
   val tierEnable = getBoolean(LogConfig.TierEnableProp)
+  val tierLocalHotsetBytes = getLong(LogConfig.TierLocalHotsetBytesProp)
+  val tierLocalHotsetMs = getLong(LogConfig.TierLocalHotsetMsProp)
 
   def randomSegmentJitter: Long =
     if (segmentJitterMs == 0) 0 else Utils.abs(scala.util.Random.nextInt()) % math.min(segmentJitterMs, segmentMs)
@@ -137,6 +141,8 @@ object LogConfig {
   val MessageTimestampDifferenceMaxMsProp = TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG
   val MessageDownConversionEnableProp = TopicConfig.MESSAGE_DOWNCONVERSION_ENABLE_CONFIG
   val TierEnableProp = ConfluentTopicConfig.TIER_ENABLE_CONFIG
+  val TierLocalHotsetBytesProp = ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG
+  val TierLocalHotsetMsProp = ConfluentTopicConfig.TIER_LOCAL_HOTSET_MS_CONFIG
 
   // Leave these out of TopicConfig for now as they are replication quota configs
   val LeaderReplicationThrottledReplicasProp = "leader.replication.throttled.replicas"
@@ -166,6 +172,8 @@ object LogConfig {
   val MessageTimestampDifferenceMaxMsDoc = TopicConfig.MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_DOC
   val MessageDownConversionEnableDoc = TopicConfig.MESSAGE_DOWNCONVERSION_ENABLE_DOC
   val TierEnableDoc = ConfluentTopicConfig.TIER_ENABLE_DOC
+  val TierLocalHotsetBytesDoc = ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_DOC
+  val TierLocalHotsetMsDoc = ConfluentTopicConfig.TIER_LOCAL_HOTSET_MS_DOC
 
   val LeaderReplicationThrottledReplicasDoc = "A list of replicas for which log replication should be throttled on " +
     "the leader side. The list should describe a set of replicas in the form " +
@@ -197,6 +205,13 @@ object LogConfig {
     def define(name: String, defType: ConfigDef.Type, importance: ConfigDef.Importance, documentation: String,
                serverDefaultConfigName: String): LogConfigDef = {
       super.define(name, defType, importance, documentation)
+      serverDefaultConfigNames.put(name, serverDefaultConfigName)
+      this
+    }
+
+    def defineInternal(name: String, defType: ConfigDef.Type, defaultValue: Any, importance: ConfigDef.Importance,
+                       documentation: String, serverDefaultConfigName: String): LogConfigDef = {
+      super.defineInternal(name, defType, defaultValue, importance, documentation)
       serverDefaultConfigNames.put(name, serverDefaultConfigName)
       this
     }
@@ -272,8 +287,14 @@ object LogConfig {
         FollowerReplicationThrottledReplicasDoc, FollowerReplicationThrottledReplicasProp)
       .define(MessageDownConversionEnableProp, BOOLEAN, Defaults.MessageDownConversionEnable, LOW,
         MessageDownConversionEnableDoc, KafkaConfig.LogMessageDownConversionEnableProp)
-      .define(TierEnableProp, BOOLEAN, Defaults.TierEnable, MEDIUM, TierEnableProp,
-        KafkaConfig.TierEnableProp)
+
+      /* --- Begin Internal Configurations --- */
+
+      .defineInternal(TierEnableProp, BOOLEAN, Defaults.TierEnable, MEDIUM, TierEnableDoc, KafkaConfig.TierEnableProp)
+      .defineInternal(TierLocalHotsetBytesProp, LONG, Defaults.TierLocalHotsetBytes, MEDIUM, TierLocalHotsetBytesDoc, KafkaConfig.TierLocalHotsetBytesProp)
+      .defineInternal(TierLocalHotsetMsProp, LONG, Defaults.TierLocalHotsetMs, MEDIUM, TierLocalHotsetMsDoc, KafkaConfig.TierLocalHotsetMsProp)
+
+      /* --- End Internal Configurations --- */
   }
 
   def apply(): LogConfig = LogConfig(new Properties())
@@ -339,7 +360,9 @@ object LogConfig {
     MessageTimestampTypeProp -> KafkaConfig.LogMessageTimestampTypeProp,
     MessageTimestampDifferenceMaxMsProp -> KafkaConfig.LogMessageTimestampDifferenceMaxMsProp,
     MessageDownConversionEnableProp -> KafkaConfig.LogMessageDownConversionEnableProp,
-    TierEnableProp -> KafkaConfig.TierEnableProp
+    TierEnableProp -> KafkaConfig.TierEnableProp,
+    TierLocalHotsetBytesProp -> KafkaConfig.TierLocalHotsetBytesProp,
+    TierLocalHotsetMsProp -> KafkaConfig.TierLocalHotsetMsProp
   )
 
 }

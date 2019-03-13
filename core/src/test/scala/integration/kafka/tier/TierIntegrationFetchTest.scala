@@ -64,9 +64,8 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
     val props = new Properties
     props.put(ConfluentTopicConfig.TIER_ENABLE_CONFIG, "true")
     props.put(TopicConfig.SEGMENT_BYTES_CONFIG, "5000000")
-    // Set retention bytes adequately low, to allow us to delete some
-    // segments after they have been tiered
-    props.put(TopicConfig.RETENTION_BYTES_CONFIG, "10000")
+    // Set hotset retention bytes adequately low, to allow us to delete some segments after they have been tiered
+    props.put(ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG, "10000")
     
     createTopic(topic, 2, 1, props)
   }

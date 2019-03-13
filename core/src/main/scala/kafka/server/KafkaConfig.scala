@@ -31,7 +31,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.Reconfigurable
 import org.apache.kafka.common.config.ConfigDef.{ConfigKey, ValidList}
 import org.apache.kafka.common.config.internals.{BrokerSecurityConfigs, ConfluentConfigs}
-import org.apache.kafka.common.config.{AbstractConfig, ConfigDef, ConfigException, SaslConfigs, SslConfigs, TopicConfig}
+import org.apache.kafka.common.config.{AbstractConfig, ConfigDef, ConfigException, ConfluentTopicConfig, SaslConfigs, SslConfigs, TopicConfig}
 import org.apache.kafka.common.metrics.Sensor
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.record.{LegacyRecord, Records, TimestampType}
@@ -177,9 +177,12 @@ object Defaults {
   val TransactionsAbortTimedOutTransactionsCleanupIntervalMS = TransactionStateManager.DefaultAbortTimedOutTransactionsIntervalMs
   val TransactionsRemoveExpiredTransactionsCleanupIntervalMS = TransactionStateManager.DefaultRemoveExpiredTransactionalIdsIntervalMs
 
-  /** ********* Tier management configuration ***********/
+  /** ********* Tiered Storage Configurations ***********/
+  /** Tiered storage feature configs **/
   val TierFeature = false
   val TierEnable = false
+
+  /** Tiered storage metadata configs **/
   val TierMetadataMaxPollMs = 100L
   val TierMetadataRequestTimeoutMs = 30000
   val TierMetadataBootstrapServers = null
@@ -194,6 +197,10 @@ object Defaults {
   val TierS3EndpointOverride = null
   val TierS3SignerOverride = null
   val TierFetcherNumThreads = 2:Integer
+
+  /** Tiered storage retention configs **/
+  val TierLocalHotsetBytes = -1L
+  val TierLocalHotsetMs = 24 * 60 * 60 * 1000L
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlots = 1000
@@ -418,10 +425,13 @@ object KafkaConfig {
   val TransactionsAbortTimedOutTransactionCleanupIntervalMsProp = "transaction.abort.timed.out.transaction.cleanup.interval.ms"
   val TransactionsRemoveExpiredTransactionalIdCleanupIntervalMsProp = "transaction.remove.expired.transaction.cleanup.interval.ms"
 
-  /** ********* Tier management configuration ***********/
+  /** ********* Tiered Storage Configurations ***********/
+  /** Tiered storage feature configs **/
   val TierFeatureProp = "tier.feature"
   val TierEnableProp = "tier.enable"
   val TierBackendProp = "tier.backend"
+
+  /** Tiered storage metadata configs **/
   val TierMetadataBootstrapServersProp = "tier.metadata.bootstrap.servers"
   val TierMetadataMaxPollMsProp = "tier.metadata.max.poll.ms"
   val TierMetadataRequestTimeoutMsProp = "tier.metadata.request.timeout.ms"
@@ -429,13 +439,20 @@ object KafkaConfig {
   val TierMetadataNumPartitionsProp = "tier.metadata.num.partitions"
   val TierMetadataReplicationFactorProp = "tier.metadata.replication.factor"
 
+  /** Tiered storage S3 configs **/
   val TierS3BucketProp = "tier.s3.bucket"
   val TierS3RegionProp = "tier.s3.region"
   val TierS3AwsAccessKeyIdProp = "tier.s3.aws.access.key.id"
   val TierS3AwsSecretAccessKeyProp = "tier.s3.aws.secret.access.key"
   val TierS3EndpointOverrideProp = "tier.s3.aws.endpoint.override"
   val TierS3SignerOverrideProp = "tier.s3.aws.signer.override"
+
+  /** Tiered storage fetcher configs */
   val TierFetcherNumThreadsProp = "tier.fetcher.num.threads"
+
+  /** Tiered storage retention configs **/
+  val TierLocalHotsetBytesProp = ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG
+  val TierLocalHotsetMsProp = ConfluentTopicConfig.TIER_LOCAL_HOTSET_MS_CONFIG
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlots = "max.incremental.fetch.session.cache.slots"
@@ -758,8 +775,11 @@ object KafkaConfig {
   val TransactionsAbortTimedOutTransactionsIntervalMsDoc = "The interval at which to rollback transactions that have timed out"
   val TransactionsRemoveExpiredTransactionsIntervalMsDoc = "The interval at which to remove transactions that have expired due to <code>transactional.id.expiration.ms<code> passing"
 
-  /** ********* Tier management configuration ***********/
+  /** ********* Tiered Storage Configurations ***********/
+  /** Tiered storage feature configs **/
   val TierFeatureDoc = "Feature flag that enables components related to tiered storage, and enable the tiered storage feature."
+
+  /** Tiered storage metadata configs **/
   val TierMetadataBootstrapServersDoc = "The bootstrap servers for the tier topic cluster. Kafka will default to the local broker if this is not defined."
   val TierMetadataMaxPollMsDoc = "The maximum delay before invocations of poll of the tier topic."
   val TierMetadataRequestTimeoutMsDoc = "request.timeout.ms passed through to the backing producer. After this timeout the producer will retry the request."
@@ -775,6 +795,10 @@ object KafkaConfig {
   val TierS3EndpointOverrideDoc = "Override picking an S3 endpoint. Normally this is performed automatically by the client."
   val TierS3SignerOverrideDoc = "Set the name of the signature algorithm used for signing S3 requests"
   val TierFetcherNumThreadsDoc = "The size of the threadpool used by the TierFetcher. Roughly corresponds to # of concurrent fetch requests."
+
+  /** Tiered storage retention configs **/
+  val TierLocalHotsetBytesDoc = ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_DOC
+  val TierLocalHotsetMsDoc = ConfluentTopicConfig.TIER_LOCAL_HOTSET_MS_DOC
 
   /** ********* Fetch Session Configuration **************/
   val MaxIncrementalFetchSessionCacheSlotsDoc = "The maximum number of incremental fetch sessions that we will maintain."
@@ -1061,6 +1085,8 @@ object KafkaConfig {
       .defineInternal(TierS3EndpointOverrideProp, STRING, Defaults.TierS3EndpointOverride, LOW, TierS3EndpointOverrideDoc)
       .defineInternal(TierS3SignerOverrideProp, STRING, Defaults.TierS3SignerOverride, LOW, TierS3SignerOverrideDoc)
       .defineInternal(TierFetcherNumThreadsProp, INT, Defaults.TierFetcherNumThreads, atLeast(1), MEDIUM, TierFetcherNumThreadsDoc)
+      .defineInternal(TierLocalHotsetBytesProp, LONG, Defaults.TierLocalHotsetBytes, HIGH, TierLocalHotsetBytesDoc)
+      .defineInternal(TierLocalHotsetMsProp, LONG, Defaults.TierLocalHotsetMs, HIGH, TierLocalHotsetMsDoc)
 
     /** ********* Fetch Session Configuration **************/
       .define(MaxIncrementalFetchSessionCacheSlots, INT, Defaults.MaxIncrementalFetchSessionCacheSlots, atLeast(0), MEDIUM, MaxIncrementalFetchSessionCacheSlotsDoc)
@@ -1384,6 +1410,8 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val tierS3EndpointOverride = getString(KafkaConfig.TierS3EndpointOverrideProp)
   val tierS3SignerOverride = getString(KafkaConfig.TierS3SignerOverrideProp)
   val tierFetcherNumThreads = getInt(KafkaConfig.TierFetcherNumThreadsProp)
+  def tierLocalHotsetBytes = getLong(KafkaConfig.TierLocalHotsetBytesProp)
+  def tierLocalHotsetMs = getLong(KafkaConfig.TierLocalHotsetMsProp)
 
   /** ********* Metric Configuration **************/
   val metricNumSamples = getInt(KafkaConfig.MetricNumSamplesProp)
