@@ -24,13 +24,13 @@ metadata:
     chart: {{ .Chart.Name }}
     release: {{ .Release.Name }}
 data:
-  topics.json: '
+  enterprise-topics.json: '
 {
   "long_lived_task_duration_ms": {{ .Values.longLivedTaskMs }},
   "short_lived_task_duration_ms": {{ .Values.shortLivedTaskMs }},
   "topics": [
     {
-      "name": "big_topic",
+      "name": "baseline_soak_big_topic_1000p",
       "partitions_count": 1000,
       "produce_mbs_throughput": 45,
       "consume_mbs_throughput": 120,
@@ -38,7 +38,7 @@ data:
       "consumer_count": 11
     },
     {
-      "name": "medium_topic",
+      "name": "baseline_soak_medium_topic_25p",
       "partitions_count": 25,
       "produce_mbs_throughput": 15,
       "consume_mbs_throughput": 30,
@@ -47,13 +47,54 @@ data:
       "idempotence_enabled": true
     },
     {
-      "name": "eos_topic",
+      "name": "baseline_soak_eos_topic_100p",
       "partitions_count": 100,
       "produce_mbs_throughput": 15,
       "consume_mbs_throughput": 30,
       "producer_count": 4,
       "consumer_count": 4,
       "transactions_enabled": true
+    }
+  ]
+}
+'
+  one-large-topic.json: '
+{
+  "long_lived_task_duration_ms": {{ .Values.longLivedTaskMs }},
+  "short_lived_task_duration_ms": {{ .Values.shortLivedTaskMs }},
+  "topics": [
+    {
+      "name": "tenant_soak_topic_144p",
+      "partitions_count": 144,
+      "produce_mbs_throughput": 30,
+      "consume_mbs_throughput": 60,
+      "producer_count": 12,
+      "consumer_count": 12
+    }
+  ]
+}
+'
+  skewed-load-topics.json: '
+{
+  "long_lived_task_duration_ms": {{ .Values.longLivedTaskMs }},
+  "short_lived_task_duration_ms": {{ .Values.shortLivedTaskMs }},
+  "topics": [
+    {
+      "name": "tenant_soak_topic_4p",
+      "partitions_count": 4,
+      "produce_mbs_throughput": 15,
+      "consume_mbs_throughput": 30,
+      "producer_count": 4,
+      "consumer_count": 4
+    },
+    {
+      "name": "tenant_soak_low_bandwidth_topic_16p",
+      "partitions_count": 16,
+      "produce_mbs_throughput": 1,
+      "consume_mbs_throughput": 2,
+      "producer_count": 2,
+      "consumer_count": 2,
+      "idempotence_enabled": true
     }
   ]
 }
