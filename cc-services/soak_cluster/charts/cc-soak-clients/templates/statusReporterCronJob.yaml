@@ -28,7 +28,7 @@ spec:
               - name: TROGDOR_HOST
                 value: "http://cc-trogdor-service-coordinator.{{.Release.Namespace}}.svc:{{ .Values.trogdorCoordinatorPort }}"
               - name: TROGDOR_TOPIC_CONFIG_PATH
-                value: "/mnt/config/topic/topics.json"
+                value: "{{ .Values.topicConfigPath }}"
               - name: DEBUG_LOGS
                 value: "{{ .Values.debugLogs }}"
             volumeMounts:
