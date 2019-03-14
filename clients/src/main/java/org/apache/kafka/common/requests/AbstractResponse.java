@@ -174,6 +174,8 @@ public abstract class AbstractResponse extends AbstractRequestResponse {
                 return new FetchEndOffsetResponse(struct, version);
             case FIND_LEADER:
                 return new FindLeaderResponse(struct, version);
+            case APPEND_RECORDS:
+                return new AppendRecordsResponse(struct, version);
             default:
                 throw new AssertionError(String.format("ApiKey %s is not currently handled in `parseResponse`, the " +
                         "code should be updated to do so.", apiKey));

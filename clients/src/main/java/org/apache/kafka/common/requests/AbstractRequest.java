@@ -243,6 +243,8 @@ public abstract class AbstractRequest extends AbstractRequestResponse {
                 return new FetchEndOffsetRequest(struct, apiVersion);
             case FIND_LEADER:
                 return new FindLeaderRequest(struct, apiVersion);
+            case APPEND_RECORDS:
+                return new AppendRecordsRequest(struct, apiVersion);
             default:
                 return maybeParseInternalRequest(apiKey, apiVersion, struct);
         }
