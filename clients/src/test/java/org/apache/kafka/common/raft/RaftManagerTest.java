@@ -49,8 +49,10 @@ public class RaftManagerTest {
     private RaftManager buildManager(Set<Integer> voters) {
         LogContext logContext = new LogContext();
         QuorumState quorum = new QuorumState(localId, voters, electionStore, logContext);
-        return new RaftManager(channel, log, quorum, time, electionTimeoutMs, electionJitterMs,
+        RaftManager manager = new RaftManager(channel, log, quorum, time, electionTimeoutMs, electionJitterMs,
                 retryBackoffMs, requestTimeoutMs, logContext);
+        manager.initialize();
+        return manager;
     }
 
     @Test

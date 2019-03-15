@@ -141,8 +141,6 @@ public class RaftManager {
         this.voterConnections = new HashMap<>();
         this.sentAppends = new HashMap<>();
         this.unsentAppends = new ArrayBlockingQueue<>(10);
-
-        initialize();
     }
 
     private boolean isLogNonEmpty() {
@@ -155,7 +153,9 @@ public class RaftManager {
      * - If we were the last leader, become a candidate
      * - If we were a follower, become a follower and check for truncation
      */
-    private void initialize() {
+    public void initialize() {
+        quorum.initialize();
+
         for (Integer voterId : quorum.remoteVoters()) {
             voterConnections.put(voterId, new ConnectionState(retryBackoffMs, requestTimeoutMs));
         }
@@ -249,7 +249,7 @@ public class RaftManager {
                     voteGranted = state.isVotedCandidate(candidateId);
                 } else {
                     EndOffset lastEpochEndOffset = new EndOffset(request.lastEpochEndOffset(), request.lastEpoch());
-                    voteGranted = lastEpochEndOffset.compareTo(endOffset()) > 0;
+                    voteGranted = lastEpochEndOffset.compareTo(endOffset()) >= 0;
                 }
 
                 if (voteGranted)
@@ -613,23 +613,23 @@ public class RaftManager {
         return false;
     }
 
-    private void handleResponse(int requestId, int remoteNodeId, RaftResponse response) {
+    private void handleResponse(RaftResponse.Inbound response) {
         // The response epoch matches the local epoch, so we can handle the response
-        ApiMessage data = response.data();
-        if (data instanceof FetchRecordsResponseData) {
-            handleFetchRecordsResponse((FetchRecordsResponseData) data);
-        } else if (data instanceof AppendRecordsResponseData) {
-            handleAppendRecordsResponse(requestId, (AppendRecordsResponseData) data);
-        } else if (data instanceof FetchEndOffsetResponseData) {
-            handleFetchEndOffsetResponse((FetchEndOffsetResponseData) data);
-        } else if (data instanceof VoteResponseData) {
-            handleVoteResponse(remoteNodeId, (VoteResponseData) data);
-        } else if (data instanceof BeginEpochResponseData) {
-            handleBeginEpochResponse(remoteNodeId, (BeginEpochResponseData) data);
-        } else if (data instanceof EndEpochResponseData) {
-            handleEndEpochResponse((EndEpochResponseData) data);
-        } else if (data instanceof FindLeaderResponseData) {
-            handleFindLeaderResponse((FindLeaderResponseData) data);
+        ApiMessage responseData = response.data();
+        if (responseData instanceof FetchRecordsResponseData) {
+            handleFetchRecordsResponse((FetchRecordsResponseData) responseData);
+        } else if (responseData instanceof AppendRecordsResponseData) {
+            handleAppendRecordsResponse(response.requestId(), (AppendRecordsResponseData) responseData);
+        } else if (responseData instanceof FetchEndOffsetResponseData) {
+            handleFetchEndOffsetResponse((FetchEndOffsetResponseData) responseData);
+        } else if (responseData instanceof VoteResponseData) {
+            handleVoteResponse(response.sourceId(), (VoteResponseData) responseData);
+        } else if (responseData instanceof BeginEpochResponseData) {
+            handleBeginEpochResponse(response.sourceId(), (BeginEpochResponseData) responseData);
+        } else if (responseData instanceof EndEpochResponseData) {
+            handleEndEpochResponse((EndEpochResponseData) responseData);
+        } else if (responseData instanceof FindLeaderResponseData) {
+            handleFindLeaderResponse((FindLeaderResponseData) responseData);
         } else {
             throw new IllegalStateException("Received unexpected response " + response);
         }
@@ -708,7 +708,7 @@ public class RaftManager {
             Errors error = responseError(response);
             updateConnectionState(response, error);
             if (error == Errors.NONE)
-                handleResponse(response.requestId(), sourceId, response);
+                handleResponse(response);
         } else {
             throw new IllegalStateException("Unexpected message " + message);
         }

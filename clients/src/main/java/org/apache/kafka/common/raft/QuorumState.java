@@ -29,10 +29,9 @@ public class QuorumState {
         this.voters = new HashSet<>(voters);
         this.store = store;
         this.log = logContext.logger(QuorumState.class);
-        initialize();
     }
 
-    private void initialize() {
+    public void initialize() {
         Election election = store.read();
         state = new FollowerState(localId, election.epoch);
         if (election.hasLeader() && election.leaderId() != localId) {

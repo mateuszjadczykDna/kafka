@@ -5,9 +5,17 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MockNetworkChannel implements NetworkChannel {
-    private AtomicInteger requestIdCounter = new AtomicInteger(0);
+    private final AtomicInteger requestIdCounter;
     private List<RaftMessage> sendQueue = new ArrayList<>();
     private List<RaftMessage> receiveQueue = new ArrayList<>();
+
+    public MockNetworkChannel(AtomicInteger requestIdCounter) {
+        this.requestIdCounter = requestIdCounter;
+    }
+
+    public MockNetworkChannel() {
+        this(new AtomicInteger(0));
+    }
 
     @Override
     public int newRequestId() {

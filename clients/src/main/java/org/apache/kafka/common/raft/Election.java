@@ -69,11 +69,10 @@ public class Election {
 
     @Override
     public String toString() {
-        return "Election{" +
-                ", epoch=" + epoch +
+        return "Election(epoch=" + epoch +
                 ", leaderIdOrNil=" + leaderIdOrNil +
                 ", votedIdOrNil=" + votedIdOrNil +
-                '}';
+                ')';
     }
 
     @Override
