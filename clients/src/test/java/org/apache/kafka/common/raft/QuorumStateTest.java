@@ -4,7 +4,8 @@ import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.Test;
 
-import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -108,7 +109,7 @@ public class QuorumStateTest {
         LeaderState leaderState = state.becomeLeader();
         assertTrue(state.isLeader());
         assertEquals(1, leaderState.epoch);
-        assertEquals(Optional.empty(), leaderState.highWatermark());
+        assertEquals(OptionalLong.empty(), leaderState.highWatermark());
     }
 
     @Test
@@ -165,7 +166,7 @@ public class QuorumStateTest {
         state.becomeLeader();
         assertTrue(state.becomeFollower(5, otherNodeId));
         assertEquals(5, state.epoch());
-        assertEquals(Optional.of(otherNodeId), state.leaderId());
+        assertEquals(OptionalInt.of(otherNodeId), state.leaderId());
         assertEquals(Election.withElectedLeader(5, otherNodeId), store.read());
     }
 
@@ -178,7 +179,7 @@ public class QuorumStateTest {
         state.becomeLeader();
         assertTrue(state.becomeUnattachedFollower(5));
         assertEquals(5, state.epoch());
-        assertEquals(Optional.empty(), state.leaderId());
+        assertEquals(OptionalInt.empty(), state.leaderId());
         assertEquals(Election.withUnknownLeader(5), store.read());
     }
 
@@ -191,7 +192,7 @@ public class QuorumStateTest {
         state.becomeLeader();
         assertTrue(state.becomeVotedFollower(5, otherNodeId));
         assertEquals(5, state.epoch());
-        assertEquals(Optional.empty(), state.leaderId());
+        assertEquals(OptionalInt.empty(), state.leaderId());
         FollowerState followerState = state.followerStateOrThrow();
         assertTrue(followerState.hasVoted());
         assertTrue(followerState.isVotedCandidate(otherNodeId));
@@ -205,7 +206,7 @@ public class QuorumStateTest {
         QuorumState state = new QuorumState(localId, voters, store, new LogContext());
         assertTrue(state.becomeFollower(5, otherNodeId));
         assertEquals(5, state.epoch());
-        assertEquals(Optional.of(otherNodeId), state.leaderId());
+        assertEquals(OptionalInt.of(otherNodeId), state.leaderId());
         assertEquals(Election.withElectedLeader(5, otherNodeId), store.read());
     }
 
@@ -216,7 +217,7 @@ public class QuorumStateTest {
         QuorumState state = new QuorumState(localId, voters, store, new LogContext());
         assertTrue(state.becomeUnattachedFollower(5));
         assertEquals(5, state.epoch());
-        assertEquals(Optional.empty(), state.leaderId());
+        assertEquals(OptionalInt.empty(), state.leaderId());
         assertEquals(Election.withUnknownLeader(5), store.read());
     }
 
@@ -227,7 +228,7 @@ public class QuorumStateTest {
         QuorumState state = new QuorumState(localId, voters, store, new LogContext());
         assertTrue(state.becomeVotedFollower(5, otherNodeId));
         assertEquals(5, state.epoch());
-        assertEquals(Optional.empty(), state.leaderId());
+        assertEquals(OptionalInt.empty(), state.leaderId());
         FollowerState followerState = state.followerStateOrThrow();
         assertTrue(followerState.hasVoted());
         assertTrue(followerState.isVotedCandidate(otherNodeId));

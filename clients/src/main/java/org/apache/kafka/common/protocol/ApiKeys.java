@@ -213,7 +213,7 @@ public enum ApiKeys {
     /* ----- Begin internal APIs: API ids decrement sequentially starting from Short.MAX_VALUE with `isInternal` set to true ----- */
 
     // Quorum APIs
-    VOTE(900, "Vote",VoteRequestData.SCHEMAS, VoteResponseData.SCHEMAS),
+    VOTE(900, "Vote", VoteRequestData.SCHEMAS, VoteResponseData.SCHEMAS),
     BEGIN_EPOCH(901, "BeginEpoch", BeginEpochRequestData.SCHEMAS, BeginEpochResponseData.SCHEMAS),
     END_EPOCH(902, "EndEpoch", EndEpochRequestData.SCHEMAS, EndEpochResponseData.SCHEMAS),
     FETCH_RECORDS(903, "FetchRecords", FetchRecordsRequestData.SCHEMAS, FetchRecordsResponseData.SCHEMAS),

@@ -1,6 +1,5 @@
 package org.apache.kafka.common.raft;
 
-import com.sun.scenario.effect.Offset;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.message.AppendRecordsRequestData;
 import org.apache.kafka.common.message.AppendRecordsResponseData;
@@ -262,7 +261,7 @@ public class RaftManager {
             public VoteResponseData ifLeader(LeaderState state) {
                 logger.debug("Ignoring vote request {} since we are the leader of epoch {}",
                         request, quorum.epoch());
-                return buildVoteResponse(Errors.NONE,false);
+                return buildVoteResponse(Errors.NONE, false);
             }
 
             @Override

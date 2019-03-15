@@ -70,6 +70,12 @@
       <allow pkg="org.apache.kafka.common.metrics" />
     </subpackage>
 
+    <subpackage name="raft">
+      <allow pkg="org.apache.kafka.common.message" />
+      <allow pkg="org.apache.kafka.common.record" />
+      <allow pkg="org.apache.kafka.common.protocol" />
+    </subpackage>
+
     <subpackage name="message">
       <allow pkg="com.fasterxml.jackson" />
       <allow pkg="org.apache.kafka.common.protocol" />
