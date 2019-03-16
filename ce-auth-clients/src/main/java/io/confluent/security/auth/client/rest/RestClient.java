@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -57,7 +58,7 @@ public class RestClient implements Closeable {
     private static final int JSON_PARSE_ERROR_CODE = 50005;
 
     private static final String AUTHORIZE_END_POINT = "/security/1.0/authorize";
-    private static final String ACTIVE_NODES_END_POINT = "/security/1.0/activenodes";
+    private static final String ACTIVE_NODES_END_POINT = "/security/1.0/activenodes/%s";
 
     private static final TypeReference<List<String>> ACTIVE_URLS_RESPONSE_TYPE = new TypeReference<List<String>>() {
     };
@@ -77,6 +78,7 @@ public class RestClient implements Closeable {
     private final int requestTimeout;
     private final int httpRequestTimeout;
     private volatile List<String> activeMetadataServerURLs;
+    private final String protocol;
 
     private SSLSocketFactory sslSocketFactory;
     private BasicAuthCredentialProvider basicAuthCredentialProvider;
@@ -94,6 +96,7 @@ public class RestClient implements Closeable {
         if (bootstrapMetadataServerURLs.isEmpty())
             throw new ConfigException("Missing required bootstrap metadata server url list.");
 
+        this.protocol = protocol(bootstrapMetadataServerURLs);
         this.requestTimeout = rbacClientConfig.getInt(RestClientConfig.REQUEST_TIMEOUT_MS_CONFIG);
         this.httpRequestTimeout = rbacClientConfig.getInt(RestClientConfig.HTTP_REQUEST_TIMEOUT_MS_CONFIG);
 
@@ -112,6 +115,14 @@ public class RestClient implements Closeable {
             scheduleMetadataServiceUrlRefresh(rbacClientConfig);
         else
             activeMetadataServerURLs = bootstrapMetadataServerURLs;
+    }
+
+    private String protocol(final List<String> bootstrapMetadataServerURLs) {
+        try {
+            return new URL(bootstrapMetadataServerURLs.get(0)).getProtocol();
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException("Error while fetching URL protocol", e);
+        }
     }
 
     private void scheduleMetadataServiceUrlRefresh(final RestClientConfig rbacClientConfig) {
@@ -166,7 +177,8 @@ public class RestClient implements Closeable {
 
     public List<String> getActiveMetadataServerURLs() throws IOException, RestClientException {
         UrlSelector urlSelector = new UrlSelector(bootstrapMetadataServerURLs);
-        return httpRequest(ACTIVE_NODES_END_POINT, "GET", null, ACTIVE_URLS_RESPONSE_TYPE,
+        String path = String.format(ACTIVE_NODES_END_POINT, protocol);
+        return httpRequest(path, "GET", null, ACTIVE_URLS_RESPONSE_TYPE,
                 urlSelector);
     }
 

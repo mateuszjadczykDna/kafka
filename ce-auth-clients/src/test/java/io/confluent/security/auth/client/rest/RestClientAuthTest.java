@@ -40,7 +40,8 @@ public class RestClientAuthTest {
     HttpURLConnection httpURLConnection = createNiceMock(HttpURLConnection.class);
     InputStream inputStream = createNiceMock(InputStream.class);
 
-    expectNew(URL.class, anyString()).andReturn(url);
+    expectNew(URL.class, anyString()).andReturn(url).times(2);
+    expect(url.getProtocol()).andReturn("http");
     expect(url.openConnection()).andReturn(httpURLConnection);
     expect(httpURLConnection.getResponseCode()).andReturn(HttpURLConnection.HTTP_OK);
 

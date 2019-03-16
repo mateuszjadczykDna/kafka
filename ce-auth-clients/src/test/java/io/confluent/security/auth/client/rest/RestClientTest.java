@@ -29,7 +29,7 @@ public class RestClientTest {
 
     @Test
     public void testFailOver() throws Exception {
-        List<String> urllList = Arrays.asList("url1", "url2", "url3");
+        List<String> urllList = Arrays.asList("http://url1:80", "http://url2:80", "http://url3:80");
 
         Map<String, Object> configs = new HashMap<>();
         configs.put(RestClientConfig.BOOTSTRAP_METADATA_SERVER_URLS_PROP, String.join(",", urllList));
@@ -96,7 +96,7 @@ public class RestClientTest {
 
     @Test
     public void testRequestTimeout() throws Exception {
-        List<String> urllList = Arrays.asList("url1", "url2", "url3");
+        List<String> urllList = Arrays.asList("http://url1:80", "http://url2:80", "http://url3:80");
 
         Map<String, Object> configs = new HashMap<>();
         configs.put(RestClientConfig.BOOTSTRAP_METADATA_SERVER_URLS_PROP, String.join(",", urllList));
