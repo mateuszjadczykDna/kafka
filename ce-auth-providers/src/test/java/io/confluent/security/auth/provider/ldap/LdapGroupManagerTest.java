@@ -42,8 +42,17 @@ public class LdapGroupManagerTest {
   }
 
   @Test
-  public void testGroupMembers() throws Exception {
-    ldapGroupManager = LdapTestUtils.createLdapGroupManager(miniKdcWithLdapService, 10, time);
+  public void testGroupInitializationWithPeriodicSearch() throws Exception {
+    verifyGroupInitialization(10);
+  }
+
+  @Test
+  public void testGroupInitializationWithPersistentSearch() throws Exception {
+    verifyGroupInitialization(LdapAuthorizerConfig.PERSISTENT_REFRESH);
+  }
+
+  public void verifyGroupInitialization(int refreshMs) throws Exception {
+    ldapGroupManager = LdapTestUtils.createLdapGroupManager(miniKdcWithLdapService, refreshMs, time);
     miniKdcWithLdapService.createGroup("groupA", "user1", "user2");
     miniKdcWithLdapService.createGroup("groupB", "user2", "user3");
     miniKdcWithLdapService.createGroup("groupC", "user2");

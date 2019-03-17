@@ -254,7 +254,19 @@ public class LdapGroupManager {
     if (!alive.get()) {
       return 0;
     }
-    log.error("LDAP search failed", exception);
+    if (failureStartMs.get() == 0) {
+      failureStartMs.set(time.milliseconds());
+    }
+    if (failed()) {
+      log.error("LDAP search failed. Configured retry timeout of " + config.retryTimeoutMs + " has "
+          + "expired without a successful search. All requests will fail authorization until the "
+          + "next successful search.", exception);
+      if (listener != null)
+        listener.fail("LDAP search failed with exception: " + exception);
+    } else {
+      log.error("LDAP search failed, search will be retried. Groups from the last successful search will "
+          + "continue to be applied until the configured retry timeout or the next succcessful search.", exception);
+    }
     try {
       if (searchFuture != null) {
         searchFuture.cancel(false);
@@ -266,11 +278,6 @@ public class LdapGroupManager {
       log.error("Context could not be closed", e);
     }
     context = null;
-    if (failureStartMs.get() == 0) {
-      failureStartMs.set(time.milliseconds());
-    }
-    if (listener != null && failed())
-      listener.fail("LDAP search failed with exception: " + exception);
     return retryBackoff.backoffMs(retryCount.getAndIncrement());
   }
 
@@ -291,7 +298,7 @@ public class LdapGroupManager {
     // Process persistent search results until read times out due to no LDAP modifications
     // or connection fails.
     while (alive.get()) {
-      processSearchResults(enumeration);
+      processPersistentSearchResults(enumeration);
     }
   }
 
@@ -343,7 +350,7 @@ public class LdapGroupManager {
     byte[] cookie = null;
     do {
       NamingEnumeration<SearchResult> enumeration = search(searchControls);
-      currentSearchEntries.addAll(processSearchResults(enumeration));
+      currentSearchEntries.addAll(processFullSearchResults(enumeration));
       resetFailure();
       Control[] responseControls = context.getResponseControls();
       if (config.searchPageSize > 0 && responseControls != null) {
@@ -420,21 +427,40 @@ public class LdapGroupManager {
   }
 
   /**
-   * Process the results of an LDAP search.
-   * <ul>
-   *   <li>For persistent search, this method blocks waiting for updates. It fails with
-   *   a {@link NamingException} if the search fails (e.g. connection to LDAP server is lost)</li>
-   *   <li>For non-persistent search, this method processes the entries in the current search
-   *   and returns the current set of entries. The returned entries are used to determine
-   *   deleted entries that need to be removed from the cache.</li>
-   * </ul>
+   * Process the results of a full LDAP search. This is used for all searches using
+   * periodic search as well as initialization before a persistent search. This method
+   * processes the entries in the current search and returns the current set of entries.
+   * The returned entries are used to determine deleted entries that need to be removed
+   * from the cache.
+   *
    * @param enumeration Enumeration of search results
-   * @return entries added in the current search if this is a non-persistent search,
-   *     empty set otherwise.
+   * @return entries added in the current search
    */
-  private Set<String> processSearchResults(NamingEnumeration<SearchResult> enumeration)
+  private Set<String> processFullSearchResults(NamingEnumeration<SearchResult> enumeration)
       throws NamingException {
     Set<String> currentSearchEntries = new HashSet<>();
+    while (enumeration.hasMore()) {
+      SearchResult searchResult = enumeration.next();
+      log.trace("Processing full search result {}", searchResult);
+      ResultEntry resultEntry = searchResultEntry(searchResult);
+      if (resultEntry == null) {
+        continue;
+      }
+      currentSearchEntries.add(resultEntry.name);
+      processSearchResultModify(resultEntry);
+    }
+    return currentSearchEntries;
+  }
+
+  /**
+   * Process the results of a persistent LDAP search. This method blocks waiting for updates.
+   * It fails with a {@link NamingException} if the search fails (e.g. connection to LDAP server
+   * is lost).
+   *
+   * @param enumeration Enumeration of search results
+   */
+  private void processPersistentSearchResults(NamingEnumeration<SearchResult> enumeration)
+      throws NamingException {
     while (enumeration.hasMore()) {
       SearchResult searchResult = enumeration.next();
       log.trace("Processing search result {}", searchResult);
@@ -443,7 +469,7 @@ public class LdapGroupManager {
         continue;
       }
       Control changeResponseControl = null;
-      if (config.persistentSearch && searchResult instanceof HasControls) {
+      if (searchResult instanceof HasControls) {
         Control[] controls = ((HasControls) searchResult).getControls();
         for (Control control : controls) {
           if (persistentSearch.isEntryChangeResponseControl(control)) {
@@ -460,9 +486,6 @@ public class LdapGroupManager {
       switch (changeType) {
         case ADD:
         case MODIFY:
-          if (!config.persistentSearch) {
-            currentSearchEntries.add(resultEntry.name);
-          }
           processSearchResultModify(resultEntry);
           break;
         case DELETE:
@@ -492,11 +515,8 @@ public class LdapGroupManager {
         default:
           throw new IllegalArgumentException("Unsupported response control type " + changeType);
       }
-      if (config.persistentSearch) {
-        log.debug("Group cache after change notification is {}", userGroupCache);
-      }
+      log.debug("Group cache after change notification is {}", userGroupCache);
     }
-    return currentSearchEntries;
   }
 
   private void processSearchResultModify(ResultEntry resultEntry) {
