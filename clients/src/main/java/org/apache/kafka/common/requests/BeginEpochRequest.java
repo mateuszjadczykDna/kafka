@@ -27,23 +27,20 @@ public class BeginEpochRequest extends AbstractRequest {
     }
 
     public final BeginEpochRequestData data;
-    public final short version;
 
     private BeginEpochRequest(BeginEpochRequestData data, short version) {
         super(ApiKeys.BEGIN_EPOCH, version);
         this.data = data;
-        this.version = version;
     }
 
     public BeginEpochRequest(Struct struct, short version) {
         super(ApiKeys.BEGIN_EPOCH, version);
         this.data = new BeginEpochRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override

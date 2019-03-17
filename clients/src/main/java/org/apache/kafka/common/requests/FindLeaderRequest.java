@@ -27,23 +27,20 @@ public class FindLeaderRequest extends AbstractRequest {
     }
 
     public final FindLeaderRequestData data;
-    public final short version;
 
     private FindLeaderRequest(FindLeaderRequestData data, short version) {
         super(ApiKeys.FIND_LEADER, version);
         this.data = data;
-        this.version = version;
     }
 
     public FindLeaderRequest(Struct struct, short version) {
         super(ApiKeys.FIND_LEADER, version);
         this.data = new FindLeaderRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override

@@ -27,23 +27,20 @@ public class FetchRecordsRequest extends AbstractRequest {
     }
 
     public final FetchRecordsRequestData data;
-    public final short version;
 
     private FetchRecordsRequest(FetchRecordsRequestData data, short version) {
         super(ApiKeys.FETCH_RECORDS, version);
         this.data = data;
-        this.version = version;
     }
 
     public FetchRecordsRequest(Struct struct, short version) {
         super(ApiKeys.FETCH_RECORDS, version);
         this.data = new FetchRecordsRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override

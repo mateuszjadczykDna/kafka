@@ -27,23 +27,20 @@ public class VoteRequest extends AbstractRequest {
     }
 
     public final VoteRequestData data;
-    public final short version;
 
     private VoteRequest(VoteRequestData data, short version) {
         super(ApiKeys.VOTE, version);
         this.data = data;
-        this.version = version;
     }
 
     public VoteRequest(Struct struct, short version) {
         super(ApiKeys.VOTE, version);
         this.data = new VoteRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override

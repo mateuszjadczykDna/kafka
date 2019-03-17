@@ -27,23 +27,20 @@ public class EndEpochRequest extends AbstractRequest {
     }
 
     public final EndEpochRequestData data;
-    public final short version;
 
     private EndEpochRequest(EndEpochRequestData data, short version) {
         super(ApiKeys.END_EPOCH, version);
         this.data = data;
-        this.version = version;
     }
 
     public EndEpochRequest(Struct struct, short version) {
         super(ApiKeys.END_EPOCH, version);
         this.data = new EndEpochRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override

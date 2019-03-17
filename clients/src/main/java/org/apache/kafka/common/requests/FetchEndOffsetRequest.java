@@ -27,23 +27,20 @@ public class FetchEndOffsetRequest extends AbstractRequest {
     }
 
     public final FetchEndOffsetRequestData data;
-    public final short version;
 
     private FetchEndOffsetRequest(FetchEndOffsetRequestData data, short version) {
         super(ApiKeys.FETCH_END_OFFSET, version);
         this.data = data;
-        this.version = version;
     }
 
     public FetchEndOffsetRequest(Struct struct, short version) {
         super(ApiKeys.FETCH_END_OFFSET, version);
         this.data = new FetchEndOffsetRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override

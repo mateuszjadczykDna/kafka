@@ -27,23 +27,20 @@ public class AppendRecordsRequest extends AbstractRequest {
     }
 
     public final AppendRecordsRequestData data;
-    public final short version;
 
     private AppendRecordsRequest(AppendRecordsRequestData data, short version) {
         super(ApiKeys.FETCH_RECORDS, version);
         this.data = data;
-        this.version = version;
     }
 
     public AppendRecordsRequest(Struct struct, short version) {
         super(ApiKeys.FETCH_RECORDS, version);
         this.data = new AppendRecordsRequestData(struct, version);
-        this.version = version;
     }
 
     @Override
     protected Struct toStruct() {
-        return data.toStruct(version);
+        return data.toStruct(version());
     }
 
     @Override
