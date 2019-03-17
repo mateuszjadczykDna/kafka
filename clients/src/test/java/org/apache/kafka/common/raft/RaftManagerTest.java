@@ -223,6 +223,25 @@ public class RaftManagerTest {
     }
 
     @Test
+    public void testObserverFindLeaderAfterElectionTimeout() {
+        int leaderId = 1;
+        int epoch = 5;
+        RaftManager manager = buildManager(Utils.mkSet(leaderId));
+
+        manager.poll();
+        int requestId = assertSentFindLeaderRequest();
+        channel.mockReceive(new RaftResponse.Inbound(requestId, findLeaderResponse(leaderId, epoch), leaderId));
+
+        manager.poll();
+        assertEquals(Election.withElectedLeader(epoch, leaderId), electionStore.read());
+
+        time.sleep(electionTimeoutMs);
+
+        manager.poll();
+        assertSentFindLeaderRequest();
+    }
+
+    @Test
     public void testLeaderHandlesFindLeader() {
         RaftManager manager = buildManager(Collections.singleton(localId));
         assertEquals(Election.withElectedLeader(1, localId), electionStore.read());

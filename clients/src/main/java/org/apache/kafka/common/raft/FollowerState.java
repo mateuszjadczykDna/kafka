@@ -107,12 +107,14 @@ public class FollowerState extends EpochState {
         if (!hasLeader())
             throw new IllegalArgumentException("Cannot update high watermark without an acknowledged leader");
         if (!highWatermark.isPresent() && this.highWatermark.isPresent())
-            throw new IllegalArgumentException("Attempt to overwrite current high watermark " + highWatermark +
+            throw new IllegalArgumentException("Attempt to overwrite current high watermark " + this.highWatermark +
                     " with unknown value");
-        this.highWatermark.ifPresent(hw -> {
-            if (hw > highWatermark.getAsLong()) {
+        this.highWatermark.ifPresent(previousHighWatermark -> {
+            long updatedHighWatermark = highWatermark.getAsLong();
+            if (updatedHighWatermark < 0)
+                throw new IllegalArgumentException("Illegal negative high watermark update");
+            if (previousHighWatermark > highWatermark.getAsLong())
                 throw new IllegalArgumentException("Non-monotonic update of high watermark attempted");
-            }
         });
 
         this.highWatermark = highWatermark;

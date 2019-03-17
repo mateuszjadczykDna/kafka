@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 // TODO:
+// - Observer should find leader after request failures/timeouts.
 // - Handle out of range fetches
 // - Figure out locking (probably read-write lock like normal partitions)
 // - Uses of Timer.currentTimeMs are probably wrong
@@ -154,18 +155,27 @@ public class RaftManager {
      * - If we were a follower, become a follower and check for truncation
      */
     public void initialize() {
-        quorum.initialize();
+        quorum.initialize(log.endOffset());
 
         for (Integer voterId : quorum.remoteVoters()) {
             voterConnections.put(voterId, new ConnectionState(retryBackoffMs, requestTimeoutMs));
         }
         findLeaderConnection = new ConnectionState(retryBackoffMs, requestTimeoutMs);
 
-        // If the quorum consists of a single node, we can become leader immediately
-        if (quorum.isCandidate()) {
+        if (quorum.isLeader()) {
+            electionTimer.reset(Long.MAX_VALUE);
+        } else if (quorum.isCandidate()) {
+            // If the quorum consists of a single node, we can become leader immediately
+            electionTimer.reset(electionTimeoutMs);
             maybeBecomeLeader(quorum.candidateStateOrThrow());
         } else if (quorum.isFollower()) {
-            this.awaitingTruncation = isLogNonEmpty();
+            if (quorum.isVoter() && quorum.epoch() == 0) {
+                // If we're initializing for the first time, become a candidate immediately
+                becomeCandidate();
+            } else {
+                electionTimer.reset(electionTimeoutMs);
+                this.awaitingTruncation = isLogNonEmpty();
+            }
         }
     }
 
@@ -182,7 +192,7 @@ public class RaftManager {
     private void maybeBecomeLeader(CandidateState state) {
         if (state.isVoteGranted()) {
             long endOffset = log.endOffset();
-            LeaderState leaderState = quorum.becomeLeader();
+            LeaderState leaderState = quorum.becomeLeader(endOffset);
             leaderState.updateLocalEndOffset(endOffset);
             log.assignEpochStartOffset(quorum.epoch(), endOffset);
             electionTimer.reset(Long.MAX_VALUE);
@@ -438,11 +448,14 @@ public class RaftManager {
             return;
 
         FollowerState state = quorum.followerStateOrThrow();
-        state.updateHighWatermark(OptionalLong.of(response.highWatermark()));
+        OptionalLong highWatermark = response.highWatermark() < 0 ?
+                OptionalLong.empty() : OptionalLong.of(response.highWatermark());
+        state.updateHighWatermark(highWatermark);
         PendingAppendRequest pendingAppend = sentAppends.get(requestId);
         if (pendingAppend != null) {
             pendingAppend.complete(new OffsetAndEpoch(response.baseOffset(), response.leaderEpoch()));
         }
+        electionTimer.reset(electionTimeoutMs);
     }
 
     private AppendRecordsResponseData buildAppendRecordsResponse(Errors error,
@@ -815,9 +828,9 @@ public class RaftManager {
         quorum.visit(new QuorumState.VoidVisitor() {
             @Override
             public void ifFollower(FollowerState state) {
-                if (!state.hasLeader()) {
+                if (quorum.isObserver() && (!state.hasLeader() || electionTimer.isExpired())) {
                     maybeSendFindLeader(currentTimeMs);
-                } else {
+                } else if (state.hasLeader()) {
                     int leaderId = state.leaderId();
                     if (awaitingTruncation) {
                         maybeSendFetchEndOffset(currentTimeMs, leaderId);
@@ -874,7 +887,7 @@ public class RaftManager {
             // This call is a bit annoying, but perhaps justifiable if we need to acquire a lock
             electionTimer.update();
 
-            if (electionTimer.isExpired())
+            if (quorum.isVoter() && electionTimer.isExpired())
                 becomeCandidate();
 
             clearTimedOutAppends(electionTimer.currentTimeMs());
@@ -907,9 +920,11 @@ public class RaftManager {
             unsentAppends.poll();
             unsentAppend.fail(new TimeoutException());
         } else if (quorum.isLeader()) {
+            LeaderState leaderState = quorum.leaderStateOrThrow();
             unsentAppends.poll();
             int epoch = quorum.epoch();
             Long baseOffset = log.appendAsLeader(unsentAppend.records, epoch);
+            leaderState.updateLocalEndOffset(log.endOffset());
             unsentAppend.complete(new OffsetAndEpoch(baseOffset, epoch));
         } else if (quorum.isFollower()) {
             FollowerState followerState = quorum.followerStateOrThrow();
@@ -976,6 +991,10 @@ public class RaftManager {
         // TODO: Safe to access epoch? Need to reset connections to be able to send EndEpoch? Block until shutdown completes?
         shutdown.set(new GracefulShutdown(timeoutMs, quorum.epoch()));
         channel.wakeup();
+    }
+
+    public OptionalLong highWatermark() {
+        return quorum.highWatermark();
     }
 
     private class GracefulShutdown {

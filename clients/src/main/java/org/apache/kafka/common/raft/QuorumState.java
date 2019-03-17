@@ -31,17 +31,25 @@ public class QuorumState {
         this.log = logContext.logger(QuorumState.class);
     }
 
-    public void initialize() {
+    public void initialize(long endOffset) {
+        // We initialize in whatever state we were in on shutdown. If we were a leader
+        // or candidate, probably an election was held, but we will find out about it
+        // when we send Vote or BeginEpoch requests.
+
         Election election = store.read();
-        state = new FollowerState(localId, election.epoch);
-        if (election.hasLeader() && election.leaderId() != localId) {
-            becomeFollower(election.epoch, election.leaderId());
-        } else if (election.hasVoted() && election.votedId() != localId) {
-            becomeVotedFollower(election.epoch, election.votedId());
-        } else if (isVoter()) {
-            becomeCandidate();
+        if (election.isLeader(localId)) {
+            state = new LeaderState(localId, election.epoch, endOffset, voters);
+        } else if (election.isCandidate(localId)) {
+            state = new CandidateState(localId, election.epoch, voters);
         } else {
-            becomeUnattachedFollower(election.epoch);
+            state = new FollowerState(localId, election.epoch);
+            if (election.hasLeader()) {
+                becomeFollower(election.epoch, election.leaderId());
+            } else if (election.hasVoted() && election.votedId() != localId) {
+                becomeVotedFollower(election.epoch, election.votedId());
+            } else {
+                becomeUnattachedFollower(election.epoch);
+            }
         }
     }
 
@@ -147,7 +155,7 @@ public class QuorumState {
         return state;
     }
 
-    public LeaderState becomeLeader() {
+    public LeaderState becomeLeader(long epochStartOffset) {
         if (isObserver())
             throw new IllegalStateException("Cannot become candidate since we are not a voter");
 
@@ -156,7 +164,7 @@ public class QuorumState {
             throw new IllegalStateException("Cannot become leader without majority votes granted");
 
         log.info("Becoming leader in epoch {}", epoch());
-        LeaderState state = new LeaderState(localId, epoch(), voters);
+        LeaderState state = new LeaderState(localId, epoch(), epochStartOffset, voters);
         store.write(state.election());
         this.state = state;
         return state;

@@ -11,11 +11,14 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class LeaderState extends EpochState {
+    private final long epochStartOffset;
     private OptionalLong highWatermark = OptionalLong.empty();
     private Map<Integer, FollowerState> followers = new HashMap<>();
 
-    protected LeaderState(int localId, int epoch, Set<Integer> voters) {
+    protected LeaderState(int localId, int epoch, long epochStartOffset, Set<Integer> voters) {
         super(localId, epoch);
+
+        this.epochStartOffset = epochStartOffset;
 
         for (int voterId : voters) {
             boolean hasEndorsedLeader = voterId == localId;
@@ -51,7 +54,14 @@ public class LeaderState extends EpochState {
         ArrayList<FollowerState> followersByFetchOffset = new ArrayList<>(this.followers.values());
         Collections.sort(followersByFetchOffset);
         int indexOfHw = followers.size() / 2 - (followers.size() % 2 == 0 ? 1 : 0);
-        highWatermark = followersByFetchOffset.get(indexOfHw).endOffset;
+
+        followersByFetchOffset.get(indexOfHw).endOffset.ifPresent(highWatermarkUpdate -> {
+            // When a leader is first elected, it cannot know the high watermark of the previous
+            // leader. In order to avoid exposing a non-monotonically increasing value, we have
+            // to wait for followers to catch up to the start of the leader's epoch.
+            if (highWatermarkUpdate >= epochStartOffset)
+                highWatermark = OptionalLong.of(highWatermarkUpdate);
+        });
     }
 
     public void updateEndOffset(int remoteNodeId, long endOffset) {

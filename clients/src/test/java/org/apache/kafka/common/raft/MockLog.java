@@ -180,7 +180,7 @@ public class MockLog implements ReplicatedLog {
         epochStartOffsets.add(new EpochStartOffset(epoch, startOffset));
     }
 
-    private static class LogEntry {
+    public static class LogEntry {
         final long offset;
         final int epoch;
         final SimpleRecord record;
