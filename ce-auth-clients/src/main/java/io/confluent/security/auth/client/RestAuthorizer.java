@@ -6,7 +6,6 @@ import io.confluent.kafka.security.authorizer.Action;
 import io.confluent.kafka.security.authorizer.AuthorizeResult;
 import io.confluent.kafka.security.authorizer.Authorizer;
 import io.confluent.security.auth.client.rest.RestClient;
-import io.confluent.security.rbac.utils.JsonMapper;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 import java.io.IOException;
@@ -54,7 +53,7 @@ public class RestAuthorizer implements Authorizer {
                 throw new IllegalStateException("RestClient is not initialized.");
 
             List<String> results = restClient.authorize(
-                    JsonMapper.objectMapper().writeValueAsString(sessionPrincipal),
+                    sessionPrincipal.toString(),
                     host,
                     actions);
             return  results.stream()

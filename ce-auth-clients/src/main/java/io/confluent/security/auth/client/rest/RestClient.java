@@ -11,7 +11,6 @@ import io.confluent.security.auth.client.provider.BasicAuthCredentialProvider;
 import io.confluent.security.auth.client.provider.BuiltInAuthProviders;
 import io.confluent.security.auth.client.provider.BuiltInAuthProviders.BasicAuthCredentialProviders;
 import io.confluent.security.auth.client.rest.entities.AuthorizeRequest;
-import io.confluent.security.auth.client.rest.entities.AuthorizeResponse;
 import io.confluent.security.auth.client.rest.entities.ErrorMessage;
 import io.confluent.security.auth.client.rest.exceptions.RestClientException;
 import org.apache.kafka.common.config.ConfigException;
@@ -62,7 +61,7 @@ public class RestClient implements Closeable {
 
     private static final TypeReference<List<String>> ACTIVE_URLS_RESPONSE_TYPE = new TypeReference<List<String>>() {
     };
-    private static final TypeReference<AuthorizeResponse> AUTHORIZE_RESPONSE_TYPE = new TypeReference<AuthorizeResponse>() {
+    private static final TypeReference<List<String>> AUTHORIZE_RESPONSE_TYPE = new TypeReference<List<String>>() {
     };
 
     private static final Map<String, String> DEFAULT_REQUEST_PROPERTIES;
@@ -168,11 +167,10 @@ public class RestClient implements Closeable {
     public List<String> authorize(final String userPrincipal, final String host,
                                   final List<Action> actions) throws IOException, RestClientException {
         AuthorizeRequest authorizeRequest = new AuthorizeRequest(userPrincipal, host, actions);
-        AuthorizeResponse response = httpRequest(AUTHORIZE_END_POINT,
+        return httpRequest(AUTHORIZE_END_POINT,
                 "PUT",
                 authorizeRequest.toJson().getBytes(StandardCharsets.UTF_8),
                 AUTHORIZE_RESPONSE_TYPE);
-        return response.authorizeResults;
     }
 
     public List<String> getActiveMetadataServerURLs() throws IOException, RestClientException {

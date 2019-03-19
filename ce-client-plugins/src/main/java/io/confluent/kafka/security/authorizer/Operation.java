@@ -2,8 +2,6 @@
 
 package io.confluent.kafka.security.authorizer;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.Objects;
 
 /**
@@ -16,11 +14,10 @@ public class Operation {
 
   private final String name;
 
-  public Operation(@JsonProperty("name") String name) {
+  public Operation(String name) {
     this.name = name;
   }
 
-  @JsonProperty
   public String name() {
     return name;
   }

@@ -86,7 +86,7 @@ public class RestClientTest {
             attempt++;
             triedUrls.add(requestUrl);
             if (attempt == successAttempt)
-                return jsonDeserializer.readValue("{}", responseFormat);
+                return jsonDeserializer.readValue("[]", responseFormat);
             else {
                 throw new IOException("http Request Failed");
             }
@@ -147,7 +147,7 @@ public class RestClientTest {
             attempt++;
             time.sleep(sleepTime);
             if (attempt == successAttempt)
-                return jsonDeserializer.readValue("{}", responseFormat);
+                return jsonDeserializer.readValue("[]", responseFormat);
             else {
                 throw new IOException("http Request Failed");
             }

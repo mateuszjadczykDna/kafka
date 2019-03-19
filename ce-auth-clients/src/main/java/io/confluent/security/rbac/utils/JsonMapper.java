@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import io.confluent.kafka.security.authorizer.Operation;
 import io.confluent.kafka.security.authorizer.ResourceType;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -36,9 +37,13 @@ public class JsonMapper {
     simpleModule.addSerializer(KafkaPrincipal.class, new PrincipalSerializer(KafkaPrincipal.class));
     simpleModule.addDeserializer(KafkaPrincipal.class, new PrincipalDeserializer(KafkaPrincipal.class));
 
-    // ResourceTypes are Strings rather than enums for extensibility. Serialize/Deserialize as String.
+    // ResourceTypes, Operations are Strings rather than enums for extensibility. Serialize/Deserialize as String.
     simpleModule.addSerializer(ResourceType.class, new ResourceTypeSerializer(ResourceType.class));
     simpleModule.addDeserializer(ResourceType.class, new ResourceTypeDeserializer(ResourceType.class));
+
+    simpleModule.addSerializer(Operation.class, new OperationSerializer(Operation.class));
+    simpleModule.addDeserializer(Operation.class, new OperationDeserializer(Operation.class));
+
     OBJECT_MAPPER.registerModule(simpleModule);
   }
 
@@ -113,6 +118,32 @@ public class JsonMapper {
     public ResourceType deserialize(JsonParser jsonParser,
         DeserializationContext deserializationContext) throws IOException {
       return new ResourceType(jsonParser.getValueAsString());
+    }
+  }
+
+  private static class OperationSerializer extends StdSerializer<Operation> {
+
+    public OperationSerializer(Class<Operation> t) {
+      super(t);
+    }
+
+    @Override
+    public void serialize(Operation operation, JsonGenerator jsonGenerator,
+                          SerializerProvider serializerProvider) throws IOException {
+      jsonGenerator.writeString(operation.name());
+    }
+  }
+
+  private static class OperationDeserializer extends StdDeserializer<Operation> {
+
+    public OperationDeserializer(Class<Operation> t) {
+      super(t);
+    }
+
+    @Override
+    public Operation deserialize(JsonParser jsonParser,
+                                    DeserializationContext deserializationContext) throws IOException {
+      return new Operation(jsonParser.getValueAsString());
     }
   }
 }
