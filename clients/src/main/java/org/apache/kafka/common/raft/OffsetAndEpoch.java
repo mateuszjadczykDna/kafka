@@ -1,6 +1,6 @@
 package org.apache.kafka.common.raft;
 
-public class OffsetAndEpoch {
+public class OffsetAndEpoch implements Comparable<OffsetAndEpoch> {
     public final long offset;
     public final int epoch;
 
@@ -35,4 +35,10 @@ public class OffsetAndEpoch {
                 ')';
     }
 
+    @Override
+    public int compareTo(OffsetAndEpoch o) {
+        if (epoch == o.epoch)
+            return Long.compare(offset, o.offset);
+        return Integer.compare(epoch, o.epoch);
+    }
 }

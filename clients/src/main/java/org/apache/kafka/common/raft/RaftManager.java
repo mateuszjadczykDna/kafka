@@ -36,7 +36,6 @@ import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -956,7 +955,7 @@ public class RaftManager {
      * @param records The records to write to the log.
      * @return The uncommitted base offset and epoch of the appended records
      */
-    public Future<OffsetAndEpoch> append(Records records) {
+    public CompletableFuture<OffsetAndEpoch> append(Records records) {
         if (shutdown.get() != null)
             throw new IllegalStateException("Cannot append records while we are shutting down");
 
