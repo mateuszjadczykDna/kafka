@@ -9,6 +9,7 @@ import kafka.log.Log$;
 import kafka.tier.domain.AbstractTierMetadata;
 import kafka.tier.domain.TierObjectMetadata;
 import kafka.tier.domain.TierTopicInitLeader;
+import kafka.tier.exceptions.TierPartitionStateIllegalListenerException;
 import kafka.tier.serdes.ObjectMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Utils;
@@ -26,9 +27,10 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
-import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileTierPartitionState implements TierPartitionState, AutoCloseable {
@@ -39,6 +41,9 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
     private final AtomicInteger currentEpoch = new AtomicInteger(-1);
     private final TopicPartition topicPartition;
     private final Object lock = new Object();
+    // Replica Fetcher needs to track materialization progress in order
+    // to restore tier state aligned with local data available on the leader
+    private ReplicationMaterializationListener materializationTracker = null;
 
     private File dir;
     private String path;
@@ -77,19 +82,16 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
     }
 
     @Override
-    public OptionalLong startOffset() {
+    public Optional<Long> startOffset() {
         Map.Entry<Long, Long> firstEntry = segments.firstEntry();
         if (firstEntry != null)
-            return OptionalLong.of(firstEntry.getKey());
-        return OptionalLong.empty();
+            return Optional.of(firstEntry.getKey());
+        return Optional.empty();
     }
 
     @Override
-    public OptionalLong endOffset() {
-        if (endOffset == null || segments.isEmpty())
-            return OptionalLong.empty();
-        else
-            return OptionalLong.of(endOffset);
+    public Optional<Long> endOffset() {
+        return Optional.ofNullable(endOffset);
     }
 
     @Override
@@ -155,6 +157,12 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
                 } finally {
                     channel = null;
                     segments.clear();
+
+                    if (materializationTracker != null) {
+                        materializationTracker.promise.completeExceptionally(new TierPartitionStateIllegalListenerException(
+                                "Tier partition state for " + topicPartition + " has been closed. "
+                                + "Materialization tracking canceled."));
+                    }
                     status = TierPartitionStatus.CLOSED;
                 }
             }
@@ -192,15 +200,39 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
     }
 
     @Override
+    public Future<TierObjectMetadata> materializationListener(long targetOffset) throws IOException {
+        final CompletableFuture<TierObjectMetadata> promise = new CompletableFuture<>();
+        synchronized (lock) {
+            if (!status.isOpen()) {
+                promise.completeExceptionally(new TierPartitionStateIllegalListenerException("Tier "
+                        + "partition state for " + topicPartition + " is not open. "
+                        + "Materialization tracker could not be created."));
+                return promise;
+            }
+
+            final Optional<TierObjectMetadata> metadata = metadata(targetOffset);
+            // listener is able to fire immediately
+            if (metadata.isPresent() && metadata.get().endOffset() >= targetOffset) {
+                promise.complete(metadata.get());
+            } else {
+                if (materializationTracker != null)
+                    materializationTracker.promise.completeExceptionally(
+                            new IllegalStateException("Cancelled materialization tracker, as "
+                                    + "another materialization tracker has been started."));
+
+                materializationTracker = new ReplicationMaterializationListener(targetOffset, promise);
+            }
+        }
+        return promise;
+    }
+
+    @Override
     public void close() throws IOException {
         synchronized (lock) {
-            if (status != TierPartitionStatus.CLOSED) {
-                try {
-                    flush();
-                } finally {
-                    closeHandlers();
-                    status = TierPartitionStatus.CLOSED;
-                }
+            try {
+                flush();
+            } finally {
+                closeHandlers();
             }
         }
     }
@@ -237,6 +269,10 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
         } else {
             return Optional.empty();
         }
+    }
+
+    public FileTierPartitionIterator iterator(long position) throws IOException {
+        return new FileTierPartitionIterator(topicPartition, channel, position);
     }
 
     private void maybeOpenFile() throws IOException {
@@ -279,11 +315,18 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
 
     private AppendResult append(TierObjectMetadata objectMetadata) throws IOException {
         if (objectMetadata.tierEpoch() == tierEpoch()) {
-            OptionalLong endOffset = endOffset();
-            if (!endOffset.isPresent() || objectMetadata.startOffset() > endOffset.getAsLong()) {
+            if (!endOffset().isPresent() || objectMetadata.endOffset() > endOffset) {
                 final ByteBuffer metadataBuffer = objectMetadata.payloadBuffer();
                 final long byteOffset = appendWithSizePrefix(channel, metadataBuffer);
                 addSegment(objectMetadata.objectMetadata(), byteOffset);
+
+                if (status.isOpen()
+                        && materializationTracker != null
+                        && objectMetadata.endOffset() >= materializationTracker.offsetToMaterialize) {
+                    materializationTracker.promise.complete(objectMetadata);
+                    materializationTracker = null;
+                }
+
                 return AppendResult.ACCEPTED;
             }
         }
@@ -327,12 +370,26 @@ public class FileTierPartitionState implements TierPartitionState, AutoCloseable
     }
 
     private void addSegment(ObjectMetadata metadata, long byteOffset) {
-        segments.put(metadata.startOffset(), byteOffset);
+        // As there may be arbitrary overlap between segments, it is possible for a new
+        // segment to completely overlap a previous segment. We rely on on lookup via the
+        // start offset, and if we insert into the lookup map with the raw offset, it is possible
+        // for portions of a segment to be unfetchable unless we bound overlapping segments
+        // in the lookup map. e.g. if [100 - 200] is in the map at 100, and we insert [50 - 250]
+        // at 50, the portion 201 - 250 will be inaccessible.
+        segments.put(Math.max(endOffset().orElse(-1L) + 1, metadata.startOffset()),
+                byteOffset);
         // store end offset for immediate access
         endOffset = metadata.startOffset() + metadata.endOffsetDelta();
     }
 
-    private FileTierPartitionIterator iterator(long position) throws IOException {
-        return new FileTierPartitionIterator(topicPartition, channel, position);
+    private static class ReplicationMaterializationListener {
+        final CompletableFuture<TierObjectMetadata> promise;
+        final long offsetToMaterialize;
+
+        ReplicationMaterializationListener(long offsetToMaterialize,
+                                           CompletableFuture<TierObjectMetadata> promise) {
+            this.offsetToMaterialize = offsetToMaterialize;
+            this.promise = promise;
+        }
     }
 }

@@ -83,7 +83,7 @@ public class TierMetadataManagerTest {
     }
 
     @Test
-    public void testInitStateForCompactedTierTopicThrows() throws IOException {
+    public void testInitStateForCompactedTopic() throws IOException {
         LogConfig config = config(true, true);
         TierMetadataManager metadataManager = new TierMetadataManager(
                 new FileTierPartitionStateFactory(),
@@ -91,11 +91,8 @@ public class TierMetadataManagerTest {
                 new LogDirFailureChannel(10),
                 true);
         addListener(metadataManager);
-        try {
-            metadataManager.initState(TOPIC_PARTITION, dir, config);
-            fail();
-        } catch (InvalidConfigurationException e) {
-        }
+        TierPartitionState state = metadataManager.initState(TOPIC_PARTITION, dir, config);
+        assertFalse(state.tieringEnabled());
         metadataManager.delete(TOPIC_PARTITION);
 
         assertEquals(0, onBecomeLeader);

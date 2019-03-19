@@ -11,7 +11,7 @@ import com.yammer.metrics.core.{Gauge, MetricName}
 import kafka.api.ApiVersion
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server._
-import kafka.server.epoch.LeaderEpochFileCache
+import kafka.server.epoch.{LeaderEpochFileCache, EpochEntry}
 import kafka.tier.TierMetadataManager
 import kafka.tier.domain.TierObjectMetadata
 import kafka.tier.state.{MemoryTierPartitionStateFactory, TierPartitionState}
@@ -258,10 +258,26 @@ class MergedLog(private[log] val localLog: Log,
       logStartOffset = newOffset
   }
 
+  def onRestoreTierState(proposeLocalLogStart: Long, leaderEpochEntries: List[EpochEntry]): Unit = lock synchronized {
+    if (!localLog.leaderEpochCache.isDefined) {
+      throw new IllegalStateException("Message format must be upgraded before restoring tier state can be allowed.")
+    }
+
+    truncateFullyAndStartAt(proposeLocalLogStart)
+
+    localLog.leaderEpochCache.get.clear()
+    for (entry <- leaderEpochEntries)
+      localLog.leaderEpochCache.get.assign(entry.epoch, entry.startOffset)
+  }
+
   /**
     * Get the base offset of first segment in log.
     */
   def baseOffsetOfFirstSegment: Long = firstTieredOffset.getOrElse(localLogSegments.head.baseOffset)
+
+  def localLogStartOffset: Long = localLog.localLogStartOffset
+
+  def localLogEndOffset: Long = localLog.logEndOffset
 
   def tierableLogSegments: Iterable[LogSegment] = {
     getHighWatermark.map { highWatermark =>
@@ -272,9 +288,11 @@ class MergedLog(private[log] val localLog: Log,
       // 4. the segment end offset is less than the recovery point. This ensures we only upload segments that have been fsync'd.
 
       val upperBoundOffset = Utils.min(firstUnstableOffset.map(_.messageOffset).getOrElse(logEndOffset), highWatermark, recoveryPoint)
-      // The last segment we picked could still contain messages we are not allowed to tier. Dropping it seems to be the
-      // easiest to do.
-      localLogSegments(firstUntieredOffset, upperBoundOffset).dropRight(1)
+      // The last segment we picked could still contain messages we are not allowed to tier
+      // e.g. entire segment not fsynced, or it is the active segment
+      // dropping the last segment ensures we do not tier these segments
+      localLogSegments(firstUntieredOffset, upperBoundOffset)
+        .dropRight(1)
     }.getOrElse(Iterable.empty)
   }
 
@@ -290,7 +308,7 @@ class MergedLog(private[log] val localLog: Log,
     val tieredOffsets = this.tieredOffsets(startOffset, Long.MaxValue).asScala.iterator
     val tierEndOffset = tierPartitionState.endOffset
 
-    if (tieredOffsets.isEmpty || startOffset > tierEndOffset.getAsLong || startOffset < logStartOffset)
+    if (tieredOffsets.isEmpty || startOffset > tierEndOffset.get || startOffset < logStartOffset)
       throw new OffsetOutOfRangeException(s"Received request for offset $startOffset for partition $topicPartition, " +
         s"but we only have log segments in the range $logStartOffset to $logEndOffset with tierLogEndOffset: " +
         s"$tierEndOffset and localLogStartOffset: ${localLog.localLogStartOffset}")
@@ -374,14 +392,8 @@ class MergedLog(private[log] val localLog: Log,
 
   // First tiered offset, if there is one
   private def firstTieredOffset: Option[Long] = {
-    val tieredOffsets = this.tieredOffsets
-    if (tieredOffsets.isEmpty)
-      None
-    else
-      Some(tieredOffsets.first)
+    tierPartitionState.startOffset.asScala.map(Long2long)
   }
-
-  private def lastTieredOffset: Option[Long] = tierPartitionState.endOffset.asScala
 
   // Handle any IOExceptions by taking the log directory offline
   private def maybeHandleIOException[T](msg: => String)(fun: => T): T = {
@@ -563,6 +575,16 @@ sealed trait AbstractLog {
     * @return Log start offset
     */
   def logStartOffset: Long
+
+  /**
+   * @return The start offset of the local (disk) log
+   */
+  def localLogStartOffset: Long
+
+ /**
+   * @return The end offset of the local (disk) log
+   */
+  def localLogEndOffset: Long
 
   /**
     * @return The current recovery point of the log
@@ -834,6 +856,12 @@ sealed trait AbstractLog {
     * Get the base offset of first segment in log.
     */
   def baseOffsetOfFirstSegment: Long
+
+  /*
+   * Restores tier state for this partition fetched from the tier object store.
+   * Initializes the local log to proposedLogStart.
+   */
+  def onRestoreTierState(proposedLocalLogStart: Long, leaderEpochEntries: List[EpochEntry]): Unit
 
   /**
     * Remove all log metrics

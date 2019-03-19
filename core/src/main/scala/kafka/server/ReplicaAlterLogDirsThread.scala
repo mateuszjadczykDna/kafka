@@ -19,12 +19,17 @@ package kafka.server
 
 import java.util
 import java.util.Optional
+import java.util.concurrent.CompletableFuture
 
 import kafka.api.Request
 import kafka.cluster.BrokerEndPoint
 import kafka.log.{LogAppendInfo, LogOffsetSnapshot}
 import kafka.server.AbstractFetcherThread.ResultWithPartitions
 import kafka.server.QuotaFactory.UnboundedQuota
+import kafka.server.epoch.EpochEntry
+import kafka.tier.TierMetadataManager
+import kafka.tier.domain.TierObjectMetadata
+import kafka.tier.fetcher.TierStateFetcher
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.KafkaStorageException
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
@@ -41,11 +46,15 @@ class ReplicaAlterLogDirsThread(name: String,
                                 brokerConfig: KafkaConfig,
                                 replicaMgr: ReplicaManager,
                                 quota: ReplicationQuotaManager,
+                                tierMetadataManager: TierMetadataManager,
+                                tierStateFetcher: Option[TierStateFetcher],
                                 brokerTopicStats: BrokerTopicStats)
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
                                 fetchBackOffMs = brokerConfig.replicaFetchBackoffMs,
+                                tierMetadataManager = tierMetadataManager,
+                                tierStateFetcher = tierStateFetcher,
                                 isInterruptible = false) {
 
   private val replicaId = brokerConfig.brokerId
@@ -261,4 +270,11 @@ class ReplicaAlterLogDirsThread(name: String,
     }
   }
 
+  override protected def onRestoreTierState(topicPartition: TopicPartition, proposedLocalLogStart: Long, epochData: List[EpochEntry]): Unit = {
+    throw new UnsupportedOperationException("Restoring tier state during an alter log dirs operation is not currently supported.")
+  }
+
+  override protected def fetchTierState(topicPartition: TopicPartition, tierObjectMetadata: TierObjectMetadata): CompletableFuture[List[EpochEntry]] = {
+    throw new UnsupportedOperationException("Restoring tier state during an alter log dirs operation is not currently supported.")
+  }
 }

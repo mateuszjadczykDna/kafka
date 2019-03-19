@@ -39,12 +39,14 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
     serverConfig.put(KafkaConfig.TierS3RegionProp, "us-east-1")
     serverConfig.put(KafkaConfig.TierS3EndpointOverrideProp, "http://localhost:9000")
     serverConfig.put(KafkaConfig.TierS3SignerOverrideProp, "AWSS3V4SignerType")
+    serverConfig.put(KafkaConfig.TierLocalHotsetBytesProp, "0")
   }
 
   private def configureS3 = {
     serverConfig.put(KafkaConfig.TierBackendProp, "S3")
     serverConfig.put(KafkaConfig.TierS3BucketProp, "ai383estnar")
     serverConfig.put(KafkaConfig.TierS3RegionProp, "us-west-2")
+    serverConfig.put(KafkaConfig.TierLocalHotsetBytesProp, "0")
   }
 
   serverConfig.put(KafkaConfig.TierEnableProp, "false")
@@ -52,6 +54,7 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
   serverConfig.put(KafkaConfig.TierMetadataNumPartitionsProp, "1")
   serverConfig.put(KafkaConfig.TierMetadataReplicationFactorProp, "1")
   serverConfig.put(KafkaConfig.LogCleanupIntervalMsProp, "500")
+  serverConfig.put(KafkaConfig.TierLocalHotsetBytesProp, "0")
   //configureMinio
   //configureS3
   configureMock
@@ -66,7 +69,8 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
     props.put(TopicConfig.SEGMENT_BYTES_CONFIG, "5000000")
     // Set hotset retention bytes adequately low, to allow us to delete some segments after they have been tiered
     props.put(ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG, "10000")
-    
+    props.put(TopicConfig.RETENTION_BYTES_CONFIG, "-1")
+
     createTopic(topic, 2, 1, props)
   }
 

@@ -203,12 +203,7 @@ object TierArchiverState {
           case None => {
             // Log has been moved or there is no eligible segment. Retry BeforeUpload state.
             CompletableFutureUtil.completed(this)}
-          case Some((_: AbstractLog, logSegment: LogSegment)) if logSegment.baseOffset != archivedOffset + 1 => {
-            // Segment offset is not adjacent to archived offset. Complete exceptionally.
-            CompletableFutureUtil.failed(
-              new IllegalStateException(s"Expected next tierable segment at base offset "
-                + s"${archivedOffset + 1}, but found base offset ${logSegment.baseOffset}"))
-          }
+
           case Some((log: AbstractLog, logSegment: LogSegment)) => {
             // Upload next segment and transition.
             val leaderEpochStateFile = uploadableLeaderEpochState(log, logSegment.readNextOffset)

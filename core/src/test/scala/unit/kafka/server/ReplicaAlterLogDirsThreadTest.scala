@@ -22,6 +22,8 @@ import kafka.cluster.{BrokerEndPoint, Partition, Replica}
 import kafka.log.LogManager
 import kafka.server.AbstractFetcherThread.ResultWithPartitions
 import kafka.utils.{DelayedItem, TestUtils}
+import kafka.tier.TierMetadataManager
+import kafka.tier.fetcher.TierStateFetcher
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.KafkaStorageException
 import org.apache.kafka.common.protocol.Errors
@@ -74,11 +76,14 @@ class ReplicaAlterLogDirsThreadTest {
     replay(partitionT1p0, partitionT1p1, replicaManager)
 
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager : TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = null,
       brokerTopicStats = null)
 
@@ -119,11 +124,14 @@ class ReplicaAlterLogDirsThreadTest {
     replay(partitionT1p0, replicaManager)
 
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = null,
       brokerTopicStats = null)
 
@@ -200,11 +208,14 @@ class ReplicaAlterLogDirsThreadTest {
 
     //Create the thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(t1p0 -> offsetAndEpoch(0L), t1p1 -> offsetAndEpoch(0L)))
@@ -271,11 +282,14 @@ class ReplicaAlterLogDirsThreadTest {
 
     //Create the thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(t1p0 -> offsetAndEpoch(0L)))
@@ -326,11 +340,14 @@ class ReplicaAlterLogDirsThreadTest {
 
     //Create the thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(t1p0 -> offsetAndEpoch(initialFetchOffset)))
@@ -404,11 +421,14 @@ class ReplicaAlterLogDirsThreadTest {
 
     //Create the thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(t1p0 -> offsetAndEpoch(0L)))
@@ -463,11 +483,14 @@ class ReplicaAlterLogDirsThreadTest {
 
     //Create the fetcher thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(t1p0 -> offsetAndEpoch(0L)))
@@ -503,11 +526,14 @@ class ReplicaAlterLogDirsThreadTest {
     //Create the fetcher thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
     val leaderEpoch = 1
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(
@@ -552,11 +578,14 @@ class ReplicaAlterLogDirsThreadTest {
     //Create the fetcher thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
     val leaderEpoch = 1
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val thread = new ReplicaAlterLogDirsThread(
       "alter-logs-dirs-thread-test1",
       sourceBroker = endPoint,
       brokerConfig = config,
       replicaMgr = replicaManager,
+      tierMetadataManager = tierMetadataManager,
+      tierStateFetcher = Some(EasyMock.createMock(classOf[TierStateFetcher])),
       quota = quotaManager,
       brokerTopicStats = null)
     thread.addPartitions(Map(

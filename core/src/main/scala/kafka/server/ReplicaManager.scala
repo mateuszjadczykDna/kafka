@@ -31,9 +31,10 @@ import kafka.log._
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.QuotaFactory.{QuotaManagers, UnboundedQuota}
 import kafka.server.checkpoints.OffsetCheckpointFile
+import kafka.tier.TierMetadataManager
 import kafka.utils._
 import kafka.zk.KafkaZkClient
-import kafka.tier.fetcher.{TierFetchResult, TierFetcher}
+import kafka.tier.fetcher.{TierStateFetcher, TierFetchResult, TierFetcher}
 import org.apache.kafka.common.errors._
 import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.metrics.Metrics
@@ -176,7 +177,9 @@ class ReplicaManager(val config: KafkaConfig,
                      val delayedFetchPurgatory: DelayedOperationPurgatory[DelayedFetch],
                      val delayedDeleteRecordsPurgatory: DelayedOperationPurgatory[DelayedDeleteRecords],
                      val delayedElectPreferredLeaderPurgatory: DelayedOperationPurgatory[DelayedElectPreferredLeader],
+                     val tierMetadataManager: TierMetadataManager,
                      val tierFetcher: Option[TierFetcher],
+                     val tierStateFetcher: Option[TierStateFetcher],
                      threadNamePrefix: Option[String]) extends Logging with KafkaMetricsGroup {
 
   def this(config: KafkaConfig,
@@ -190,7 +193,9 @@ class ReplicaManager(val config: KafkaConfig,
            brokerTopicStats: BrokerTopicStats,
            metadataCache: MetadataCache,
            logDirFailureChannel: LogDirFailureChannel,
+           tierMetadataManager: TierMetadataManager,
            tierFetcher: Option[TierFetcher] = None,
+           tierStateFetcher: Option[TierStateFetcher] = None,
            threadNamePrefix: Option[String] = None) {
     this(config, metrics, time, zkClient, scheduler, logManager, isShuttingDown,
       quotaManagers, brokerTopicStats, metadataCache, logDirFailureChannel,
@@ -205,7 +210,9 @@ class ReplicaManager(val config: KafkaConfig,
         purgeInterval = config.deleteRecordsPurgatoryPurgeIntervalRequests),
       DelayedOperationPurgatory[DelayedElectPreferredLeader](
         purgatoryName = "ElectPreferredLeader", brokerId = config.brokerId),
+      tierMetadataManager,
       tierFetcher,
+      tierStateFetcher,
       threadNamePrefix)
   }
 
@@ -1514,7 +1521,16 @@ class ReplicaManager(val config: KafkaConfig,
           val reason = s"Attempt to fetch tiered data by follower $replicaId from $localBrokerId at offset " +
             s"${readResult.info.fetchMetadata.fetchStartOffset}}"
           warn(reason)
-          topicPartition -> readResult.copy(exception = Some(new OffsetTieredException(reason)))
+          topicPartition ->
+            LogReadResult(info = FetchDataInfo(LogOffsetMetadata.UnknownOffsetMetadata, MemoryRecords.EMPTY),
+              highWatermark = -1L,
+              leaderLogStartOffset = -1L,
+              leaderLogEndOffset = -1L,
+              followerLogStartOffset = -1L,
+              fetchTimeMs = -1L,
+              readSize = 0,
+              lastStableOffset = None,
+              exception = Some(new OffsetTieredException(reason)))
       }
     }
   }
@@ -1620,11 +1636,11 @@ class ReplicaManager(val config: KafkaConfig,
   }
 
   protected def createReplicaFetcherManager(metrics: Metrics, time: Time, threadNamePrefix: Option[String], quotaManager: ReplicationQuotaManager) = {
-    new ReplicaFetcherManager(config, this, metrics, time, threadNamePrefix, quotaManager)
+    new ReplicaFetcherManager(config, this, metrics, time, threadNamePrefix, quotaManager, tierMetadataManager, tierStateFetcher)
   }
 
   protected def createReplicaAlterLogDirsManager(quotaManager: ReplicationQuotaManager, brokerTopicStats: BrokerTopicStats) = {
-    new ReplicaAlterLogDirsManager(config, this, quotaManager, brokerTopicStats)
+    new ReplicaAlterLogDirsManager(config, this, quotaManager, tierMetadataManager, tierStateFetcher, brokerTopicStats)
   }
 
   def lastOffsetForLeaderEpoch(requestedEpochInfo: Map[TopicPartition, OffsetsForLeaderEpochRequest.PartitionData]): Map[TopicPartition, EpochEndOffset] = {

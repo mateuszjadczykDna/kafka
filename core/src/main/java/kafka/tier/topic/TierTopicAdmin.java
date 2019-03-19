@@ -41,15 +41,24 @@ public class TierTopicAdmin {
     public static boolean ensureTopicCreated(String bootstrapServers, String topicName,
                                           int partitions, short replication)
             throws KafkaException, InterruptedException {
-        log.debug("creating tier topic {}", topicName);
+        log.debug("creating tier topic {} with partitions={}, replicationFactor={}", topicName,
+                partitions, replication);
         Properties properties = new Properties();
         properties.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         try (AdminClient admin = AdminClient.create(properties)) {
-            NewTopic newTopic =
-                    new NewTopic(topicName, partitions, replication)
-                            .configs(TIER_TOPIC_CONFIG);
-            CreateTopicsResult result = admin.createTopics(Collections.singletonList(newTopic));
-            result.values().get(topicName).get();
+            // we can't simply create the tier topic and check whether it already exists
+            // as creation may be rejected if # live brokers < replication factor,
+            // even if the topic already exists.
+            // https://issues.apache.org/jira/browse/KAFKA-8125
+            if (topicExists(admin, topicName)) {
+                return true;
+            } else {
+                NewTopic newTopic =
+                        new NewTopic(topicName, partitions, replication)
+                                .configs(TIER_TOPIC_CONFIG);
+                CreateTopicsResult result = admin.createTopics(Collections.singletonList(newTopic));
+                result.values().get(topicName).get();
+            }
         } catch (ExecutionException e) {
             if (e.getCause() instanceof TopicExistsException) {
                 log.debug("{} topic has already been created.", topicName);
@@ -59,5 +68,21 @@ public class TierTopicAdmin {
             }
         }
         return true;
+    }
+
+    /**
+     * Determines whether the tier topic exists
+     * @param adminClient the Kafka admin client
+     * @param topicName the tier topic name
+     * @return boolean denoting whether the topic exists
+     */
+    private static boolean topicExists(AdminClient adminClient, String topicName) {
+        try {
+            adminClient.describeTopics(Collections.singleton(topicName)).values().get(topicName).get();
+            return true;
+        } catch (Exception e) {
+            log.debug("error checking for existence of tier topic {}", topicName, e);
+            return false;
+        }
     }
 }

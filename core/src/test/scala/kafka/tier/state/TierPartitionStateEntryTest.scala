@@ -25,7 +25,6 @@ class TierPartitionStateEntryTest {
     val tp = new TopicPartition(topic, partition)
     val n = 200
     val epoch = 0
-    val sparsity = 0.01
     val factory = new FileTierPartitionStateFactory()
     val state = factory.initState(dir, tp, true)
 
@@ -56,18 +55,50 @@ class TierPartitionStateEntryTest {
 
       assertEquals(n, state.numSegments())
       assertEquals(size, state.totalSize)
-      assertEquals(0, state.startOffset().getAsLong)
-      assertEquals(n * 2 - 1, state.endOffset().getAsLong)
+      assertEquals(0L, state.startOffset().get())
+      assertEquals(n * 2 - 1 : Long, state.endOffset().get())
 
       state.close()
 
-      checkInsufficientPayloadTruncated(dir, tp, sparsity, path)
-      checkInsufficientSizeHeaderTruncated(dir, tp, sparsity, path)
+      checkInsufficientPayloadTruncated(dir, tp, path)
+      checkInsufficientSizeHeaderTruncated(dir, tp, path)
     }
     finally {
       dir.delete()
     }
   }
+
+  @Test
+  def overlappingOffsetRangesTest(): Unit = {
+    val dir = TestUtils.tempDir()
+    val topic = "topic_A"
+    val partition = 0
+    val tp = new TopicPartition(topic, partition)
+    val factory = new FileTierPartitionStateFactory()
+    val state = factory.initState(dir, tp, true)
+
+    state.beginCatchup()
+    state.onCatchUpComplete()
+    val path = state.path
+    try {
+      assertEquals(TierPartitionState.AppendResult.ACCEPTED, state.append(new TierTopicInitLeader(tp, 0, java.util.UUID.randomUUID(), 0)))
+      assertEquals(TierPartitionState.AppendResult.ACCEPTED, state.append(new TierObjectMetadata(tp, 0, 0, 100, 100, 0, 0, false, false, 0)))
+      assertEquals(TierPartitionState.AppendResult.ACCEPTED, state.append(new TierObjectMetadata(tp, 0, 100, 100, 200, 0, 0, false, false, 0)))
+      // leader failover
+      assertEquals(TierPartitionState.AppendResult.ACCEPTED, state.append(new TierTopicInitLeader(tp, 1, java.util.UUID.randomUUID(), 0)))
+      // should be fenced because segment has no new data
+
+      assertEquals(TierPartitionState.AppendResult.FENCED, state.append(new TierObjectMetadata(tp, 1, 190, 10, 200, 0, 0, false, false, 0)))
+      // should be accepted because segment overlaps but has additional data
+      assertEquals(TierPartitionState.AppendResult.ACCEPTED, state.append(new TierObjectMetadata(tp, 1, 180, 100, 200, 0, 0, false, false, 0)))
+
+      state.close()
+    }
+    finally {
+      dir.delete()
+    }
+  }
+
 
   @Test
   def checkPartiallyWrittenFilePartiallyReadable() = {
@@ -113,7 +144,7 @@ class TierPartitionStateEntryTest {
     }
   }
 
-  private def checkInsufficientSizeHeaderTruncated(baseDir: File, tp: TopicPartition, sparsity: Double, path: String) = {
+  private def checkInsufficientSizeHeaderTruncated(baseDir: File, tp: TopicPartition, path: String) = {
     // write some garbage to the end to test truncation
     val channel = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
     val origSize = channel.size()
@@ -136,7 +167,7 @@ class TierPartitionStateEntryTest {
     assertEquals("insufficient size header, not truncated", origSize, newSize)
   }
 
-  private def checkInsufficientPayloadTruncated(baseDir: File, tp: TopicPartition, sparsity: Double, path: String) = {
+  private def checkInsufficientPayloadTruncated(baseDir: File, tp: TopicPartition, path: String) = {
     // write some garbage to the end to test truncation
     val channel = FileChannel.open(Paths.get(path), StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)
     val origSize = channel.size()

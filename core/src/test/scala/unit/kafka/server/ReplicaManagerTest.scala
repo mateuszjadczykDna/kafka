@@ -28,6 +28,7 @@ import TestUtils.createBroker
 import kafka.cluster.BrokerEndPoint
 import kafka.server.epoch.LeaderEpochFileCache
 import kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
+import kafka.tier.TierMetadataManager
 import kafka.utils.timer.MockTimer
 import kafka.zk.KafkaZkClient
 import org.I0Itec.zkclient.ZkClient
@@ -82,9 +83,10 @@ class ReplicaManagerTest {
     val props = TestUtils.createBrokerConfig(1, TestUtils.MockZkConnect)
     val config = KafkaConfig.fromProps(props)
     val mockLogMgr = TestUtils.createLogManager(config.logDirs.map(new File(_)))
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val rm = new ReplicaManager(config, metrics, time, kafkaZkClient, new MockScheduler(time), mockLogMgr,
       new AtomicBoolean(false), QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size))
+      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), tierMetadataManager)
     try {
       val partition = rm.getOrCreatePartition(new TopicPartition(topic, 1))
       partition.getOrCreateReplica(1)
@@ -101,9 +103,10 @@ class ReplicaManagerTest {
     props.put("log.dir", TestUtils.tempRelativeDir("data").getAbsolutePath)
     val config = KafkaConfig.fromProps(props)
     val mockLogMgr = TestUtils.createLogManager(config.logDirs.map(new File(_)))
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val rm = new ReplicaManager(config, metrics, time, kafkaZkClient, new MockScheduler(time), mockLogMgr,
       new AtomicBoolean(false), QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size))
+      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), tierMetadataManager)
     try {
       val partition = rm.getOrCreatePartition(new TopicPartition(topic, 1))
       partition.getOrCreateReplica(1)
@@ -119,9 +122,10 @@ class ReplicaManagerTest {
     val props = TestUtils.createBrokerConfig(1, TestUtils.MockZkConnect)
     val config = KafkaConfig.fromProps(props)
     val mockLogMgr = TestUtils.createLogManager(config.logDirs.map(new File(_)))
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val rm = new ReplicaManager(config, metrics, time, kafkaZkClient, new MockScheduler(time), mockLogMgr,
       new AtomicBoolean(false), QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), None, Option(this.getClass.getName))
+      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), tierMetadataManager, None, None, Option(this.getClass.getName))
     try {
       def callback(responseStatus: Map[TopicPartition, PartitionResponse]) = {
         assert(responseStatus.values.head.error == Errors.INVALID_REQUIRED_ACKS)
@@ -152,9 +156,10 @@ class ReplicaManagerTest {
     val metadataCache: MetadataCache = EasyMock.createMock(classOf[MetadataCache])
     EasyMock.expect(metadataCache.getAliveBrokers).andReturn(aliveBrokers).anyTimes()
     EasyMock.replay(metadataCache)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
     val rm = new ReplicaManager(config, metrics, time, kafkaZkClient, new MockScheduler(time), mockLogMgr,
       new AtomicBoolean(false), QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      metadataCache, new LogDirFailureChannel(config.logDirs.size))
+      metadataCache, new LogDirFailureChannel(config.logDirs.size), tierMetadataManager)
 
     try {
       val brokerList = Seq[Integer](0, 1).asJava
@@ -683,17 +688,16 @@ class ReplicaManagerTest {
     val replicaManager = new ReplicaManager(config, metrics, time, kafkaZkClient, mockScheduler, mockLogMgr,
       new AtomicBoolean(false), quota, mockBrokerTopicStats,
       metadataCache, mockLogDirFailureChannel, mockProducePurgatory, mockFetchPurgatory,
-      mockDeleteRecordsPurgatory, mockElectPreferredLeaderPurgatory, None, Option(this.getClass.getName)) {
-
+      mockDeleteRecordsPurgatory, mockElectPreferredLeaderPurgatory, tierMetadataManager, None, None, Option(this.getClass.getName)) {
       override protected def createReplicaFetcherManager(metrics: Metrics,
-                                                     time: Time,
-                                                     threadNamePrefix: Option[String],
-                                                     quotaManager: ReplicationQuotaManager): ReplicaFetcherManager = {
-        new ReplicaFetcherManager(config, this, metrics, time, threadNamePrefix, quotaManager) {
+                                                         time: Time,
+                                                         threadNamePrefix: Option[String],
+                                                         quotaManager: ReplicationQuotaManager): ReplicaFetcherManager = {
+        new ReplicaFetcherManager(config, this, metrics, time, threadNamePrefix, quotaManager, tierMetadataManager) {
 
           override def createFetcherThread(fetcherId: Int, sourceBroker: BrokerEndPoint): ReplicaFetcherThread = {
             new ReplicaFetcherThread(s"ReplicaFetcherThread-$fetcherId", fetcherId,
-              sourceBroker, config, replicaManager, metrics, time, quota.follower, Some(blockingSend)) {
+              sourceBroker, config, replicaManager, metrics, time, quota.follower, tierMetadataManager, None, Some(blockingSend)) {
 
               override def doWork() = {
                 // In case the thread starts before the partition is added by AbstractFetcherManager,
@@ -835,11 +839,12 @@ class ReplicaManagerTest {
       purgatoryName = "DeleteRecords", timer, reaperEnabled = false)
     val mockDelayedElectPreferredLeaderPurgatory = new DelayedOperationPurgatory[DelayedElectPreferredLeader](
       purgatoryName = "DelayedElectPreferredLeader", timer, reaperEnabled = false)
+    val tierMetadataManager: TierMetadataManager = EasyMock.createMock(classOf[TierMetadataManager])
 
     new ReplicaManager(config, metrics, time, kafkaZkClient, new MockScheduler(time), mockLogMgr,
       new AtomicBoolean(false), QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
       metadataCache, new LogDirFailureChannel(config.logDirs.size), mockProducePurgatory, mockFetchPurgatory,
-      mockDeleteRecordsPurgatory, mockDelayedElectPreferredLeaderPurgatory, None, Option(this.getClass.getName))
+      mockDeleteRecordsPurgatory, mockDelayedElectPreferredLeaderPurgatory, tierMetadataManager, None, None, Option(this.getClass.getName))
   }
 
 }

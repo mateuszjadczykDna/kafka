@@ -7,7 +7,7 @@ package kafka.tier
 import java.io.File
 import java.nio.ByteBuffer
 import java.util
-import java.util.{Collections, OptionalLong}
+import java.util.{Collections, Optional}
 
 import kafka.log._
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel, ReplicaManager}
@@ -170,9 +170,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 1: segment should be materialized with correct offset relationship",
-        0, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
+        0L, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
       assertEquals("batch 1: segment should be materialized with correct end offset",
-        3, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
+        3L, tierTopicManager.partitionState(log.topicPartition).endOffset.get())
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
@@ -189,9 +189,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 2: segment should be materialized with correct offset relationship",
-        4, tierTopicManager.partitionState(log.topicPartition).metadata(6).get().startOffset)
+        4L, tierTopicManager.partitionState(log.topicPartition).metadata(6).get().startOffset)
       assertEquals("batch 2: segment should be materialized with correct end offset",
-        7, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
+        7L, tierTopicManager.partitionState(log.topicPartition).endOffset.get())
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
@@ -205,9 +205,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("batch 3: segment should be materialized with correct offset relationship",
-        8, tierTopicManager.partitionState(log.topicPartition).metadata(10).get().startOffset)
+        8L, tierTopicManager.partitionState(log.topicPartition).metadata(10).get().startOffset)
       assertEquals("batch 3: segment should be materialized with correct end offset",
-        11, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
+        11L, tierTopicManager.partitionState(log.topicPartition).endOffset.get())
     }
 
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
@@ -236,9 +236,9 @@ class TierIntegrationTest {
 
     logs.foreach { log =>
       assertEquals("Segment should be materialized with correct offset relationship",
-        0, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
+        0L, tierTopicManager.partitionState(log.topicPartition).metadata(0).get().startOffset)
       assertEquals("Segment should be materialized with correct end offset",
-        3, tierTopicManager.partitionState(log.topicPartition).endOffset.getAsLong)
+        3L, tierTopicManager.partitionState(log.topicPartition).endOffset.get())
     }
     validatePartitionStateContainedInObjectStore(tierTopicManager, tierObjectStore, logs)
   }
@@ -270,7 +270,7 @@ class TierIntegrationTest {
     var materializedFirstCycle = Seq.empty[TopicPartition]
 
     // Wait for the partitions that happened to be at the front of the priority queue to each upload their first segment and store metadata.
-    val lastOffsetOfInitialSegment = OptionalLong.of(recordsPerBatch - 1)
+    val lastOffsetOfInitialSegment = Optional.of(recordsPerBatch - 1 : Long)
     archiveAndMaterializeUntilTrue(() => {
       materializedFirstCycle = logs.collect {
         case log if tierTopicManager.partitionState(log.topicPartition).endOffset()
@@ -293,7 +293,7 @@ class TierIntegrationTest {
     }
     // The previous assertions cover priority fairness in practice.
     // Now ensure the archiver can exhaust all tierable segs.
-    val lastOffsetOfFinalTierableSegment = OptionalLong.of(recordsPerBatch * (batches - 1) - 1)
+    val lastOffsetOfFinalTierableSegment = Optional.of(recordsPerBatch * (batches - 1) - 1 : Long)
     archiveAndMaterializeUntilTrue(() => {
       logs.forall { log =>
         lastOffsetOfFinalTierableSegment == tierTopicManager.partitionState(log.topicPartition).endOffset()

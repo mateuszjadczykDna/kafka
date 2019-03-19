@@ -82,7 +82,7 @@ class TierTopicManagerTest {
       consumerBuilder.moveRecordsFromProducer()
       tierTopicManager.doWork()
       val tierPartitionState = tierTopicManager.partitionState(archivedPartition1)
-      assertEquals(1000L, tierPartitionState.endOffset().getAsLong)
+      assertEquals(1000L, tierPartitionState.endOffset().get())
 
       // should be ignored
       tierTopicManager.addMetadata(
@@ -90,7 +90,7 @@ class TierTopicManagerTest {
           0,
           0L,
           1000,
-          15000L,
+          1000L,
           16000L,
           1000,
           true,
@@ -102,13 +102,13 @@ class TierTopicManagerTest {
       // should be filtered
       assertEquals(1000L, tierPartitionState.totalSize)
 
-      // should be ignored
+      // should be ignored as it doesn't contain any distinct data
       tierTopicManager.addMetadata(
         new TierObjectMetadata(archivedPartition1,
           0,
-          1L,
-          1001,
-          15000L,
+          5L,
+          994,
+          999L,
           16000L,
           1000,
           true,

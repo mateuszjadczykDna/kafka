@@ -12,8 +12,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.NavigableSet;
 import java.util.Optional;
-import java.util.OptionalLong;
-
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 public interface TierPartitionState {
     /**
@@ -51,14 +51,14 @@ public interface TierPartitionState {
      * @return start offset
      * @throws IOException
      */
-    OptionalLong startOffset() throws IOException;
+    Optional<Long> startOffset() throws IOException;
 
     /**
      * Determine end offset spanned by the TierPartitionState.
      * @return end offset
      * @throws IOException
      */
-    OptionalLong endOffset() throws IOException;
+    Optional<Long> endOffset() throws IOException;
 
     /**
      * Scan the ObjectMetadata (segment) entries in this tier partition, and return the count.
@@ -138,6 +138,17 @@ public interface TierPartitionState {
      * Mark catchup completed for tier partition state.
      */
     void onCatchUpComplete();
+
+    /**
+     * Sets up a listener for this tier partition state for use by the replica fetcher.
+     * Returns a future that is completed when TierPartitionState endOffset >= targetOffset
+     * with the TierObjectMetadata that covers targetOffset.
+     *
+     * @param targetOffset the offset awaiting materialization
+     * @return future containing the TierObjectMetadata.
+     * @throws IOException
+     */
+    Future<TierObjectMetadata> materializationListener(long targetOffset) throws IOException;
 
     /**
      * Return the current status of the TierPartitionState.

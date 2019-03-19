@@ -4,9 +4,10 @@
 
 package kafka.log
 
-import java.util.concurrent.{ConcurrentNavigableMap, ConcurrentSkipListMap, TimeUnit}
+import java.util.concurrent.{TimeUnit, ConcurrentSkipListMap, ConcurrentNavigableMap}
 
 import kafka.server.{BrokerTopicStats, FetchDataInfo, LogDirFailureChannel, TierFetchDataInfo}
+import kafka.server.epoch.EpochEntry
 import kafka.tier.TierMetadataManager
 import kafka.tier.domain.{TierObjectMetadata, TierTopicInitLeader}
 import kafka.tier.state.FileTierPartitionStateFactory
@@ -89,12 +90,14 @@ class MergedLogTest {
     log.flush(4) // flushes up to 3, because the logic is flushing up to the provided offset - 1
 
     assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment - 1 segment",
-      log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector, Vector(0, 1, 2))
+      Vector(0, 1, 2),
+      log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector)
 
     log.flush(8) // flushes up to 7, because the logic is flushing up to the provided offset - 1
 
     assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment - 1 segment",
-      log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector, Vector(0, 1, 2, 3, 4, 5, 6))
+      Vector(0, 1, 2, 3, 4, 5, 6),
+      log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector)
   }
 
   @Test
@@ -217,6 +220,36 @@ class MergedLogTest {
     assertEquals(0, log.deleteOldSegments())
     log.close()
   }
+
+  @Test
+  def testRestoreStateFromTier(): Unit = {
+    val numTieredSegments = 30
+    val numHotsetSegments = 10
+    val numUntieredSegments = 5
+
+    val numHotsetSegmentsToRetain = 2
+
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = segmentSize * numHotsetSegmentsToRetain)
+    val log = createLogWithOverlap(numTieredSegments, numUntieredSegments, numHotsetSegments, logConfig)
+
+    val tierPartitionState = tierMetadataManager.tierPartitionState(log.topicPartition).get
+
+    val entries = List(EpochEntry(0, 100))
+
+    // leader reports that its start offset is 190
+    // therefore we should restore state using a segment which covers offset 190
+    // and restore state, and start replicating after that segment
+    val leaderOffset = 190
+    val metadata = tierPartitionState.metadata(leaderOffset).get()
+    log.onRestoreTierState(metadata.endOffset() + 1, entries)
+
+    // check that local log is trimmed to immediately after tiered metadata
+    assertEquals(metadata.endOffset() + 1, log.localLog.localLogStartOffset)
+    assertEquals(metadata.endOffset() + 1, log.localLog.logEndOffset)
+    // check that leader epoch cache is correct
+    assertEquals(List(EpochEntry(0, 100)), log.leaderEpochCache.get.epochEntries)
+  }
+
 
   @Test
   def testSizeOfLogWithOverlap(): Unit = {

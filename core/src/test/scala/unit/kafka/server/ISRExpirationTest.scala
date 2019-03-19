@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kafka.cluster.{Partition, Replica}
 import kafka.log.{AbstractLog, LogManager}
 import kafka.server.epoch.LeaderEpochFileCache
+import kafka.tier.TierMetadataManager
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
@@ -60,7 +61,7 @@ class IsrExpirationTest {
 
     replicaManager = new ReplicaManager(configs.head, metrics, time, null, null, logManager, new AtomicBoolean(false),
       QuotaFactory.instantiate(configs.head, metrics, time, ""), new BrokerTopicStats, new MetadataCache(configs.head.brokerId),
-      new LogDirFailureChannel(configs.head.logDirs.size))
+      new LogDirFailureChannel(configs.head.logDirs.size), EasyMock.createMock(classOf[TierMetadataManager]))
   }
 
   @After

@@ -15,9 +15,9 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MemoryTierPartitionState implements TierPartitionState {
@@ -50,20 +50,32 @@ public class MemoryTierPartitionState implements TierPartitionState {
         return dir;
     }
 
-    @Override
-    public OptionalLong endOffset() {
+    Optional<TierObjectMetadata> lastSegmentMetadata() {
         Map.Entry<Long, TierObjectMetadata> lastEntry = segmentMap.lastEntry();
-        if (lastEntry != null)
-            return OptionalLong.of(metadata(lastEntry.getKey()).get().endOffset());
-        return OptionalLong.empty();
+        if (lastEntry != null) {
+            return metadata(lastEntry.getKey());
+        } else {
+            return Optional.empty();
+        }
     }
 
     @Override
-    public OptionalLong startOffset() {
+    public Optional<Long> endOffset() {
+        return lastSegmentMetadata().map(TierObjectMetadata::endOffset);
+    }
+
+    @Override
+    public Optional<Long> startOffset() {
         Map.Entry<Long, TierObjectMetadata> firstEntry = segmentMap.firstEntry();
         if (firstEntry != null)
-            return OptionalLong.of(firstEntry.getKey());
-        return OptionalLong.empty();
+            return Optional.of(firstEntry.getKey());
+        return Optional.empty();
+    }
+
+    @Override
+    public Future<TierObjectMetadata> materializationListener(long targetOffset) throws UnsupportedOperationException {
+        throw new UnsupportedOperationException("offsetListener not supported for "
+                + "MemoryTierPartitionState.");
     }
 
     @Override
@@ -184,9 +196,17 @@ public class MemoryTierPartitionState implements TierPartitionState {
 
     private AppendResult append(TierObjectMetadata objectMetadata) {
         if (objectMetadata.tierEpoch() == tierEpoch()) {
-            OptionalLong endOffset = endOffset();
-            if (!endOffset.isPresent() || objectMetadata.startOffset() > endOffset.getAsLong()) {
-                segmentMap.put(objectMetadata.startOffset(), objectMetadata);
+            Optional<Long> endOffset = endOffset();
+            if (!endOffset.isPresent()
+                    || objectMetadata.endOffset() > endOffset.get()) {
+                // As there may be arbitrary overlap between segments, it is possible for a new
+                // segment to completely overlap a previous segment. We rely on on lookup via the
+                // start offset, and if we insert into the lookup map with the raw offset, it is possible
+                // for portions of a segment to be unfetchable unless we bound overlapping segments
+                // in the lookup map. e.g. if [100 - 200] is in the map at 100, and we insert [50 - 250]
+                // at 50, the portion 201 - 250 will be inaccessible.
+                segmentMap.put(Math.max(endOffset().orElse(-1L) + 1, objectMetadata.startOffset()),
+                        objectMetadata);
                 return AppendResult.ACCEPTED;
             }
         }

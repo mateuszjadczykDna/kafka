@@ -6,6 +6,7 @@ package kafka.tier;
 
 import kafka.log.LogConfig;
 import kafka.server.LogDirFailureChannel;
+import kafka.tier.domain.TierObjectMetadata;
 import kafka.tier.state.TierPartitionState;
 import kafka.tier.state.TierPartitionStateFactory;
 import kafka.tier.store.TierObjectStore;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 
 /**
  * Central place to maintain lifecycle of partitions for tiered storage. Tracks the lifecycle (addition, deletion, leader
@@ -75,6 +77,11 @@ public class TierMetadataManager {
         PartitionMetadata partitionMetadata = new PartitionMetadata(tierPartitionStateFactory, dir, topicPartition, logConfig, tierFeatureEnabled);
         tierMetadata.put(topicPartition, partitionMetadata);
         return partitionMetadata.tierPartitionState;
+    }
+
+    public Future<TierObjectMetadata> materializeUntilOffset(TopicPartition topicPartition,
+                                                             Long target) throws IOException {
+        return tierMetadata.get(topicPartition).tierPartitionState.materializationListener(target);
     }
 
     /**
@@ -293,10 +300,13 @@ public class TierMetadataManager {
 
         private boolean checkTierConfig(TopicPartition topicPartition, LogConfig config, boolean tierFeatureEnabled) {
             if (tierFeatureEnabled && config.tierEnable()) {
-                if (config.compact())
-                    throw new InvalidConfigurationException("Tiering cannot be enabled for compacted topic " + topicPartition);
-                if (Topic.isInternal(topicPartition.topic()))
-                    throw new InvalidConfigurationException("Tiering cannot be enabled for internal topic " + topicPartition);
+                if (config.compact()) {
+                    log.warn("Tiering cannot be enabled for compacted topic " + topicPartition);
+                    return false;
+                } else if (Topic.isInternal(topicPartition.topic())) {
+                    log.warn("Tiering cannot be enabled for internal topic " + topicPartition);
+                    return false;
+                }
                 return true;
             }
             return false;

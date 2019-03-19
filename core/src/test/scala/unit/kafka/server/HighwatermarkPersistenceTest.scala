@@ -29,6 +29,7 @@ import kafka.utils.{KafkaScheduler, MockTime, TestUtils}
 import kafka.zk.KafkaZkClient
 import java.util.concurrent.atomic.AtomicBoolean
 
+import kafka.tier.TierMetadataManager
 import org.apache.kafka.common.TopicPartition
 
 class HighwatermarkPersistenceTest {
@@ -65,7 +66,7 @@ class HighwatermarkPersistenceTest {
     // create replica manager
     val replicaManager = new ReplicaManager(configs.head, metrics, time, zkClient, scheduler,
       logManagers.head, new AtomicBoolean(false), QuotaFactory.instantiate(configs.head, metrics, time, ""),
-      new BrokerTopicStats, new MetadataCache(configs.head.brokerId), logDirFailureChannels.head)
+      new BrokerTopicStats, new MetadataCache(configs.head.brokerId), logDirFailureChannels.head, EasyMock.createMock(classOf[TierMetadataManager]))
     replicaManager.startup()
     try {
       replicaManager.checkpointHighWatermarks()
@@ -110,7 +111,7 @@ class HighwatermarkPersistenceTest {
     // create replica manager
     val replicaManager = new ReplicaManager(configs.head, metrics, time, zkClient,
       scheduler, logManagers.head, new AtomicBoolean(false), QuotaFactory.instantiate(configs.head, metrics, time, ""),
-      new BrokerTopicStats, new MetadataCache(configs.head.brokerId), logDirFailureChannels.head)
+      new BrokerTopicStats, new MetadataCache(configs.head.brokerId), logDirFailureChannels.head, EasyMock.createMock(classOf[TierMetadataManager]))
     replicaManager.startup()
     try {
       replicaManager.checkpointHighWatermarks()

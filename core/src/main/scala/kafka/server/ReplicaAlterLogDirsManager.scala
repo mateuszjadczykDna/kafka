@@ -18,10 +18,14 @@
 package kafka.server
 
 import kafka.cluster.BrokerEndPoint
+import kafka.tier.TierMetadataManager
+import kafka.tier.fetcher.TierStateFetcher
 
 class ReplicaAlterLogDirsManager(brokerConfig: KafkaConfig,
                                  replicaManager: ReplicaManager,
                                  quotaManager: ReplicationQuotaManager,
+                                 tierMetadataManager: TierMetadataManager,
+                                 tierStateFetcher: Option[TierStateFetcher] = None,
                                  brokerTopicStats: BrokerTopicStats)
   extends AbstractFetcherManager[ReplicaAlterLogDirsThread](
     name = s"ReplicaAlterLogDirsManager on broker ${brokerConfig.brokerId}",
@@ -31,7 +35,7 @@ class ReplicaAlterLogDirsManager(brokerConfig: KafkaConfig,
   override def createFetcherThread(fetcherId: Int, sourceBroker: BrokerEndPoint): ReplicaAlterLogDirsThread = {
     val threadName = s"ReplicaAlterLogDirsThread-$fetcherId"
     new ReplicaAlterLogDirsThread(threadName, sourceBroker, brokerConfig, replicaManager,
-      quotaManager, brokerTopicStats)
+      quotaManager, tierMetadataManager, tierStateFetcher, brokerTopicStats)
   }
 
   def shutdown() {

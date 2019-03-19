@@ -40,6 +40,7 @@ import kafka.tier.fetcher.{TierFetcher, TierFetcherConfig}
 import kafka.tier.state.FileTierPartitionStateFactory
 import kafka.tier.store.{MockInMemoryTierObjectStore, S3TierObjectStore, TierObjectStore, TierObjectStoreConfig}
 import kafka.tier.{TierMetadataManager, TierTopicManager, TierTopicManagerConfig}
+import kafka.tier.fetcher.TierStateFetcher
 import kafka.utils._
 import kafka.zk.{BrokerInfo, KafkaZkClient}
 import org.apache.kafka.clients.{ApiVersions, ClientDnsLookup, ManualMetadataUpdater, NetworkClient, NetworkClientUtils}
@@ -150,6 +151,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
   var tierMetadataManager: TierMetadataManager = null
   var tierTopicManager: TierTopicManager = null
   var tierFetcher: Option[TierFetcher] = None
+  var tierStateFetcher: Option[TierStateFetcher] = None
   var tierObjectStore: Option[TierObjectStore] = None
   var tierArchiver: TierArchiver = null
 
@@ -262,6 +264,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           }
 
           tierFetcher = Some(new TierFetcher(new TierFetcherConfig(config), tierObjectStore.get, metrics, logContext))
+          tierStateFetcher = Some(new TierStateFetcher(config.tierObjectFetcherThreads, tierObjectStore.get))
         }
 
         tierMetadataManager = new TierMetadataManager(new FileTierPartitionStateFactory(), tierObjectStore, logDirFailureChannel, config.tierFeature)
@@ -405,7 +408,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
   protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager = {
     new ReplicaManager(config, metrics, time, zkClient, kafkaScheduler, logManager, isShuttingDown, quotaManagers,
-      brokerTopicStats, metadataCache, logDirFailureChannel, tierFetcher, None)
+      brokerTopicStats, metadataCache, logDirFailureChannel, tierMetadataManager, tierFetcher, tierStateFetcher)
   }
 
   private def initZkClient(time: Time): Unit = {

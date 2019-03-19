@@ -16,16 +16,17 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseable {
+    // KEY_TO_BLOB is static so that a mock object store can be shared across brokers
+    // We can remove the shared state once we have more substantial system tests that use S3.
+    private final static ConcurrentHashMap<String, byte[]> KEY_TO_BLOB = new ConcurrentHashMap<>();
     private final TierObjectStoreConfig config;
-    private final ConcurrentHashMap<String, byte[]> keyToBlob;
 
     public MockInMemoryTierObjectStore(TierObjectStoreConfig config) {
         this.config = config;
-        this.keyToBlob = new ConcurrentHashMap<>();
     }
 
     public ConcurrentHashMap<String, byte[]> getStored() {
-        return keyToBlob;
+         return KEY_TO_BLOB;
     }
 
     @Override
@@ -34,7 +35,7 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
             Integer byteOffset, Integer byteOffsetEnd)
             throws IOException {
         String key = keyPath(objectMetadata, objectFileType);
-        byte[] blob = keyToBlob.get(key);
+        byte[] blob = KEY_TO_BLOB.get(key);
         if (blob == null)
             throw new IOException(String.format("No bytes for key %s", key));
         int start = byteOffset == null ? 0 : byteOffset;
@@ -88,7 +89,7 @@ public class MockInMemoryTierObjectStore implements TierObjectStore, AutoCloseab
         try (FileChannel sourceChan = FileChannel.open(file.toPath())) {
             ByteBuffer buf = ByteBuffer.allocate((int) sourceChan.size());
             sourceChan.read(buf);
-            keyToBlob.put(filePath, buf.array());
+            KEY_TO_BLOB.put(filePath, buf.array());
         }
     }
 

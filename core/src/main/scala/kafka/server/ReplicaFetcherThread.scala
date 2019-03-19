@@ -17,19 +17,27 @@
 
 package kafka.server
 
-import java.util.Optional
+import java.util.{Collections, Optional}
+import java.util.concurrent.Future
 
 import kafka.api._
 import kafka.cluster.BrokerEndPoint
 import kafka.log.LogAppendInfo
 import kafka.server.AbstractFetcherThread.ResultWithPartitions
+import kafka.server.epoch.EpochEntry
+import kafka.tier.TierMetadataManager
+import kafka.tier.domain.TierObjectMetadata
+import kafka.tier.fetcher.TierStateFetcher
 import org.apache.kafka.clients.FetchSessionHandler
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.KafkaStorageException
+import org.apache.kafka.common.message.TierListOffsetRequestData
+import org.apache.kafka.common.message.TierListOffsetRequestData.{TierListOffsetPartition, TierListOffsetTopic}
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.{MemoryRecords, Records}
 import org.apache.kafka.common.requests.EpochEndOffset._
+import org.apache.kafka.common.requests.TierListOffsetRequest.OffsetType
 import org.apache.kafka.common.requests._
 import org.apache.kafka.common.utils.{LogContext, Time}
 
@@ -44,11 +52,15 @@ class ReplicaFetcherThread(name: String,
                            metrics: Metrics,
                            time: Time,
                            quota: ReplicaQuota,
+                           tierMetadataManager: TierMetadataManager,
+                           tierStateFetcher: Option[TierStateFetcher],
                            leaderEndpointBlockingSend: Option[BlockingSend] = None)
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
                                 fetchBackOffMs = brokerConfig.replicaFetchBackoffMs,
+                                tierMetadataManager = tierMetadataManager,
+                                tierStateFetcher = tierStateFetcher,
                                 isInterruptible = false) {
 
   private val replicaId = brokerConfig.brokerId
@@ -178,6 +190,16 @@ class ReplicaFetcherThread(name: String,
     logAppendInfo
   }
 
+  override def onRestoreTierState(topicPartition: TopicPartition, proposedLocalLogStart: Long, epochData: List[EpochEntry]): Unit = {
+    val replica = replicaMgr.localReplicaOrException(topicPartition)
+    debug(s"Restoring tier state $topicPartition: $epochData")
+    replica.log.get.onRestoreTierState(proposedLocalLogStart, epochData)
+  }
+
+  override def fetchTierState(topicPartition: TopicPartition, tierObjectMetadata: TierObjectMetadata): Future[List[EpochEntry]] = {
+    tierStateFetcher.get.fetchLeaderEpochState(tierObjectMetadata)
+  }
+
   def maybeWarnIfOversizedRecords(records: MemoryRecords, topicPartition: TopicPartition): Unit = {
     // oversized messages don't cause replication to fail from fetch request version 3 (KIP-74)
     if (fetchRequestVersion <= 2 && records.sizeInBytes > 0 && records.validBytes <= 0)
@@ -205,11 +227,37 @@ class ReplicaFetcherThread(name: String,
   }
 
   override protected def fetchEarliestOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int): Long = {
-    fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetRequest.EARLIEST_TIMESTAMP)
+    fetchLocalOffsetFromLeader(topicPartition, currentLeaderEpoch, OffsetType.LOCAL_START_OFFSET)
   }
 
   override protected def fetchLatestOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int): Long = {
-    fetchOffsetFromLeader(topicPartition, currentLeaderEpoch, ListOffsetRequest.LATEST_TIMESTAMP)
+    fetchLocalOffsetFromLeader(topicPartition, currentLeaderEpoch, OffsetType.LOCAL_END_OFFSET)
+  }
+
+  private def fetchLocalOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int, offsetType: OffsetType): Long = {
+    val tierListOffsetTopic = new TierListOffsetTopic()
+      .setName(topicPartition.topic)
+      .setPartitions(Collections.singletonList(new TierListOffsetPartition()
+        .setPartitionIndex(topicPartition.partition)
+        .setOffsetType(OffsetType.toId(offsetType))
+        .setCurrentLeaderEpoch(currentLeaderEpoch)))
+
+    val request = new TierListOffsetRequest.Builder(new TierListOffsetRequestData()
+      .setReplicaId(replicaId)
+      .setTopics(Collections.singletonList(tierListOffsetTopic)))
+
+    val clientResponse = leaderEndpoint.sendRequest(request)
+    val response = clientResponse.responseBody.asInstanceOf[TierListOffsetResponse]
+
+    if (response.data.topics.size() != 1)
+      throw new IllegalStateException("Unexpected response from TIER_LIST_OFFSET request. Response contains more topics than expected.")
+
+    val topicResponse = response.data.topics.asScala.last
+    val partitionResponse = topicResponse.partitions.asScala.last
+    if (partitionResponse.errorCode() == Errors.NONE.code)
+      partitionResponse.offset()
+    else
+      throw Errors.forCode(partitionResponse.errorCode()).exception()
   }
 
   private def fetchOffsetFromLeader(topicPartition: TopicPartition, currentLeaderEpoch: Int, earliestOrLatest: Long): Long = {

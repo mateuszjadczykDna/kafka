@@ -23,12 +23,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kafka.cluster.Replica
 import kafka.log.{AbstractLog, LogManager}
 import kafka.server._
+import kafka.tier.TierMetadataManager
 import kafka.utils.{MockTime, TestUtils}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{EpochEndOffset, OffsetsForLeaderEpochRequest}
 import org.apache.kafka.common.requests.EpochEndOffset._
+import org.easymock.EasyMock
 import org.easymock.EasyMock._
 import org.junit.Assert._
 import org.junit.Test
@@ -55,9 +57,10 @@ class OffsetsForLeaderEpochTest {
     replay(mockLog, logManager)
 
     // create a replica manager with 1 partition that has 1 replica
+
     val replicaManager = new ReplicaManager(config, metrics, time, null, null, logManager, new AtomicBoolean(false),
       QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size))
+      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), EasyMock.createMock(classOf[TierMetadataManager]))
     val partition = replicaManager.getOrCreatePartition(tp)
     val leaderReplica = new Replica(config.brokerId, partition.topicPartition, time, 0, Some(mockLog))
     partition.addReplicaIfNotExists(leaderReplica)
@@ -79,7 +82,7 @@ class OffsetsForLeaderEpochTest {
     //create a replica manager with 1 partition that has 0 replica
     val replicaManager = new ReplicaManager(config, metrics, time, null, null, logManager, new AtomicBoolean(false),
       QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size))
+      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), EasyMock.createMock(classOf[TierMetadataManager]))
     replicaManager.getOrCreatePartition(tp)
 
     //Given
@@ -102,7 +105,7 @@ class OffsetsForLeaderEpochTest {
     //create a replica manager with 0 partition
     val replicaManager = new ReplicaManager(config, metrics, time, null, null, logManager, new AtomicBoolean(false),
       QuotaFactory.instantiate(config, metrics, time, ""), new BrokerTopicStats,
-      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size))
+      new MetadataCache(config.brokerId), new LogDirFailureChannel(config.logDirs.size), EasyMock.createMock(classOf[TierMetadataManager]))
 
     //Given
     val epochRequested: Integer = 5

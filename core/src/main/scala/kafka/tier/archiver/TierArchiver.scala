@@ -19,7 +19,7 @@ import org.apache.kafka.common.utils.Time
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-case class TierArchiverConfig(updateIntervalMs: Int = 500,
+case class TierArchiverConfig(updateIntervalMs: Int = 50,
                               enableArchiver: Boolean = true,
                               maxConcurrentUploads: Int = 10,
                               maxRetryBackoffMs: Int = 1000 * 60 * 5,

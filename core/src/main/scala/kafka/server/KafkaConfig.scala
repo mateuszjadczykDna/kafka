@@ -198,6 +198,7 @@ object Defaults {
   val TierS3EndpointOverride = null
   val TierS3SignerOverride = null
   val TierFetcherNumThreads = 2:Integer
+  val TierObjectFetcherThreads = 1:Integer
 
   /** Tiered storage retention configs **/
   val TierLocalHotsetBytes = -1L
@@ -440,6 +441,7 @@ object KafkaConfig {
   val TierMetadataNamespaceProp = "tier.metadata.namespace"
   val TierMetadataNumPartitionsProp = "tier.metadata.num.partitions"
   val TierMetadataReplicationFactorProp = "tier.metadata.replication.factor"
+  val TierObjectFetcherThreadsProp = "tier.object.fetcher.num.threads"
 
   /** Tiered storage S3 configs **/
   val TierS3BucketProp = "tier.s3.bucket"
@@ -802,8 +804,9 @@ object KafkaConfig {
   val TierS3AwsAccessKeyIdDoc = "The S3 AWS access key id directly via the Kafka configuration. If not set, the access key id will be supplied via the AWS default provider chain e.g. AWS_ACCESS_KEY_ID environment variable, ~/.aws/config, etc"
   val TierS3AwsSecretAccessKeyDoc = "The S3 AWS secret access key directly via the Kafka configuration. If not set, the secret access key will be supplied via the AWS default provider chain e.g. AWS_SECRET_ACCESS_KEY environment variable, ~/.aws/config, etc"
   val TierS3EndpointOverrideDoc = "Override picking an S3 endpoint. Normally this is performed automatically by the client."
-  val TierS3SignerOverrideDoc = "Set the name of the signature algorithm used for signing S3 requests"
+  val TierS3SignerOverrideDoc = "Set the name of the signature algorithm used for signing S3 requests."
   val TierFetcherNumThreadsDoc = "The size of the threadpool used by the TierFetcher. Roughly corresponds to # of concurrent fetch requests."
+  val TierObjectFetcherThreadsDoc  = "The size of the threadpool use by the tier object fetcher. Currently this option is the concurrency factor for tier state fetches made by the replica fetcher threads."
 
   /** Tiered storage retention configs **/
   val TierLocalHotsetBytesDoc = ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_DOC
@@ -1095,6 +1098,7 @@ object KafkaConfig {
       .defineInternal(TierS3EndpointOverrideProp, STRING, Defaults.TierS3EndpointOverride, LOW, TierS3EndpointOverrideDoc)
       .defineInternal(TierS3SignerOverrideProp, STRING, Defaults.TierS3SignerOverride, LOW, TierS3SignerOverrideDoc)
       .defineInternal(TierFetcherNumThreadsProp, INT, Defaults.TierFetcherNumThreads, atLeast(1), MEDIUM, TierFetcherNumThreadsDoc)
+      .defineInternal(TierObjectFetcherThreadsProp, INT, Defaults.TierObjectFetcherThreads, atLeast(1), MEDIUM, TierObjectFetcherThreadsDoc)
       .defineInternal(TierLocalHotsetBytesProp, LONG, Defaults.TierLocalHotsetBytes, HIGH, TierLocalHotsetBytesDoc)
       .defineInternal(TierLocalHotsetMsProp, LONG, Defaults.TierLocalHotsetMs, HIGH, TierLocalHotsetMsDoc)
 
@@ -1421,6 +1425,7 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val tierS3EndpointOverride = getString(KafkaConfig.TierS3EndpointOverrideProp)
   val tierS3SignerOverride = getString(KafkaConfig.TierS3SignerOverrideProp)
   val tierFetcherNumThreads = getInt(KafkaConfig.TierFetcherNumThreadsProp)
+  val tierObjectFetcherThreads = getInt(KafkaConfig.TierObjectFetcherThreadsProp)
   def tierLocalHotsetBytes = getLong(KafkaConfig.TierLocalHotsetBytesProp)
   def tierLocalHotsetMs = getLong(KafkaConfig.TierLocalHotsetMsProp)
 

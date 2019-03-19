@@ -9,7 +9,7 @@ import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util
 import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
-import java.util.{Collections, OptionalLong, Properties}
+import java.util.{Collections, Optional, Properties, UUID}
 
 import kafka.log.{AbstractLog, LogManager, LogSegment, LogTest, _}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel, ReplicaManager}
@@ -27,8 +27,10 @@ import org.apache.kafka.common.utils.Utils
 import org.junit.Assert.{assertEquals, assertTrue}
 import org.junit.Test
 import org.mockito.Mockito.{mock, when}
-
 import kafka.tier.archiver.JavaFunctionConversions._
+import kafka.tier.domain.TierTopicInitLeader
+import kafka.tier.state.MemoryTierPartitionState
+
 import scala.collection.JavaConverters._
 
 class TierArchiverStateTest {
@@ -121,7 +123,7 @@ class TierArchiverStateTest {
     when(replicaManager.getLog(topicPartition)).thenReturn(Some(log))
 
     val tierPartitionState = mock(classOf[TierPartitionState])
-    when(tierPartitionState.endOffset()).thenReturn(OptionalLong.of(1))
+    when(tierPartitionState.endOffset()).thenReturn(Optional.of(new java.lang.Long(1L)))
 
     val tierTopicManager = mock(classOf[TierTopicManager])
     when(tierTopicManager.addMetadata(metadata))
@@ -148,7 +150,7 @@ class TierArchiverStateTest {
     when(replicaManager.getLog(topicPartition)).thenReturn(Some(log))
 
     val tierPartitionState = mock(classOf[TierPartitionState])
-    when(tierPartitionState.endOffset()).thenReturn(OptionalLong.empty())
+    when(tierPartitionState.endOffset()).thenReturn(Optional.empty() : Optional[java.lang.Long])
     when(tierPartitionState.tierEpoch).thenReturn(1)
 
     val nextStage = BeforeUpload(replicaManager, tierTopicManager, tierObjectStore, topicPartition, tierPartitionState, 0, blockingTaskExecutor, TierArchiverConfig())
@@ -176,7 +178,7 @@ class TierArchiverStateTest {
     when(replicaManager.getLog(topicPartition)).thenReturn(Some(log))
 
     val tierPartitionState = mock(classOf[TierPartitionState])
-    when(tierPartitionState.endOffset()).thenReturn(OptionalLong.empty())
+    when(tierPartitionState.endOffset()).thenReturn(Optional.empty() : Optional[java.lang.Long])
     when(tierPartitionState.tierEpoch).thenReturn(0)
 
     val nextStage = BeforeUpload(replicaManager, tierTopicManager, tierObjectStore, topicPartition, tierPartitionState, 0, blockingTaskExecutor, TierArchiverConfig()).nextState().handle { (result: TierArchiverState, ex: Throwable) =>
@@ -202,7 +204,7 @@ class TierArchiverStateTest {
     when(replicaManager.getLog(topicPartition)).thenReturn(Some(log))
 
     val tierPartitionState = mock(classOf[TierPartitionState])
-    when(tierPartitionState.endOffset()).thenReturn(OptionalLong.empty())
+    when(tierPartitionState.endOffset()).thenReturn(Optional.empty() : Optional[java.lang.Long])
     when(tierPartitionState.tierEpoch).thenReturn(0)
 
     log.appendAsFollower(TierUtils.createRecords(5, topicPartition, log.logEndOffset, 0))
@@ -218,6 +220,50 @@ class TierArchiverStateTest {
 
     nextStage.get(2000, TimeUnit.MILLISECONDS)
   }
+
+  @Test
+  def testBeforeUploadOverlappingSegment(): Unit = {
+    val topicPartition = new TopicPartition("foo", 0)
+    val tierTopicManager = mock(classOf[TierTopicManager])
+    val tierObjectStore = new MockInMemoryTierObjectStore(objectStoreConfig)
+    val logConfig = LogTest.createLogConfig(segmentBytes =  1000, indexIntervalBytes = 1, maxMessageBytes = 64 * 1024, tierEnable = true)
+    val logDir = Paths.get(TestUtils.tempDir().getPath, topicPartition.toString).toFile
+
+    val tierPartitionState = new MemoryTierPartitionState(logDir, topicPartition, true)
+    tierPartitionState.beginCatchup()
+    tierPartitionState.onCatchUpComplete()
+
+    val tierMetadataManager = mock(classOf[TierMetadataManager])
+    when(tierMetadataManager.initState(topicPartition, logDir, logConfig)).thenReturn(tierPartitionState)
+
+    val log = Log(logDir, logConfig, 0L, 0L,  mockTime.scheduler, new BrokerTopicStats, mockTime, 60 * 60 * 1000,
+      LogManager.ProducerIdExpirationCheckIntervalMs, new LogDirFailureChannel(10), Some(tierMetadataManager))
+
+    log.appendAsFollower(TierUtils.createRecords(50, topicPartition, log.logEndOffset, 0))
+    log.appendAsFollower(TierUtils.createRecords(50, topicPartition, log.logEndOffset, 0))
+    log.appendAsFollower(TierUtils.createRecords(50, topicPartition, log.logEndOffset, 0))
+    log.appendAsFollower(TierUtils.createRecords(50, topicPartition, log.logEndOffset, 0))
+
+    // overlaps with one of our segments
+    tierPartitionState.append(new TierTopicInitLeader(topicPartition, 0, UUID.randomUUID(), 0))
+    tierPartitionState.append(new TierObjectMetadata(topicPartition, 0, 0L, 60, 50L, 1551311973419L, 1000, false, false, kafka.tier.serdes.State.AVAILABLE))
+
+    val newTierEpoch = 1
+    tierPartitionState.append(new TierTopicInitLeader(topicPartition, newTierEpoch, UUID.randomUUID(), 0))
+    log.onHighWatermarkIncremented(log.logEndOffset)
+
+    val replicaManager = mock(classOf[ReplicaManager])
+    when(replicaManager.getLog(topicPartition)).thenReturn(Some(log))
+
+    val nextStage = BeforeUpload(replicaManager, tierTopicManager, tierObjectStore, topicPartition, tierPartitionState,
+      newTierEpoch, blockingTaskExecutor, TierArchiverConfig()).nextState().handle { (result: TierArchiverState, ex: Throwable) =>
+      assertTrue("Should advance to AfterUpload", result.isInstanceOf[AfterUpload])
+      result
+    }
+
+    nextStage.get(2000, TimeUnit.MILLISECONDS)
+  }
+
 
   @Test
   def testArchiverStateRelativePriority(): Unit = {
@@ -260,7 +306,7 @@ class TierArchiverStateTest {
 
   private def mockTierPartitionStateAtEndOffset(offset: Long): TierPartitionState = {
     val tierPartitionState = mock(classOf[TierPartitionState])
-    when(tierPartitionState.endOffset()).thenReturn(OptionalLong.of(offset))
+    when(tierPartitionState.endOffset()).thenReturn(Optional.of(offset) : Optional[java.lang.Long])
     tierPartitionState
   }
 

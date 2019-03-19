@@ -160,9 +160,8 @@ public class TierTopicManager implements Runnable {
     public void shutdown() {
         shutdown.set(true);
         primaryConsumer.wakeup();
-        if (catchUpConsumer != null) {
+        if (catchUpConsumer != null)
             catchUpConsumer.wakeup();
-        }
         producer.close();
         try {
             if (managerThread != null && managerThread.isAlive()) { // if the manager thread never
@@ -309,10 +308,10 @@ public class TierTopicManager implements Runnable {
                     de);
             Exit.exit(1);
         } finally {
-            primaryConsumer.close();
-            if (catchUpConsumer != null) {
+            if (primaryConsumer != null)
+                primaryConsumer.close();
+            if (catchUpConsumer != null)
                 catchUpConsumer.close();
-            }
             committer.shutdown();
             shutdownInitiated.countDown();
         }

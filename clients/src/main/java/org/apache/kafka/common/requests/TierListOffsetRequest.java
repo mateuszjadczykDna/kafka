@@ -72,7 +72,8 @@ public class TierListOffsetRequest extends AbstractRequest {
         /**
          * Lookup the local log start offset.
          */
-        LOCAL_START_OFFSET((byte) 0);
+        LOCAL_START_OFFSET((byte) 0),
+        LOCAL_END_OFFSET((byte) 1);
 
         private static final Map<Byte, OffsetType> ID_TO_TYPE = new HashMap<>(values().length);
         private byte id;

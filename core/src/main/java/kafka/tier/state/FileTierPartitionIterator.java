@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
-class FileTierPartitionIterator extends AbstractIterator<TierObjectMetadata> {
+public class FileTierPartitionIterator extends AbstractIterator<TierObjectMetadata> {
     private static final Logger log = LoggerFactory.getLogger(FileTierPartitionIterator.class);
     private static final int ENTRY_LENGTH_SIZE = 2;
 
@@ -61,7 +61,8 @@ class FileTierPartitionIterator extends AbstractIterator<TierObjectMetadata> {
 
             // reallocate entry buffer if needed
             if (entryBuffer == null || length > entryBuffer.capacity()) {
-                log.debug("Allocating buffer of size " + length);
+                if (entryBuffer != null)
+                    log.debug("Resizing tier partition state iterator buffer from " + entryBuffer.capacity() + " to " + length);
                 entryBuffer = ByteBuffer.allocate(length).order(ByteOrder.LITTLE_ENDIAN);
             }
 

@@ -66,7 +66,7 @@ class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
     assertEquals(AppendResult.ACCEPTED, metaresult1)
 
     val tierPartitionState = tierTopicManager.partitionState(topicPartition)
-    assertEquals(1000L, tierPartitionState.endOffset.getAsLong)
+    assertEquals(1000L, tierPartitionState.endOffset.get())
     val metaresult2 = tierTopicManager.addMetadata(
       new TierObjectMetadata(
         topicPartition,
@@ -81,7 +81,7 @@ class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
         State.AVAILABLE))
 
     assertEquals(AppendResult.FENCED, metaresult2.get())
-    assertEquals(1000L, tierPartitionState.endOffset.getAsLong)
+    assertEquals(1000L, tierPartitionState.endOffset.get())
 
     assertEquals(1, tierPartitionState.numSegments())
 

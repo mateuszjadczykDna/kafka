@@ -79,6 +79,8 @@
     </subpackage>
     <subpackage name="fetcher">
       <allow class="kafka.server.DelayedOperation" />
+      <allow class="kafka.server.checkpoints.LeaderEpochCheckpointBuffer" />
+      <allow class="kafka.server.epoch.EpochEntry" />
     </subpackage>
     <subpackage name="store">
       <allow pkg="com.amazonaws" />

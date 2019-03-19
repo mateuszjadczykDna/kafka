@@ -33,7 +33,7 @@ trait LeaderEpochCheckpoint {
 object LeaderEpochCheckpointFile {
   private val LeaderEpochCheckpointFilename = "leader-epoch-checkpoint"
   private val WhiteSpacesPattern = Pattern.compile("\\s+")
-  private val CurrentVersion = 0
+  val CurrentVersion = 0
 
   def newFile(dir: File): File = new File(dir, LeaderEpochCheckpointFilename)
 
@@ -48,7 +48,6 @@ object LeaderEpochCheckpointFile {
         case _ => None
       }
     }
-
   }
 }
 
@@ -63,4 +62,22 @@ class LeaderEpochCheckpointFile(val file: File, logDirFailureChannel: LogDirFail
   def write(epochs: Seq[EpochEntry]): Unit = checkpoint.write(epochs)
 
   def read(): Seq[EpochEntry] = checkpoint.read()
+}
+
+/**
+  * This class reads a map of (LeaderEpoch => Offsets) from a buffered reader
+  */
+class LeaderEpochCheckpointBuffer(val location: String, val reader: BufferedReader) extends LeaderEpochCheckpoint {
+  import LeaderEpochCheckpointFile._
+
+  val file: File = null
+
+  def write(epochs: Seq[EpochEntry]): Unit = {
+    throw new UnsupportedOperationException("write is not supported for checkpoint input buffers.")
+  }
+
+  def read(): Seq[EpochEntry] =  {
+    val checkpoint = new CheckpointReadBuffer[EpochEntry](location, reader, LeaderEpochCheckpointFile.CurrentVersion, Formatter)
+    checkpoint.read()
+  }
 }

@@ -824,10 +824,11 @@ class Partition(val topicPartition: TopicPartition,
                              fetchOnlyFromLeader: Boolean): Option[Long] = inReadLock(leaderIsrUpdateLock) {
     // decide whether to only fetch from leader
     localReplicaWithEpochOrException(currentLeaderEpoch.asJava, fetchOnlyFromLeader)
-    logManager.getLog(topicPartition).flatMap { log =>
+    logManager.getLog(topicPartition).map { log =>
       offsetType match {
-        case OffsetType.LOCAL_START_OFFSET => log.localLogSegments.headOption.map(_.baseOffset)
-        case _ => throw new UnsupportedOperationException(s"Lookup for ${offsetType} not supported")
+        case OffsetType.LOCAL_START_OFFSET => log.localLogStartOffset
+        case OffsetType.LOCAL_END_OFFSET => log.localLogEndOffset
+        case _ => throw new UnsupportedOperationException(s"Lookup for $offsetType not supported")
       }
     }
   }
