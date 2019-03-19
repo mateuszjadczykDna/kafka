@@ -1,32 +1,40 @@
 {
-  "topics": [
+  "long_lived_task_duration_ms":604800000,
+  "short_lived_task_duration_ms":900000,
+  "short_lived_task_reschedule_delay_ms":0,
+  "topics":[
     {
-      "name": "big_topic",
-      "partitions_count": 1000,
-      "produce_mbs_throughput": 150,
-      "consume_mbs_throughput": 400,
-      "producer_count": 6,
-      "consumer_count": 6
+      "name":"baseline_soak_big_topic_1000p",
+      "partitions_count":1000,
+      "produce_mbs_throughput":45,
+      "consume_mbs_throughput":120,
+      "long_lived_producer_count":6,
+      "short_lived_producer_count":6,
+      "long_lived_consumer_count":6,
+      "short_lived_consumer_count":6
+
     },
     {
-      "name": "medium_topic",
-      "partitions_count": 25,
-      "produce_mbs_throughput": 50,
-      "consume_mbs_throughput": 100,
-      "producer_count": 4,
-      "consumer_count": 4,
-      "idempotence_enabled": true
+      "name":"baseline_soak_medium_topic_25p",
+      "partitions_count":25,
+      "produce_mbs_throughput":15,
+      "consume_mbs_throughput":30,
+      "long_lived_producer_count":2,
+      "short_lived_producer_count":2,
+      "long_lived_consumer_count":2,
+      "short_lived_consumer_count":2,
+      "idempotence_enabled":true
     },
     {
-      "name": "eos_topic",
-      "partitions_count": 100,
-      "produce_mbs_throughput": 50,
-      "consume_mbs_throughput": 100,
-      "producer_count": 4,
-      "consumer_count": 4,
-      "transactions_enabled": true
+      "name":"baseline_soak_eos_topic_100p",
+      "partitions_count":100,
+      "produce_mbs_throughput":15,
+      "consume_mbs_throughput":30,
+      "long_lived_producer_count":2,
+      "short_lived_producer_count":2,
+      "long_lived_consumer_count":2,
+      "short_lived_consumer_count":2,
+      "transactions_enabled":true
     }
-  ],
-  "long_lived_task_duration_ms": 604800000,
-  "short_lived_task_duration_ms": 900000
+  ]
 }

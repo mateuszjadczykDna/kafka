@@ -7,13 +7,15 @@ import (
 	"github.com/jinzhu/copier"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
+	"math"
 	"strings"
 	"testing"
 )
 
 const (
-	oneWeekDurationMs        = 604800000
-	fifteenMinutesDurationMs = 900000
+	oneWeekDurationMs               = 604800000
+	fifteenMinutesDurationMs        = 900000
+	shortLivedTaskRescheduleDelayMs = 0
 )
 
 var clientNodes = []string{"node1", "node2", "node3"}
@@ -21,12 +23,7 @@ var clientNodes = []string{"node1", "node2", "node3"}
 func TestBaselineTasks(t *testing.T) {
 	InitLogger()
 	topics := soakTestConfig([]string{"a", "b", "c"})
-	produceCount, consumeCount := 0, 0
-	for _, topic := range topics.Topics {
-		consumeCount += topic.ConsumeCount
-		produceCount += topic.ProduceCount
-	}
-	expected := calculateExpectedTasksCount(produceCount, consumeCount, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs)
+	expectedTasks := calculateExpectedTasksCount(topics.Topics, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs, topics.ShortLivedTaskRescheduleDelayMs)
 	configPath := writeSoakTestConfigFile(t, topics)
 	tasks, err := baselineTasks(configPath, 10)
 	if err != nil {
@@ -35,25 +32,88 @@ func TestBaselineTasks(t *testing.T) {
 	}
 
 	assertTaskNamesUnique(t, tasks)
-	assertTaskCount(t, tasks, expected, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs)
+	assertTaskCount(t, tasks, expectedTasks, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs)
 }
 
-func TestCreateTopicTasks(t *testing.T) {
-	produceCount := 12
-	consumeCount := 10
+func assertCreateTopicTasks(t *testing.T, topicSpecification TopicConfiguration,
+	expectedCount *expectedTasksCount, longDuration uint64, shortDuration uint64, reschedDelay uint64) {
 
-	expected := calculateExpectedTasksCount(produceCount, consumeCount, oneWeekDurationMs, fifteenMinutesDurationMs/2)
-	topicSpecification := TopicConfiguration{
-		Name:                 "testTest",
-		PartitionsCount:      1000,
-		ProduceMBsThroughput: 60,
-		ConsumeMBsThroughput: 60,
-		ProduceCount:         produceCount,
-		ConsumeCount:         consumeCount,
+	calculatedExpected := calculateExpectedTasksCount([]TopicConfiguration{topicSpecification}, longDuration, shortDuration, reschedDelay)
+	if expectedCount == nil {
+		expectedCount = &calculatedExpected
 	}
-	tasks := createTopicTasks(topicSpecification, oneWeekDurationMs, fifteenMinutesDurationMs/2, clientNodes, make(map[string]bool))
+	assert.Equal(t, *expectedCount, calculatedExpected) // verify calculateExpectedTasksCount output when expectedCount specified
 
-	assertTaskCount(t, tasks, expected, oneWeekDurationMs, fifteenMinutesDurationMs/2)
+	tasks := createTopicTasks(topicSpecification, clientNodes, make(map[string]bool), longDuration, shortDuration, reschedDelay)
+	assertTaskCount(t, tasks, *expectedCount, longDuration, shortDuration)
+}
+
+func TestCreateTopicTasksVariousDurations(t *testing.T) {
+	InitLogger()
+	topicSpecification := TopicConfiguration{
+		Name:                   "testTest",
+		PartitionsCount:        1000,
+		ProduceMBsThroughput:   60,
+		ConsumeMBsThroughput:   60,
+		ShortLivedProduceCount: 1,
+		LongLivedProduceCount:  1,
+		ShortLivedConsumeCount: 1,
+		LongLivedConsumeCount:  1,
+	}
+
+	longDuration, shortDuration, reschedDelay := uint64(10), uint64(5), uint64(2)
+	expected := &expectedTasksCount{
+		ExpectedShortLivedProducerTasks: 1,
+		ExpectedLongLivedProducerTasks:  1,
+		ExpectedShortLivedConsumerTasks: 1,
+		ExpectedLongLivedConsumerTasks:  1,
+
+		ExpectedShortLivedTasksCount: 2,
+		ExpectedLongLivedTasksCount:  2,
+		ExpectedTotalTasksCount:      4,
+	}
+	assertCreateTopicTasks(t, topicSpecification, expected, longDuration, shortDuration, reschedDelay)
+
+	longDuration, shortDuration, reschedDelay = uint64(10), uint64(5), uint64(5)
+	expected2 := &expectedTasksCount{
+		ExpectedShortLivedProducerTasks: 1,
+		ExpectedLongLivedProducerTasks:  1,
+		ExpectedShortLivedConsumerTasks: 1,
+		ExpectedLongLivedConsumerTasks:  1,
+
+		ExpectedShortLivedTasksCount: 2,
+		ExpectedLongLivedTasksCount:  2,
+		ExpectedTotalTasksCount:      4,
+	}
+	assertCreateTopicTasks(t, topicSpecification, expected2, longDuration, shortDuration, reschedDelay)
+
+	longDuration, shortDuration, reschedDelay = uint64(9), uint64(3), uint64(1)
+	expected3 := &expectedTasksCount{
+		ExpectedShortLivedProducerTasks: 2,
+		ExpectedLongLivedProducerTasks:  1,
+		ExpectedShortLivedConsumerTasks: 2,
+		ExpectedLongLivedConsumerTasks:  1,
+
+		ExpectedShortLivedTasksCount: 4,
+		ExpectedLongLivedTasksCount:  2,
+		ExpectedTotalTasksCount:      6,
+	}
+	assertCreateTopicTasks(t, topicSpecification, expected3, longDuration, shortDuration, reschedDelay)
+
+	longDuration, shortDuration, reschedDelay = uint64(9), uint64(3), uint64(0)
+	expected4 := &expectedTasksCount{
+		ExpectedShortLivedProducerTasks: 3,
+		ExpectedLongLivedProducerTasks:  1,
+		ExpectedShortLivedConsumerTasks: 3,
+		ExpectedLongLivedConsumerTasks:  1,
+
+		ExpectedShortLivedTasksCount: 6,
+		ExpectedLongLivedTasksCount:  2,
+		ExpectedTotalTasksCount:      8,
+	}
+	assertCreateTopicTasks(t, topicSpecification, expected4, longDuration, shortDuration, reschedDelay)
+
+	assertCreateTopicTasks(t, topicSpecification, nil, oneWeekDurationMs, fifteenMinutesDurationMs/2, shortLivedTaskRescheduleDelayMs)
 }
 
 func assertTaskNamesUnique(t *testing.T, tasks []trogdor.TaskSpec) {
@@ -111,6 +171,7 @@ func assertTaskCount(t *testing.T, tasks []trogdor.TaskSpec, expected expectedTa
 	assert.Equal(t, expected.ExpectedShortLivedProducerTasks, len(shortLivedProducerTasks))
 	assert.Equal(t, expected.ExpectedLongLivedProducerTasks, len(longLivedProducerTasks))
 	assert.Equal(t, expected.ExpectedLongLivedConsumerTasks, len(longLivedConsumerTasks))
+	assert.Equal(t, expected.ExpectedTotalTasksCount, len(tasks))
 }
 
 func TestParseConfigParsesCorrectly(t *testing.T) {
@@ -130,8 +191,7 @@ func writeSoakTestConfigFile(t *testing.T, topics SoakTestConfig) string {
 	if err != nil {
 		assert.Fail(t, fmt.Sprintf("error while marshalling topics %s", err))
 	}
-	file.Write(data)
-
+	_, err = file.Write(data)
 	if err != nil {
 		assert.Fail(t, fmt.Sprintf("error while creating temporary file %s", err))
 	}
@@ -188,7 +248,7 @@ func TestConsecutiveTasks(t *testing.T) {
 		thirdConfig,
 	}
 
-	actualConfigs, err := consecutiveTasks(startConfig, 25)
+	actualConfigs, err := consecutiveTasks(startConfig, 25, shortLivedTaskRescheduleDelayMs)
 	if err != nil {
 		assert.Fail(t, err.Error())
 	}
@@ -215,7 +275,7 @@ func TestConsecutiveTasksFailsIfStartMsIsZero(t *testing.T) {
 		DurationMs:       5,
 		BootstrapServers: bootstrapServers,
 	}
-	_, err := consecutiveTasks(*startConfig, 25)
+	_, err := consecutiveTasks(*startConfig, 25, shortLivedTaskRescheduleDelayMs)
 	assert.Error(t, err)
 }
 
@@ -232,38 +292,22 @@ func TestMessagesPerSec(t *testing.T) {
 		}))
 }
 
-func TestCalculateClientCounts(t *testing.T) {
-	expectedCounts := ClientCounts{
-		LongLivedProducersCount:  6,
-		LongLivedConsumersCount:  5,
-		ShortLivedProducersCount: 5,
-		ShortLivedConsumersCount: 5,
-	}
-	clientCounts := calculateClientCounts(TopicConfiguration{
-		Name:                 "",
-		PartitionsCount:      1000,
-		ProduceMBsThroughput: 60,
-		ConsumeMBsThroughput: 60,
-		ProduceCount:         11,
-		ConsumeCount:         10,
-	})
-
-	assert.Equal(t, expectedCounts, clientCounts)
-}
-
 func soakTestConfig(topicNames []string) SoakTestConfig {
 	topics := SoakTestConfig{
-		LongLivedTaskDurationMs:  oneWeekDurationMs,
-		ShortLivedTaskDurationMs: fifteenMinutesDurationMs,
+		LongLivedTaskDurationMs:         oneWeekDurationMs,
+		ShortLivedTaskDurationMs:        fifteenMinutesDurationMs,
+		ShortLivedTaskRescheduleDelayMs: shortLivedTaskRescheduleDelayMs,
 	}
 	for _, topicName := range topicNames {
 		topics.Topics = append(topics.Topics, TopicConfiguration{
-			Name:                 topicName,
-			PartitionsCount:      1000,
-			ProduceMBsThroughput: 60,
-			ConsumeMBsThroughput: 60,
-			ProduceCount:         10,
-			ConsumeCount:         10,
+			Name:                   topicName,
+			PartitionsCount:        1000,
+			ProduceMBsThroughput:   60,
+			ConsumeMBsThroughput:   60,
+			ShortLivedProduceCount: 5,
+			LongLivedProduceCount:  5,
+			LongLivedConsumeCount:  5,
+			ShortLivedConsumeCount: 5,
 		})
 	}
 
@@ -290,22 +334,25 @@ type expectedTasksCount struct {
 	ExpectedTotalTasksCount         int
 }
 
-// calculate the total expected task counts for a given topic, given the number of producer and consumer clients
-func calculateExpectedTasksCount(produceCount int, consumeCount int, longLivedMs uint64, shortLivedMs uint64) expectedTasksCount {
-	clientCounts := calculateClientCounts(TopicConfiguration{
-		ProduceCount: produceCount,
-		ConsumeCount: consumeCount,
-	})
-	shortLivedCount := int(longLivedMs / shortLivedMs)
-	expected := expectedTasksCount{
-		ExpectedLongLivedProducerTasks:  clientCounts.LongLivedProducersCount,
-		ExpectedLongLivedConsumerTasks:  clientCounts.LongLivedConsumersCount,
-		ExpectedShortLivedProducerTasks: shortLivedCount * clientCounts.ShortLivedProducersCount,
-		ExpectedShortLivedConsumerTasks: shortLivedCount * clientCounts.ShortLivedConsumersCount,
-	}
-	expected.ExpectedShortLivedTasksCount = expected.ExpectedShortLivedProducerTasks + expected.ExpectedShortLivedConsumerTasks
-	expected.ExpectedLongLivedTasksCount = expected.ExpectedLongLivedProducerTasks + expected.ExpectedLongLivedConsumerTasks
-	expected.ExpectedTotalTasksCount = expected.ExpectedLongLivedTasksCount + expected.ExpectedShortLivedTasksCount
+func calculateExpectedTasksCount(topics []TopicConfiguration, longLivedMs uint64, shortLivedMs uint64, shortLivedRescheduleDelayMs uint64) expectedTasksCount {
+	llProduceCount, slProduceCount, llConsumeCount, slConsumeCount := 0, 0, 0, 0
+	for _, topic := range topics {
+		llProduceCount += topic.LongLivedProduceCount
+		slProduceCount += topic.ShortLivedProduceCount
 
-	return expected
+		llConsumeCount += topic.LongLivedConsumeCount
+		slConsumeCount += topic.ShortLivedConsumeCount
+	}
+	shortLivedCount := int(math.Max(float64(longLivedMs/(shortLivedMs+shortLivedRescheduleDelayMs)), 1))
+	slTaskCount := (slConsumeCount + slProduceCount) * shortLivedCount
+	llTaskCount := llConsumeCount + llProduceCount
+	return expectedTasksCount{
+		ExpectedShortLivedProducerTasks: slProduceCount * shortLivedCount,
+		ExpectedLongLivedProducerTasks:  llProduceCount,
+		ExpectedShortLivedConsumerTasks: slConsumeCount * shortLivedCount,
+		ExpectedLongLivedConsumerTasks:  llConsumeCount,
+		ExpectedShortLivedTasksCount:    slTaskCount,
+		ExpectedLongLivedTasksCount:     llTaskCount,
+		ExpectedTotalTasksCount:         llTaskCount + slTaskCount,
+	}
 }
