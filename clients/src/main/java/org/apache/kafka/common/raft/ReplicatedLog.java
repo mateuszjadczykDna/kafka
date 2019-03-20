@@ -85,11 +85,11 @@ public interface ReplicatedLog {
             if (localEndOffsetOpt.isPresent()) {
                 EndOffset localEndOffset = localEndOffsetOpt.get();
                 if (localEndOffset.epoch == leaderEpoch) {
-                    long truncationOffset = Math.min(localEndOffset.offset, endOffset());
+                    long truncationOffset = Math.min(localEndOffset.offset, endOffset.offset);
                     truncateTo(truncationOffset);
                     return true;
                 } else {
-                    long truncationOffset = Math.min(localEndOffset.offset, endOffset.offset);
+                    long truncationOffset = Math.min(localEndOffset.offset, endOffset());
                     truncateTo(truncationOffset);
                     return false;
                 }

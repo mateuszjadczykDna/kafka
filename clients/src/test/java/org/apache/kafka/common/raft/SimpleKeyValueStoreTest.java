@@ -35,13 +35,12 @@ public class SimpleKeyValueStoreTest {
     @Test
     public void testPutAndGet() throws Exception {
         RaftManager manager = setupSingleNodeRaftManager();
-        manager.initialize();
+        manager.initialize(new NoOpStateMachine());
         SimpleKeyValueStore<Integer, Integer> store = new SimpleKeyValueStore<>(manager,
                 new Serdes.IntegerSerde(), new Serdes.IntegerSerde());
 
         CompletableFuture<OffsetAndEpoch> future = store.put(0, 1);
         manager.poll();
-        store.sync();
         assertTrue(future.isDone());
         assertEquals(new OffsetAndEpoch(0L, 1), future.get());
         assertEquals(1, store.get(0).intValue());

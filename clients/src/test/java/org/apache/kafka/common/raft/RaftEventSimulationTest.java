@@ -1,9 +1,6 @@
 package org.apache.kafka.common.raft;
 
 import org.apache.kafka.common.protocol.types.Type;
-import org.apache.kafka.common.record.CompressionType;
-import org.apache.kafka.common.record.MemoryRecords;
-import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
@@ -62,6 +59,7 @@ public class RaftEventSimulationTest {
         testInitialLeaderElection(new QuorumConfig(5, 0));
     }
 
+
     private void testInitialLeaderElection(QuorumConfig config) {
         for (int seed = 0; seed < 100; seed++) {
             Cluster cluster = new Cluster(config, seed);
@@ -70,7 +68,7 @@ public class RaftEventSimulationTest {
 
             cluster.startAll();
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliver, 0, 2, 1);
+            scheduler.schedule(router::deliverAll, 0, 2, 1);
             scheduler.runUntil(cluster::hasConsistentLeader);
         }
     }
@@ -112,7 +110,7 @@ public class RaftEventSimulationTest {
             assertTrue(cluster.hasConsistentLeader());
 
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliver, 0, 2, 0);
+            scheduler.schedule(router::deliverAll, 0, 2, 0);
             scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
             scheduler.runUntil(() -> cluster.highWatermarkReached(10));
         }
@@ -149,7 +147,7 @@ public class RaftEventSimulationTest {
 
             // Seed the cluster with some data
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliver, 0, 2, 1);
+            scheduler.schedule(router::deliverAll, 0, 2, 1);
             scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
             scheduler.runUntil(() -> cluster.highWatermarkReached(10));
 
@@ -191,7 +189,7 @@ public class RaftEventSimulationTest {
 
             // Seed the cluster with some data
             schedulePolling(scheduler, cluster, 3, 5);
-            scheduler.schedule(router::deliver, 0, 2, 1);
+            scheduler.schedule(router::deliverAll, 0, 2, 2);
             scheduler.schedule(new SequentialAppendAction(cluster), 0, 2, 3);
             scheduler.runUntil(() -> cluster.highWatermarkReached(10));
 
@@ -275,7 +273,6 @@ public class RaftEventSimulationTest {
     }
 
     private static class SequentialAppendAction implements Action {
-        final AtomicInteger sequence = new AtomicInteger(0);
         final Cluster cluster;
 
         private SequentialAppendAction(Cluster cluster) {
@@ -284,12 +281,7 @@ public class RaftEventSimulationTest {
 
         @Override
         public void execute() {
-            ByteBuffer buffer = ByteBuffer.allocate(4);
-            Type.INT32.write(buffer, sequence.getAndIncrement());
-            buffer.flip();
-            SimpleRecord record = new SimpleRecord(buffer);
-            MemoryRecords records = MemoryRecords.withRecords(CompressionType.NONE, record);
-            cluster.forRandomRunning(node -> node.manager.append(records));
+            cluster.forRandomRunning(node -> node.counter.increment());
         }
     }
 
@@ -481,7 +473,7 @@ public class RaftEventSimulationTest {
             RaftManager raftManager = new RaftManager(channel, persistentState.log, quorum, time,
                     ELECTION_TIMEOUT_MS, ELECTION_JITTER_MS, RETRY_BACKOFF_MS, REQUEST_TIMEOUT_MS, logContext);
             RaftNode node = new RaftNode(nodeId, raftManager, persistentState.log, channel,
-                    persistentState.store, quorum);
+                    persistentState.store, quorum, logContext);
             node.initialize();
             running.put(nodeId, node);
         }
@@ -494,23 +486,27 @@ public class RaftEventSimulationTest {
         final MockNetworkChannel channel;
         final MockElectionStore store;
         final QuorumState quorum;
+        final LogContext logContext;
+        DistributedCounter counter;
 
         private RaftNode(int nodeId,
                          RaftManager manager,
                          MockLog log,
                          MockNetworkChannel channel,
                          MockElectionStore store,
-                         QuorumState quorum) {
+                         QuorumState quorum,
+                         LogContext logContext) {
             this.nodeId = nodeId;
             this.manager = manager;
             this.log = log;
             this.channel = channel;
             this.store = store;
             this.quorum = quorum;
+            this.logContext = logContext;
         }
 
         void initialize() {
-            manager.initialize();
+            this.counter = new DistributedCounter(manager, logContext);
         }
 
         void poll() {
@@ -706,9 +702,17 @@ public class RaftEventSimulationTest {
             filters.put(nodeId, filter);
         }
 
-        void deliver() {
+        void deliverRandom() {
+            cluster.forRandomRunning(this::deliverTo);
+        }
+
+        void deliverTo(RaftNode node) {
+            node.channel.drainSendQueue().forEach(msg -> deliver(node.nodeId, msg));
+        }
+
+        void deliverAll() {
             for (RaftNode node : cluster.running()) {
-                node.channel.drainSendQueue().forEach(msg -> deliver(node.nodeId, msg));
+                deliverTo(node);
             }
         }
     }

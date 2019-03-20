@@ -33,4 +33,12 @@ public class EndOffset implements Comparable<EndOffset> {
         result = 31 * result + epoch;
         return result;
     }
+
+    @Override
+    public String toString() {
+        return "EndOffset(" +
+                "offset=" + offset +
+                ", epoch=" + epoch +
+                ')';
+    }
 }

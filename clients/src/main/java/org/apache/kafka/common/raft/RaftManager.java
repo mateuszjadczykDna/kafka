@@ -1,6 +1,7 @@
 package org.apache.kafka.common.raft;
 
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.message.AppendRecordsRequestData;
 import org.apache.kafka.common.message.AppendRecordsResponseData;
 import org.apache.kafka.common.message.BeginEpochRequestData;
@@ -118,6 +119,7 @@ public class RaftManager {
     private boolean awaitingTruncation;
     private BlockingQueue<PendingAppendRequest> unsentAppends;
     private Map<Integer, PendingAppendRequest> sentAppends;
+    private DistributedStateMachine stateMachine;
 
     public RaftManager(NetworkChannel channel,
                        ReplicatedLog log,
@@ -147,13 +149,44 @@ public class RaftManager {
         return log.latestEpoch() != 0;
     }
 
-    /**
-     * On startup:
-     * - If there is no election state, become a candidate
-     * - If we were the last leader, become a candidate
-     * - If we were a follower, become a follower and check for truncation
-     */
-    public void initialize() {
+    private void applyCommittedRecordsToStateMachine() {
+        quorum.highWatermark().ifPresent(highWatermark -> {
+            while (stateMachine.position().offset < highWatermark) {
+                OffsetAndEpoch position = stateMachine.position();
+                Records records = read(position);
+                logger.trace("Applying committed records at {} to the state machine", position);
+                stateMachine.apply(records);
+            }
+        });
+    }
+
+    private void updateFollowerHighWatermark(FollowerState state, OptionalLong highWatermarkOpt) {
+        highWatermarkOpt.ifPresent(highWatermark -> {
+            long newHighWatermark = Math.min(endOffset().offset, highWatermark);
+            state.updateHighWatermark(OptionalLong.of(newHighWatermark));
+            logger.trace("Follower high watermark updated to {}", newHighWatermark);
+            applyCommittedRecordsToStateMachine();
+        });
+    }
+
+    private void updateLeaderEndOffset(LeaderState state) {
+        if (state.updateLocalEndOffset(log.endOffset())) {
+            logger.trace("Leader high watermark updated to {} after end offset updated to {}",
+                    state.highWatermark(), log.endOffset());
+            applyCommittedRecordsToStateMachine();
+        }
+    }
+
+    private void updateReplicaEndOffset(LeaderState state, int replicaId, long endOffset) {
+        if (state.updateEndOffset(replicaId, endOffset)) {
+            logger.trace("Leader high watermark updated to {} after replica {} end offset updated to {}",
+                    state.highWatermark(), replicaId, endOffset);
+            applyCommittedRecordsToStateMachine();
+        }
+    }
+
+    public void initialize(DistributedStateMachine stateMachine) {
+        this.stateMachine = stateMachine;
         quorum.initialize(log.endOffset());
 
         for (Integer voterId : quorum.remoteVoters()) {
@@ -163,17 +196,20 @@ public class RaftManager {
 
         if (quorum.isLeader()) {
             electionTimer.reset(Long.MAX_VALUE);
+            onBecomeLeader(quorum.leaderStateOrThrow());
         } else if (quorum.isCandidate()) {
             // If the quorum consists of a single node, we can become leader immediately
             electionTimer.reset(electionTimeoutMs);
             maybeBecomeLeader(quorum.candidateStateOrThrow());
         } else if (quorum.isFollower()) {
+            FollowerState state = quorum.followerStateOrThrow();
             if (quorum.isVoter() && quorum.epoch() == 0) {
                 // If we're initializing for the first time, become a candidate immediately
                 becomeCandidate();
             } else {
                 electionTimer.reset(electionTimeoutMs);
-                this.awaitingTruncation = isLogNonEmpty();
+                if (state.hasLeader())
+                    onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
             }
         }
     }
@@ -188,14 +224,19 @@ public class RaftManager {
         findLeaderConnection.reset();
     }
 
+    private void onBecomeLeader(LeaderState state) {
+        stateMachine.becomeLeader(quorum.epoch());
+        updateLeaderEndOffset(state);
+        log.assignEpochStartOffset(quorum.epoch(), log.endOffset());
+        electionTimer.reset(Long.MAX_VALUE);
+        resetConnections();
+    }
+
     private void maybeBecomeLeader(CandidateState state) {
         if (state.isVoteGranted()) {
             long endOffset = log.endOffset();
             LeaderState leaderState = quorum.becomeLeader(endOffset);
-            leaderState.updateLocalEndOffset(endOffset);
-            log.assignEpochStartOffset(quorum.epoch(), endOffset);
-            electionTimer.reset(Long.MAX_VALUE);
-            resetConnections();
+            onBecomeLeader(leaderState);
         }
     }
 
@@ -219,11 +260,16 @@ public class RaftManager {
         }
     }
 
+    private void onBecomeFollowerOfElectedLeader(FollowerState state) {
+        awaitingTruncation = isLogNonEmpty();
+        stateMachine.becomeFollower(state.epoch);
+        electionTimer.reset(electionTimeoutMs);
+        resetConnections();
+    }
+
     private void becomeFollower(int leaderId, int epoch) {
         if (quorum.becomeFollower(epoch, leaderId)) {
-            electionTimer.reset(electionTimeoutMs);
-            awaitingTruncation = isLogNonEmpty();
-            resetConnections();
+            onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
         }
     }
 
@@ -404,7 +450,7 @@ public class RaftManager {
 
         if (quorum.isVoter(replicaId)) {
             // Voters can read to the end of the log
-            state.updateEndOffset(replicaId, fetchOffset);
+            updateReplicaEndOffset(state, replicaId, fetchOffset);
             Records records = log.read(fetchOffset, log.endOffset());
             return buildFetchRecordsResponse(Errors.NONE, records, highWatermark);
         } else {
@@ -433,14 +479,13 @@ public class RaftManager {
         } else {
             ByteBuffer recordsBuffer = ByteBuffer.wrap(response.records());
             log.appendAsFollower(MemoryRecords.readableRecords(recordsBuffer));
-
+            logger.trace("Follower end offset updated to {} after append", endOffset());
             OptionalLong highWatermark = response.highWatermark() < 0 ?
                     OptionalLong.empty() : OptionalLong.of(response.highWatermark());
-            state.updateHighWatermark(highWatermark);
+            updateFollowerHighWatermark(state, highWatermark);
             electionTimer.reset(electionTimeoutMs);
         }
     }
-
     private void handleAppendRecordsResponse(int requestId, AppendRecordsResponseData response) {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
@@ -449,7 +494,7 @@ public class RaftManager {
         FollowerState state = quorum.followerStateOrThrow();
         OptionalLong highWatermark = response.highWatermark() < 0 ?
                 OptionalLong.empty() : OptionalLong.of(response.highWatermark());
-        state.updateHighWatermark(highWatermark);
+        updateFollowerHighWatermark(state, highWatermark);
         PendingAppendRequest pendingAppend = sentAppends.get(requestId);
         if (pendingAppend != null) {
             pendingAppend.complete(new OffsetAndEpoch(response.baseOffset(), response.leaderEpoch()));
@@ -478,9 +523,22 @@ public class RaftManager {
         LeaderState state = quorum.leaderStateOrThrow();
         ByteBuffer buffer = ByteBuffer.wrap(request.records());
         Records records = MemoryRecords.readableRecords(buffer);
-        Long baseOffset = log.appendAsLeader(records, quorum.epoch());
-        state.updateLocalEndOffset(log.endOffset());
-        return buildAppendRecordsResponse(Errors.NONE, OptionalLong.of(baseOffset), state.highWatermark());
+        OptionalLong baseOffsetOpt = maybeAppendAsLeader(state, records);
+        if (baseOffsetOpt.isPresent()) {
+            return buildAppendRecordsResponse(Errors.NONE, baseOffsetOpt, state.highWatermark());
+        } else {
+            return buildAppendRecordsResponse(Errors.INVALID_REQUEST, OptionalLong.empty(), state.highWatermark());
+        }
+    }
+
+    private OptionalLong maybeAppendAsLeader(LeaderState state, Records records) {
+        if (state.highWatermark().isPresent() && stateMachine.accept(records)) {
+            Long baseOffset = log.appendAsLeader(records, quorum.epoch());
+            updateLeaderEndOffset(state);
+            logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());
+            return OptionalLong.of(baseOffset);
+        }
+        return OptionalLong.empty();
     }
 
     private FetchEndOffsetResponseData buildFetchEndOffsetResponse(Errors error, EndOffset endOffset) {
@@ -510,9 +568,10 @@ public class RaftManager {
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
             return;
 
-        FollowerState state = quorum.followerStateOrThrow();
+        quorum.followerStateOrThrow();
+
         if (!awaitingTruncation) {
-            logger.warn("Received unexpected FetchEndOffset response {} while fetching", response);
+            logger.debug("Ignoring unneeded FetchEndOffset response {}", response);
         } else {
             if (response.endOffset() < 0 || response.endOffsetEpoch() < 0) {
                 logger.warn("Leader returned an unknown offset to our EndOffset request");
@@ -922,9 +981,12 @@ public class RaftManager {
             LeaderState leaderState = quorum.leaderStateOrThrow();
             unsentAppends.poll();
             int epoch = quorum.epoch();
-            Long baseOffset = log.appendAsLeader(unsentAppend.records, epoch);
-            leaderState.updateLocalEndOffset(log.endOffset());
-            unsentAppend.complete(new OffsetAndEpoch(baseOffset, epoch));
+            OptionalLong baseOffsetOpt = maybeAppendAsLeader(leaderState, unsentAppend.records);
+            if (baseOffsetOpt.isPresent()) {
+                unsentAppend.complete(new OffsetAndEpoch(baseOffsetOpt.getAsLong(), epoch));
+            } else {
+                unsentAppend.fail(new InvalidRequestException("Leader refused the append"));
+            }
         } else if (quorum.isFollower()) {
             FollowerState followerState = quorum.followerStateOrThrow();
             if (followerState.hasLeader()) {

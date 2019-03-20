@@ -43,6 +43,13 @@ public class MockLog implements ReplicatedLog {
             }
             epochLowerBound = epochStartOffset.epoch;
         }
+
+        if (!epochStartOffsets.isEmpty()) {
+            EpochStartOffset lastEpochStartOffset = epochStartOffsets.get(epochStartOffsets.size() - 1);
+            if (lastEpochStartOffset.epoch == epoch)
+                return Optional.of(new EndOffset(endOffset(), epoch));
+        }
+
         return Optional.empty();
     }
 

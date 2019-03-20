@@ -16,16 +16,18 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 
 /**
  * This is an experimental key-value store built on top of Raft consensus. Really
  * just trying to figure out what a useful API looks like.
  */
-public class SimpleKeyValueStore<K, V> {
+public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
     private final RaftManager raftManager;
     private final Serde<K> keySerde;
     private final Serde<V> valueSerde;
-    private final Map<K, V> map = new HashMap<>();
+    private final Map<K, V> committed = new HashMap<>();
+    private final Map<K, V> uncommitted = new HashMap<>();
     private OffsetAndEpoch currentPosition = new OffsetAndEpoch(0L, 0);
     private SortedMap<OffsetAndEpoch, CompletableFuture<OffsetAndEpoch>> pendingCommit = new TreeMap<>();
 
@@ -35,10 +37,12 @@ public class SimpleKeyValueStore<K, V> {
         this.raftManager = raftManager;
         this.keySerde = keySerde;
         this.valueSerde = valueSerde;
+
+        raftManager.initialize(this);
     }
 
     public synchronized V get(K key) {
-        return map.get(key);
+        return committed.get(key);
     }
 
     public synchronized CompletableFuture<OffsetAndEpoch> put(K key, V value) {
@@ -49,11 +53,63 @@ public class SimpleKeyValueStore<K, V> {
         // Append returns after the data was accepted by the leader, but we need to wait
         // for it to be committed.
         CompletableFuture<OffsetAndEpoch> appendFuture = raftManager.append(buildRecords(map));
-        return appendFuture.thenComposeAsync(offsetAndEpoch -> {
-            CompletableFuture<OffsetAndEpoch> commitFuture = new CompletableFuture<>();
-            pendingCommit.put(offsetAndEpoch, commitFuture);
-            return commitFuture;
+        return appendFuture.thenCompose(offsetAndEpoch -> {
+            // It is possible when this is invoked that the operation has already been applied to
+            // the state machine
+            if (offsetAndEpoch.compareTo(currentPosition) < 0) {
+                return CompletableFuture.completedFuture(offsetAndEpoch);
+            } else {
+                CompletableFuture<OffsetAndEpoch> commitFuture = new CompletableFuture<>();
+                pendingCommit.put(offsetAndEpoch, commitFuture);
+                return commitFuture;
+            }
         });
+    }
+
+    @Override
+    public synchronized void becomeLeader(int epoch) {
+
+    }
+
+    @Override
+    public synchronized void becomeFollower(int epoch) {
+        uncommitted.clear();
+    }
+
+    @Override
+    public synchronized OffsetAndEpoch position() {
+        return currentPosition;
+    }
+
+    @Override
+    public synchronized void apply(Records records) {
+        withRecords(records, (key, value) -> {
+            uncommitted.remove(key, value);
+            committed.put(key, value);
+        });
+
+        for (RecordBatch batch : records.batches()) {
+            maybeCompletePendingCommit(batch);
+            currentPosition = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
+        }
+    }
+
+    @Override
+    public synchronized boolean accept(Records records) {
+        withRecords(records, uncommitted::put);
+        return true;
+    }
+
+    private void withRecords(Records records, BiConsumer<K, V> action) {
+        for (RecordBatch batch : records.batches()) {
+            for (Record record : batch) {
+                byte[] keyBytes = Utils.toArray(record.key());
+                byte[] valueBytes = Utils.toArray(record.value());
+                K key = keySerde.deserializer().deserialize(null, keyBytes);
+                V value = valueSerde.deserializer().deserialize(null, valueBytes);
+                action.accept(key, value);
+            }
+        }
     }
 
     private Records buildRecords(Map<K, V> map) {
@@ -69,20 +125,6 @@ public class SimpleKeyValueStore<K, V> {
         byte[] keyBytes = keySerde.serializer().serialize(null, key);
         byte[] valueBytes = valueSerde.serializer().serialize(null, value);
         return new SimpleRecord(keyBytes, valueBytes);
-    }
-
-    private void putRecords(Records records) {
-        for (RecordBatch batch : records.batches()) {
-            for (Record record : batch) {
-                byte[] keyBytes = Utils.toArray(record.key());
-                byte[] valueBytes = Utils.toArray(record.value());
-                K key = keySerde.deserializer().deserialize(null, keyBytes);
-                V value = valueSerde.deserializer().deserialize(null, valueBytes);
-                map.put(key, value);
-            }
-            maybeCompletePendingCommit(batch);
-            currentPosition = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
-        }
     }
 
     private void maybeCompletePendingCommit(RecordBatch batch) {
@@ -104,11 +146,6 @@ public class SimpleKeyValueStore<K, V> {
                 break;
             }
         }
-    }
-
-    public synchronized void sync() {
-        Records records = raftManager.read(currentPosition);
-        putRecords(records);
     }
 
 }

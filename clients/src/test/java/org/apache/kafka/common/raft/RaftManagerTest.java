@@ -51,7 +51,7 @@ public class RaftManagerTest {
         QuorumState quorum = new QuorumState(localId, voters, electionStore, logContext);
         RaftManager manager = new RaftManager(channel, log, quorum, time, electionTimeoutMs, electionJitterMs,
                 retryBackoffMs, requestTimeoutMs, logContext);
-        manager.initialize();
+        manager.initialize(new NoOpStateMachine());
         return manager;
     }
 
