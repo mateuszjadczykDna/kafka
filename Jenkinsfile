@@ -45,6 +45,9 @@ def job = {
 
 def post = {
     stage('Upload results') {
+        // Kafka failed test stdout files
+        archiveArtifacts artifacts: '**/testOutput/*.stdout', allowEmptyArchive: true
+
         def summary = junit '**/build/test-results/**/TEST-*.xml'
         def total = summary.getTotalCount()
         def failed = summary.getFailCount()
