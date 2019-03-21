@@ -41,11 +41,13 @@ public class S3TierObjectStore implements TierObjectStore {
     private final static int PART_UPLOAD_SIZE = 5 * 1024 * 1024;
     private final static Logger log = LoggerFactory.getLogger(S3TierObjectStore.class);
     private final String bucket;
+    private final boolean enableMultiPartUpload;
     private AmazonS3 client;
 
     public S3TierObjectStore(TierObjectStoreConfig config) {
         this.client = client(config);
         this.bucket = config.s3bucket;
+        this.enableMultiPartUpload = config.s3EnableMultipartUpload;
         ensureBucket(false);
     }
 
@@ -114,7 +116,12 @@ public class S3TierObjectStore implements TierObjectStore {
             File producerStateSnapshotData, File transactionIndexData,
             Optional<File> epochState) {
         try {
-            putFileMultipart(keyPath(objectMetadata, TierObjectStoreFileType.SEGMENT), segmentData);
+            if (enableMultiPartUpload) {
+                putFileMultipart(keyPath(objectMetadata, TierObjectStoreFileType.SEGMENT),
+                        segmentData);
+            } else {
+                putFile(keyPath(objectMetadata, TierObjectStoreFileType.SEGMENT), segmentData);
+            }
             putFile(keyPath(objectMetadata, TierObjectStoreFileType.OFFSET_INDEX), offsetIndexData);
             putFile(keyPath(objectMetadata, TierObjectStoreFileType.TIMESTAMP_INDEX),
                 timestampIndexData);
@@ -197,11 +204,11 @@ public class S3TierObjectStore implements TierObjectStore {
                             Regions.fromName(config.s3Region).getName()
                     ));
             builder.setPathStyleAccessEnabled(true);
-
         }
 
-        if (config.s3Region != null)
+        if (config.s3Region != null && config.s3EndpointOverride == null) {
             builder.setRegion(config.s3Region);
+        }
 
         if (config.s3AwsAccessKeyId != null && config.s3AwsSecretAccessKey != null) {
             final BasicAWSCredentials credentials = new BasicAWSCredentials(config.s3AwsAccessKeyId,

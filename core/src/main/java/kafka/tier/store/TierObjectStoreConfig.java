@@ -13,6 +13,7 @@ public class TierObjectStoreConfig {
     public String s3AwsAccessKeyId;
     public String s3EndpointOverride;
     public String s3SignerOverride;
+    public Boolean s3EnableMultipartUpload;
 
     public TierObjectStoreConfig(KafkaConfig config) {
         this.s3bucket = config.tierS3Bucket();
@@ -21,6 +22,7 @@ public class TierObjectStoreConfig {
         this.s3AwsAccessKeyId = config.tierS3AwsAccessKeyId();
         this.s3EndpointOverride = config.tierS3EndpointOverride();
         this.s3SignerOverride = config.tierS3SignerOverride();
+        this.s3EnableMultipartUpload = config.tierS3EnableMultipartUpload();
     }
 
     public TierObjectStoreConfig() { }
