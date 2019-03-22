@@ -127,16 +127,16 @@ public class MultiTenantApis {
   }
 
   private static TenantContext.ValueType commonTransformableType(Field field) {
-    if (field == CommonFields.TOPIC_NAME) {
-      return TenantContext.ValueType.TOPIC;
-    } else if (field == CommonFields.GROUP_ID) {
-      return TenantContext.ValueType.GROUP;
-    } else if (field == CommonFields.TRANSACTIONAL_ID
-        || field == CommonFields.NULLABLE_TRANSACTIONAL_ID) {
-      return TenantContext.ValueType.TRANSACTIONAL_ID;
-    } else {
-      return null;
+    if (field != null) {
+      if (field.name.equals(CommonFields.TOPIC_NAME.name)) {
+        return TenantContext.ValueType.TOPIC;
+      } else if (field.name.equals(CommonFields.GROUP_ID.name)) {
+        return TenantContext.ValueType.GROUP;
+      } else if (field.name.equals(CommonFields.TRANSACTIONAL_ID.name)) {
+        return TenantContext.ValueType.TRANSACTIONAL_ID;
+      }
     }
+    return null;
   }
 
   private static void ensureStringType(Type type) {
@@ -331,7 +331,7 @@ public class MultiTenantApis {
             new StringTenantTransformer(type, valueType, TenantTransform.REMOVE_PREFIX));
       }
 
-      if (field == CommonFields.ERROR_MESSAGE) {
+      if (field != null && field.name.equals(CommonFields.ERROR_MESSAGE.name)) {
         return Optional.some(new ErrorMessageSanitizer(type));
       }
 

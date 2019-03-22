@@ -22,7 +22,6 @@ import io.confluent.security.store.kafka.coordinator.NodeMetadata;
 import io.confluent.security.test.utils.RbacTestUtils;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
