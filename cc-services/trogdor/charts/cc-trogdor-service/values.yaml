@@ -8,7 +8,7 @@ agentReplicaCount: 6
 image:
   repository: confluent-docker.jfrog.io/confluentinc
   name: cc-trogdor
-  tag: 2.2.0-3
+  tag: 0.109.0-2.3.0-SNAPSHOT
   pullPolicy: Always
 
 kafkaName: kafka
