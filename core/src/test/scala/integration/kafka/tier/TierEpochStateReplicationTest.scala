@@ -111,7 +111,7 @@ class TierEpochStateReplicationTest extends ZooKeeperTestHarness with Logging {
       leaderLog.get.deleteOldSegments()
       leaderLog.get.localLogStartOffset > logEndPriorToProduce
     }, "timed out waiting for segment tiering and deletion",
-      30000)
+      60000)
 
     assertEquals(1001, latestRecord(leader).nextOffset())
 

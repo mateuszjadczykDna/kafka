@@ -106,7 +106,8 @@ class TierEpochStateRevolvingReplicationTest extends ZooKeeperTestHarness with L
         val leaderLog = leader.replicaManager.logManager.getLog(tp)
         leaderLog.get.deleteOldSegments()
         leaderLog.get.localLogStartOffset > logEndPriorToProduce
-      }, "timed out waiting for segment tiering and deletion", 30000L)
+      }, "timed out waiting for segment tiering and deletion",
+        60000)
 
       start(followerToShutdown)
       awaitISR(tp, 3)
@@ -129,7 +130,8 @@ class TierEpochStateRevolvingReplicationTest extends ZooKeeperTestHarness with L
   private def waitForLogEndOffsetToMatch(b1: KafkaServer, b2: KafkaServer, partition: Int = 0): Unit = {
     TestUtils.waitUntilTrue(() => {
       getLog(b1, partition).logEndOffset == getLog(b2, partition).logEndOffset
-    }, s"Logs didn't match ${getLog(b1, partition).logEndOffset} vs ${getLog(b2, partition).logEndOffset}. ${b1.config.brokerId} v ${b2.config.brokerId}")
+    }, s"Logs didn't match ${getLog(b1, partition).logEndOffset} vs ${getLog(b2, partition).logEndOffset}. ${b1.config.brokerId} v ${b2.config.brokerId}",
+      60000)
   }
 
   private def getLogFile(broker: KafkaServer, partition: Int): File = {
