@@ -21,8 +21,9 @@ import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.AbstractCoordinator;
 import org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient;
+import org.apache.kafka.common.message.JoinGroupRequestData;
+import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.metrics.Metrics;
-import org.apache.kafka.common.requests.JoinGroupRequest.ProtocolMetadata;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
@@ -76,9 +77,12 @@ public class MetadataServiceCoordinator extends AbstractCoordinator {
   }
 
   @Override
-  protected List<ProtocolMetadata> metadata() {
-    ProtocolMetadata protocolMetadata = new ProtocolMetadata(PROTOCOL, nodeMetadata.serialize());
-    return Collections.singletonList(protocolMetadata);
+  protected JoinGroupRequestData.JoinGroupRequestProtocolSet metadata() {
+    JoinGroupRequestData.JoinGroupRequestProtocolSet protocolSet = new JoinGroupRequestData.JoinGroupRequestProtocolSet();
+    protocolSet.add(new JoinGroupRequestData.JoinGroupRequestProtocol()
+            .setName(PROTOCOL)
+            .setMetadata(nodeMetadata.serialize().array()));
+    return protocolSet;
   }
 
   @Override
@@ -90,12 +94,12 @@ public class MetadataServiceCoordinator extends AbstractCoordinator {
   @Override
   protected Map<String, ByteBuffer> performAssignment(String coordinationLeaderId,
                                                       String protocol,
-                                                      Map<String, ByteBuffer> allMemberMetadata) {
+                                                      List<JoinGroupResponseData.JoinGroupResponseMember> allMemberMetadata) {
     if (!PROTOCOL.equals(protocol))
       throw new IllegalArgumentException("Invalid protocol received for join complete");
 
-    Map<String, NodeMetadata> allMembers = allMemberMetadata.entrySet().stream()
-        .collect(Collectors.toMap(Entry::getKey, e -> NodeMetadata.deserialize(e.getValue())));
+    Map<String, NodeMetadata> allMembers = allMemberMetadata.stream()
+        .collect(Collectors.toMap(e -> e.memberId(), e -> NodeMetadata.deserialize(ByteBuffer.wrap(e.metadata()))));
     log.debug("Perform assignment on leader {} members {}", coordinationLeaderId,
         allMemberMetadata);
 
@@ -121,8 +125,8 @@ public class MetadataServiceCoordinator extends AbstractCoordinator {
         writerNodeMetdata);
 
     log.debug("Node {} with memberId {} elected as writer", writerNodeMetdata, writerMemberId);
-    return allMemberMetadata.entrySet().stream()
-        .collect(Collectors.toMap(Entry::getKey, e -> newAssignment.serialize()));
+    return allMemberMetadata.stream()
+        .collect(Collectors.toMap(e -> e.memberId(), e -> newAssignment.serialize()));
   }
 
   @Override

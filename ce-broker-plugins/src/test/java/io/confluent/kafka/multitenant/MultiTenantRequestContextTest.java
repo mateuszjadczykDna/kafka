@@ -21,17 +21,13 @@ import org.apache.kafka.common.acl.AclOperation;
 import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
-import org.apache.kafka.common.message.CreateTopicsRequestData;
+import org.apache.kafka.common.message.*;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfig;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreateableTopicConfigSet;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicSet;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignment;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignmentSet;
-import org.apache.kafka.common.message.DescribeGroupsRequestData;
-import org.apache.kafka.common.message.DescribeGroupsResponseData;
-import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
-import org.apache.kafka.common.message.MetadataRequestData;
 import org.apache.kafka.common.message.MetadataRequestData.MetadataRequestTopic;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.MetricConfig;
@@ -64,7 +60,6 @@ import org.apache.kafka.common.requests.CreatePartitionsRequest;
 import org.apache.kafka.common.requests.CreatePartitionsRequest.PartitionDetails;
 import org.apache.kafka.common.requests.CreatePartitionsResponse;
 import org.apache.kafka.common.requests.CreateTopicsRequest;
-import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResult;
 import org.apache.kafka.common.message.CreateTopicsResponseData.CreatableTopicResultSet;
 import org.apache.kafka.common.requests.CreateTopicsResponse;
@@ -535,10 +530,22 @@ public class MultiTenantRequestContextTest {
   public void testJoinGroupRequest() {
     for (short ver = ApiKeys.JOIN_GROUP.oldestVersion(); ver <= ApiKeys.JOIN_GROUP.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.JOIN_GROUP, ver);
-      JoinGroupRequest inbound = new JoinGroupRequest.Builder("group", 30000, "", "consumer",
-          Collections.<JoinGroupRequest.ProtocolMetadata>emptyList()).build(ver);
+
+      JoinGroupRequestData.JoinGroupRequestProtocolSet protocols = new JoinGroupRequestData.JoinGroupRequestProtocolSet(
+              Collections.singleton(
+                      new JoinGroupRequestData.JoinGroupRequestProtocol()
+                              .setMetadata(new byte[0])
+              ).iterator()
+      );
+      JoinGroupRequestData data = new JoinGroupRequestData()
+              .setGroupId("group")
+              .setSessionTimeoutMs(30000)
+              .setMemberId("")
+              .setProtocolType("consumer")
+              .setProtocols(protocols);
+      JoinGroupRequest inbound = new JoinGroupRequest.Builder(data).build(ver);
       JoinGroupRequest intercepted = (JoinGroupRequest) parseRequest(context, inbound);
-      assertEquals("tenant_group", intercepted.groupId());
+      assertEquals("tenant_group", intercepted.data().groupId());
       verifyRequestMetrics(ApiKeys.JOIN_GROUP);
     }
   }

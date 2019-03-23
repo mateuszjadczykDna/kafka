@@ -54,6 +54,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartitionInfo;
+import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.requests.FindCoordinatorResponse;
 import org.apache.kafka.common.requests.JoinGroupResponse;
@@ -266,14 +267,20 @@ public class MockAuthStore extends KafkaAuthStore {
   }
 
   private JoinGroupResponse joinGroupResponse(int generationId) {
-    Map<String, ByteBuffer> members = new HashMap<>();
+    List<JoinGroupResponseData.JoinGroupResponseMember> members = new ArrayList<>();
     for (Map.Entry<Integer, NodeMetadata> entry : nodes.entrySet()) {
-      members.put(memberId(entry.getKey()),
-          JsonMapper.toByteBuffer(entry.getValue()));
+      members.add(new JoinGroupResponseData.JoinGroupResponseMember()
+              .setMemberId(entry.getKey().toString())
+              .setMetadata(entry.getValue().serialize().array()));
     }
 
-    return new JoinGroupResponse(Errors.NONE, generationId,
-        MetadataServiceCoordinator.PROTOCOL, "0", "0", members);
+    return new JoinGroupResponse(new JoinGroupResponseData()
+            .setErrorCode(Errors.NONE.code())
+            .setGenerationId(generationId)
+            .setProtocolName(MetadataServiceCoordinator.PROTOCOL)
+            .setMemberId("0")
+            .setLeader("0")
+            .setMembers(members));
   }
 
   private SyncGroupResponse syncGroupResponse(int writeNodeId) {

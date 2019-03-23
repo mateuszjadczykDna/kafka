@@ -12,10 +12,11 @@ import io.confluent.security.rbac.utils.JsonMapper;
 import io.confluent.security.store.kafka.KafkaStoreConfig;
 import io.confluent.security.store.kafka.coordinator.MetadataServiceAssignment.AssignmentError;
 import java.net.URL;
-import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -30,6 +31,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.internals.ConsumerNetworkClient;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
+import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.metrics.Metrics;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.Errors;
@@ -205,12 +207,21 @@ public class MetadataServiceCoordinatorTest {
   }
 
   private void addJoinGroupResponse(String leaderId, int generationId) {
-    Map<String, ByteBuffer> members = new HashMap<>();
+    List<JoinGroupResponseData.JoinGroupResponseMember> members = new ArrayList<>();
     for (Map.Entry<String, NodeMetadata> entry : activeNodes.entrySet()) {
-      members.put(entry.getKey(), JsonMapper.toByteBuffer(entry.getValue()));
+      members.add(new JoinGroupResponseData.JoinGroupResponseMember()
+              .setMemberId(entry.getKey())
+              .setMetadata(entry.getValue().serialize().array()));
     }
-    mockClient.prepareResponse(new JoinGroupResponse(Errors.NONE, generationId,
-        MetadataServiceCoordinator.PROTOCOL, coordinatorId, leaderId, members));
+
+    mockClient.prepareResponse(
+            new JoinGroupResponse(new JoinGroupResponseData()
+                    .setErrorCode(Errors.NONE.code())
+                    .setGenerationId(generationId)
+                    .setProtocolName(MetadataServiceCoordinator.PROTOCOL)
+                    .setMemberId(coordinatorId)
+                    .setLeader(leaderId)
+                    .setMembers(members)));
   }
 
   private void addSyncGroupResponse(String writerId, AssignmentError error) {
