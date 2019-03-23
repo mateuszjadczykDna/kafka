@@ -15,10 +15,10 @@ import org.junit.Test
 class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
 
   val overridingProps = new Properties()
-  overridingProps.setProperty("tier.feature", "true")
-  overridingProps.setProperty("tier.metadata.num.partitions", "2")
-  overridingProps.setProperty("tier.metadata.replication.factor", "1")
-  overridingProps.setProperty("tier.backend", "mock")
+  overridingProps.setProperty(KafkaConfig.TierFeatureProp, "true")
+  overridingProps.setProperty(KafkaConfig.TierMetadataNumPartitionsProp, "2")
+  overridingProps.setProperty(KafkaConfig.TierMetadataReplicationFactorProp, "1")
+  overridingProps.setProperty(KafkaConfig.TierBackendProp, "mock")
   val logDir = TestUtils.tempDir()
 
   override def generateConfigs =
@@ -33,7 +33,7 @@ class TierTopicManagerIntegrationTest extends KafkaServerTestHarness {
     val tierTopicManager = servers.last.tierTopicManager
 
     val properties = new Properties()
-    properties.put("tier.enable", "true")
+    properties.put(KafkaConfig.TierEnableProp, "true")
 
     while (!tierTopicManager.isReady) {
       Thread.sleep(5)

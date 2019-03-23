@@ -13,7 +13,7 @@ package org.apache.kafka.common.config;
 public class ConfluentTopicConfig {
     private static final String CONFLUENT_PREFIX = "confluent.";
 
-    public static final String TIER_ENABLE_CONFIG = "tier.enable";
+    public static final String TIER_ENABLE_CONFIG = CONFLUENT_PREFIX + "tier.enable";
     public static final String TIER_ENABLE_DOC = "True if this topic has tiered storage enabled.";
 
     public static final String TIER_LOCAL_HOTSET_BYTES_CONFIG = CONFLUENT_PREFIX + "tier.local.hotset.bytes";

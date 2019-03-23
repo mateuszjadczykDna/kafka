@@ -13,6 +13,7 @@ import java.util.{Collections, Optional, Properties, UUID}
 
 import kafka.log.{AbstractLog, LogManager, LogSegment, LogTest, _}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel, ReplicaManager}
+import kafka.server.KafkaConfig
 import kafka.tier.archiver.TierArchiverState.{AfterUpload, BeforeLeader, BeforeUpload, Priority}
 import kafka.tier.domain.TierObjectMetadata
 import kafka.tier.exceptions.TierArchiverFencedException
@@ -53,7 +54,7 @@ class TierArchiverStateTest {
       .thenReturn(CompletableFutureUtil.completed(AppendResult.ACCEPTED))
 
     val properties = new Properties()
-    properties.put("tier.enable", "true")
+    properties.put(KafkaConfig.TierEnableProp, "true")
 
     tierTopicManager.becomeReady()
 

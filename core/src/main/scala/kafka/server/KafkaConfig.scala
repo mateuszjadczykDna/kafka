@@ -281,6 +281,7 @@ object Defaults {
 object KafkaConfig {
 
   private val LogConfigPrefix = "log."
+  private val ConfluentPrefix = "confluent."
 
   def main(args: Array[String]) {
     System.out.println(configDef.toHtmlTable(DynamicBrokerConfig.dynamicConfigUpdateModes))
@@ -431,30 +432,30 @@ object KafkaConfig {
 
   /** ********* Tiered Storage Configurations ***********/
   /** Tiered storage feature configs **/
-  val TierFeatureProp = "tier.feature"
-  val TierEnableProp = "tier.enable"
-  val TierBackendProp = "tier.backend"
+  val TierFeatureProp = ConfluentPrefix + "tier.feature"
+  val TierEnableProp = ConfluentPrefix + "tier.enable"
+  val TierBackendProp = ConfluentPrefix + "tier.backend"
 
   /** Tiered storage metadata configs **/
-  val TierMetadataBootstrapServersProp = "tier.metadata.bootstrap.servers"
-  val TierMetadataMaxPollMsProp = "tier.metadata.max.poll.ms"
-  val TierMetadataRequestTimeoutMsProp = "tier.metadata.request.timeout.ms"
-  val TierMetadataNamespaceProp = "tier.metadata.namespace"
-  val TierMetadataNumPartitionsProp = "tier.metadata.num.partitions"
-  val TierMetadataReplicationFactorProp = "tier.metadata.replication.factor"
-  val TierObjectFetcherThreadsProp = "tier.object.fetcher.num.threads"
+  val TierMetadataBootstrapServersProp = ConfluentPrefix + "tier.metadata.bootstrap.servers"
+  val TierMetadataMaxPollMsProp = ConfluentPrefix + "tier.metadata.max.poll.ms"
+  val TierMetadataRequestTimeoutMsProp = ConfluentPrefix + "tier.metadata.request.timeout.ms"
+  val TierMetadataNamespaceProp = ConfluentPrefix + "tier.metadata.namespace"
+  val TierMetadataNumPartitionsProp = ConfluentPrefix + "tier.metadata.num.partitions"
+  val TierMetadataReplicationFactorProp = ConfluentPrefix + "tier.metadata.replication.factor"
+  val TierObjectFetcherThreadsProp = ConfluentPrefix + "tier.object.fetcher.num.threads"
 
   /** Tiered storage S3 configs **/
-  val TierS3BucketProp = "tier.s3.bucket"
-  val TierS3RegionProp = "tier.s3.region"
+  val TierS3BucketProp = ConfluentPrefix + "tier.s3.bucket"
+  val TierS3RegionProp = ConfluentPrefix + "tier.s3.region"
   val TierS3EnableMultipartUploadProp = "tier.s3.enable.multipart.upload"
-  val TierS3AwsAccessKeyIdProp = "tier.s3.aws.access.key.id"
-  val TierS3AwsSecretAccessKeyProp = "tier.s3.aws.secret.access.key"
-  val TierS3EndpointOverrideProp = "tier.s3.aws.endpoint.override"
-  val TierS3SignerOverrideProp = "tier.s3.aws.signer.override"
+  val TierS3AwsAccessKeyIdProp = ConfluentPrefix + "tier.s3.aws.access.key.id"
+  val TierS3AwsSecretAccessKeyProp = ConfluentPrefix + "tier.s3.aws.secret.access.key"
+  val TierS3EndpointOverrideProp = ConfluentPrefix + "tier.s3.aws.endpoint.override"
+  val TierS3SignerOverrideProp = ConfluentPrefix + "tier.s3.aws.signer.override"
 
   /** Tiered storage fetcher configs */
-  val TierFetcherNumThreadsProp = "tier.fetcher.num.threads"
+  val TierFetcherNumThreadsProp = ConfluentPrefix + "tier.fetcher.num.threads"
 
   /** Tiered storage retention configs **/
   val TierLocalHotsetBytesProp = ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG

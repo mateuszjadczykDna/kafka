@@ -9,6 +9,7 @@ import java.util
 import java.util.Properties
 
 import kafka.log.LogConfig
+import kafka.server.KafkaConfig
 import kafka.server.LogDirFailureChannel
 import kafka.tier.client.{MockConsumerBuilder, MockProducerBuilder}
 import kafka.tier.domain.TierObjectMetadata
@@ -166,7 +167,7 @@ class TierTopicManagerTest {
 
   private def addReplica(topicPartition: TopicPartition): Unit = {
     val properties = new Properties()
-    properties.put("tier.enable", "true")
+    properties.put(KafkaConfig.TierEnableProp, "true")
     tierMetadataManager.initState(topicPartition, new File(logDir), new LogConfig(properties))
   }
 
