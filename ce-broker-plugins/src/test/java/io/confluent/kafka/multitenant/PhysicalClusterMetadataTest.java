@@ -533,17 +533,18 @@ public class PhysicalClusterMetadataTest {
     Utils.createLogicalClusterFile(LC_META_DED, tempFolder);
 
     // Wait until the cache is updated. We are checking that the non-deleted one is in the cache
-    // and the deleted one is marked as deleted
+    // and the deleted one is not
     TestUtils.waitForCondition(
             () -> lcCache.metadata(LC_META_ABC.logicalClusterId()) != null &&
-                    lcCache.deletedClusters().contains(LC_META_DED.logicalClusterId()),
+                  !lcCache.logicalClusterIds().contains(LC_META_DED.logicalClusterId()),
             TEST_MAX_WAIT_MS,
-            "Expected new logical cluster to be added to the cache and deleted cluster to be "
-                    + "deleted.");
+            "Expected new logical cluster to be added to the cache and the deleted to not be.");
 
-    // Make sure we are not returning deleted tenants to authorizer
-    assertFalse(lcCache.logicalClusterIds().contains(LC_META_DED.logicalClusterId()));
-    assertFalse(lcCache.logicalClusterIdsIncludingStale().contains(LC_META_DED.logicalClusterId()));
+
+    assertFalse("We expect that the deactivated cluster will be marked for deletion",
+            lcCache.deletedClusters().contains(LC_META_DED));
+    assertFalse("We expect that deactivated clusters will not be in cache, even as stale",
+            lcCache.logicalClusterIdsIncludingStale().contains(LC_META_DED.logicalClusterId()));
   }
 
 }

@@ -3,14 +3,15 @@
 package io.confluent.kafka.multitenant;
 
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.confluent.common.InterClusterConnection;
 import io.confluent.kafka.multitenant.schema.TenantContext;
 import io.confluent.kafka.server.plugins.policy.TopicPolicyConfig;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.ListTopicsResult;
 import org.apache.kafka.common.acl.AccessControlEntryFilter;
 import org.apache.kafka.common.acl.AclBinding;
 import org.apache.kafka.common.acl.AclBindingFilter;
@@ -19,6 +20,7 @@ import org.apache.kafka.common.acl.AclPermissionType;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.internals.ConfluentConfigs;
 import org.apache.kafka.common.errors.InvalidRequestException;
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.resource.ResourcePatternFilter;
 import org.apache.kafka.common.resource.ResourceType;
@@ -47,6 +49,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -82,9 +86,11 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   final LogicalClustersChangeListener dirWatcher;
   private final Thread dirListenerThread;
   private final ScheduledExecutorService executorService;
+  private final ExecutorService topicDeletionExecutor;
   private long reloadDelaysMs;
   private volatile Future<?> reloadFuture = null;
   private final ReadWriteLock cacheLock;
+  private int deleteTopicBatchSize;
 
   public enum State {
     NOT_READY,
@@ -123,6 +129,8 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       thread.setDaemon(true);
       return thread;
     });
+    this.topicDeletionExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat(
+            "tenant-topic-deletion-thread-%d").build());
   }
 
   /**
@@ -153,6 +161,13 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       this.reloadDelaysMs = ConfluentConfigs.MULTITENANT_METADATA_RELOAD_DELAY_MS_DEFAULT;
     else
       this.reloadDelaysMs = (long) reloadDelayValue;
+
+    Object deleteTopicBatchSizeValue =
+            configs.get(ConfluentConfigs.MULTITENANT_TENANT_DELETE_BATCH_SIZE_CONFIG);
+    if (deleteTopicBatchSizeValue == null)
+      this.deleteTopicBatchSize = ConfluentConfigs.MULTITENANT_TENANT_DELETE_BATCH_SIZE_DEFAULT;
+    else
+      this.deleteTopicBatchSize = (int) deleteTopicBatchSizeValue;
 
     // this shouldn't happen in real cluster, but we want to allow testing the cache without
     // a cluster.
@@ -304,6 +319,15 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
       } catch (InterruptedException e) {
         LOG.debug("Shutting down was interrupted", e);
       }
+
+      try {
+        if (topicDeletionExecutor.awaitTermination(CLOSE_TIMEOUT_MS, TimeUnit.MILLISECONDS))
+          LOG.debug("Deleting topics of deactivated tenants was completed before shutdown.");
+        else
+          executorService.shutdownNow();
+      } catch (InterruptedException e) {
+        LOG.debug("Shutting down was interrupted", e);
+      }
       if (adminClient != null)
         adminClient.close(Duration.ofMillis(CLOSE_TIMEOUT_MS));
 
@@ -421,27 +445,30 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
         }
       });
 
-      // delete tenants that were marked for deletion. This will return immediately if there's
-      // nothing to delete.
-      deleteTenants();
-
       // since above does not remove any entries from the cache, logicalClusterIdsIncludingStale()
       // returns all logical clusters that existed before this load/update
       Set<String> removedLogicalClusters = new HashSet<>();
       removedLogicalClusters.addAll(Sets.difference(logicalClusterIdsIncludingStale(),
-                                                           logicalClustersInDir));
-
-      // treat all clusters that are marked for deletion as if they are completely gone
-      // note that the JSON is not gone immediately, so we'll keep reloading the file and them
-      // removing the cluster from the cache on every iteration
-      removedLogicalClusters.addAll(deleteInProgressClusters);
-      removedLogicalClusters.addAll(deletedClusters);
+              logicalClustersInDir));
 
       for (String removedLogicalCluster : removedLogicalClusters) {
         logicalClusterMap.remove(removedLogicalCluster);
         markUpToDate(removedLogicalCluster);
         LOG.info("Removed logical cluster {}", removedLogicalCluster);
       }
+
+      // treat all clusters that are marked for deletion as if they are completely gone
+      // note that the JSON is not gone immediately, so we'll keep reloading the file and them
+      // removing the cluster from the cache on every iteration, and therefore we are not
+      // logging here.
+      for (String deactivatedCluster : deletedClusters()) {
+        logicalClusterMap.remove(deactivatedCluster);
+        markUpToDate(deactivatedCluster);
+      }
+
+      // delete tenants that were marked for deletion. This will wait to get a list of topics
+      // then create a task and have it executed on a different thread
+      deleteTenants();
     } catch (IOException ioe) {
       LOG.warn("Failed to read metadata files from dir={}", logicalClustersDataDir(), ioe);
     } finally {
@@ -572,10 +599,6 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   // deleting them.
   private void deleteTenants() {
 
-    // avoid deleting clusters that were already deleted
-    // note that until the JSON files are physically removed, we'll need to do this every time
-    deleteInProgressClusters.removeAll(deletedClusters);
-
     if (adminClient == null)
       return;
 
@@ -584,28 +607,68 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
 
     LOG.info("Deleting tenants in: {}", deleteInProgressClusters);
 
-    Set<String> tenantsWithNoTopics;
-    Set<String> tenantsWithNoACLs = new HashSet<>();
+    Set<String> tenantsWithNoTopics = deleteTopics();
+    Set<String> tenantsWithNoACLs = deleteAcls();
 
-    ListTopicsResult topicsResult = adminClient.listTopics();
+    // all the tenants with no topics *and* no ACLs are considered completely deleted
+    deletedClusters.addAll(Sets.intersection(tenantsWithNoACLs, tenantsWithNoTopics));
+    deleteInProgressClusters.removeAll(deletedClusters);
+  }
+
+  // Delete topics of deactivated tenants.
+  // We do a bunch of setup here and then create a task and pass it to an executor because this
+  // can take a while.
+  // Note that the actual deletion is done synchronously, in small batches and one thread
+  // This is to avoid taking over the controller for too long
+  private Set<String> deleteTopics() {
+    Set<String> tenantsWithNoTopics = new HashSet<>();
+    List<String> topicsToDelete;
+
     try {
-      List<String> topicsToDelete = topicsResult.names().get().stream()
+      Set<String> topics = adminClient.listTopics().names().get();
+      topicsToDelete = topics.stream()
               .filter(topic -> deleteInProgressClusters.contains(TenantContext.extractTenant(topic)))
               .collect(Collectors.toList());
-      LOG.info("deleting topics {} because they belong to tenants {}", topicsToDelete, deleteInProgressClusters);
-      adminClient.deleteTopics(topicsToDelete);
-      tenantsWithNoTopics = Sets.difference(deleteInProgressClusters,
-              topicsToDelete.stream().map(topic -> TenantContext.extractTenant(topic)).collect(Collectors.toSet())).immutableCopy();
+      Set<String> clustersWithTopicsToDelete =
+              topicsToDelete.stream().map(topic -> TenantContext.extractTenant(topic)).collect(Collectors.toSet());
+      tenantsWithNoTopics =
+              Sets.difference(deleteInProgressClusters, clustersWithTopicsToDelete).immutableCopy();
+      LOG.info("deleting topics {} because they belong to tenants {}", topicsToDelete, clustersWithTopicsToDelete);
     } catch (Exception e) {
-      LOG.error("Failed to delete topics for tenants {}. We'll try again next time",
-              deleteInProgressClusters, e);
-      return;
+      LOG.error("Failed to get list of topics in cluster. We'll retry in {} ms", reloadDelaysMs, e);
+      return tenantsWithNoTopics; //can't delete if we have no topics...
     }
 
+    Runnable deleteTopics = () -> {
+      List<List<String>> topicBatches = Lists.partition(topicsToDelete, deleteTopicBatchSize);
+      try {
+        for (List<String> topicBatch : topicBatches) {
+          try {
+            adminClient.deleteTopics(topicBatch).all().get();
+            LOG.info("Successfully deleted topics {}", topicBatch);
+          } catch (UnknownTopicOrPartitionException e) {
+            // Do nothing and keep going. It just means the topic was already removed via another
+            // broker
+          }
+        }
+      } catch (InterruptedException e) {
+        LOG.info("Deleting topics of deactivated tenants was interrupted");
+      } catch (ExecutionException e) {
+        LOG.error("Failed to delete topics for tenants {}. We'll try again next time",
+                deleteInProgressClusters, e);
+      }
+    };
+
+    topicDeletionExecutor.execute(deleteTopics);
+
+    return tenantsWithNoTopics;
+  }
+
+  private Set<String>  deleteAcls() {
+    Set<String> tenantsWithNoACLs = new HashSet<>();
     Collection<AclBindingFilter> aclFiltersToDelete = new LinkedList<>();
 
     for (String lc: deleteInProgressClusters) {
-
       AclBindingFilter tenantFilter = new AclBindingFilter(
               new ResourcePatternFilter(ResourceType.ANY, lc + TenantContext.DELIMITER,
                       PatternType.CONFLUENT_ALL_TENANT_ANY),
@@ -623,26 +686,27 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
                   + "this physical cluster. We won't retry and will consider deletion of ACLs "
                   + "for all tenants in list complete.", deleteInProgressClusters, e);
           tenantsWithNoACLs.addAll(deleteInProgressClusters);
+          return tenantsWithNoACLs; // we know this cluster doesn't do ACLs, no point in trying all of them
         } else {
           LOG.error("Failed to get ACLs for tenants {}. We'll try again next time",
                   deleteInProgressClusters, e);
-          return;
+          return tenantsWithNoACLs;
         }
       }
     }
 
     adminClient.deleteAcls(aclFiltersToDelete);
-
-    // all the tenants with no topics *and* no ACLs are considered completely deleted
-    deletedClusters.addAll(Sets.intersection(tenantsWithNoACLs, tenantsWithNoTopics));
+    return tenantsWithNoACLs;
   }
+
+
 
   private static QuotaConfig quotaConfig(LogicalClusterMetadata lcMeta) {
     double multiplier = 1 + lcMeta.networkQuotaOverhead() / 100.0;
     return new QuotaConfig((long) (multiplier * lcMeta.producerByteRate()),
-                           (long) (multiplier * lcMeta.consumerByteRate()),
-                           lcMeta.requestPercentage(),
-                           QuotaConfig.UNLIMITED_QUOTA);
+          (long) (multiplier * lcMeta.consumerByteRate()),
+          lcMeta.requestPercentage(),
+          QuotaConfig.UNLIMITED_QUOTA);
   }
 
   private void updateQuotas() {
@@ -678,10 +742,10 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
         Files.createDirectories(logicalClustersDirPath);
       }
       logicalClustersDirPath.register(watchService,
-                                      StandardWatchEventKinds.ENTRY_CREATE,
-                                      StandardWatchEventKinds.ENTRY_MODIFY,
-                                      StandardWatchEventKinds.ENTRY_DELETE,
-                                      StandardWatchEventKinds.OVERFLOW);
+              StandardWatchEventKinds.ENTRY_CREATE,
+              StandardWatchEventKinds.ENTRY_MODIFY,
+              StandardWatchEventKinds.ENTRY_DELETE,
+              StandardWatchEventKinds.OVERFLOW);
     }
 
     public void close() {

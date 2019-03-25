@@ -215,22 +215,22 @@ public class LogicalClusterMetadata {
     }
 
     @JsonProperty
-    String logicalClusterName() {
+    public String logicalClusterName() {
       return logicalClusterName;
     }
 
     @JsonProperty
-    String physicalK8sNamespace() {
+    public String physicalK8sNamespace() {
       return physicalK8sNamespace;
     }
 
     @JsonProperty
-    Date creationDate() {
+    public Date creationDate() {
       return creationDate;
     }
 
     @JsonProperty
-    Date deletionDate() {
+    public Date deletionDate() {
       return deletionDate;
     }
 

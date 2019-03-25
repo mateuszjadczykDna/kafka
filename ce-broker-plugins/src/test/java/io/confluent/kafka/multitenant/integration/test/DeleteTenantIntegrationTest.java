@@ -121,7 +121,7 @@ public class DeleteTenantIntegrationTest {
         assertTrue(adminClient1.listTopics().names().get().containsAll(expectedTopics));
         assertTrue(adminClient2.listTopics().names().get().containsAll(expectedTopics));
 
-        LogicalClusterMetadata deleted = getDeleteLogicalCluster();
+        LogicalClusterMetadata deleted = deleteLogicalCluster(LC_META_ABC);
 
         // Wait for tenant to disappear
         TestUtils.waitForCondition(
@@ -174,7 +174,7 @@ public class DeleteTenantIntegrationTest {
 
         assertTrue("ACLs should exist", describedAcls.size() > 0);
 
-        LogicalClusterMetadata deleted = getDeleteLogicalCluster();
+        LogicalClusterMetadata deleted = deleteLogicalCluster(LC_META_ABC);
 
         // Wait for tenant to disappear
         TestUtils.waitForCondition(
@@ -231,27 +231,29 @@ public class DeleteTenantIntegrationTest {
 
         lc1 = physicalCluster.createLogicalCluster(LC_META_ABC.logicalClusterId(), adminUserId, 9, 11, 12);
         Utils.createLogicalClusterFile(LC_META_ABC, tempFolder);
+        Utils.createLogicalClusterFile(LC_META_XYZ, tempFolder);
 
-        // delete the cluster
-        LogicalClusterMetadata deleted = getDeleteLogicalCluster();
+        // delete the clusters
+        LogicalClusterMetadata deleted1 = deleteLogicalCluster(LC_META_ABC);
+        LogicalClusterMetadata deleted2 = deleteLogicalCluster(LC_META_XYZ);
 
         // make sure it is completely deleted
         TestUtils.waitForCondition(
-                () -> metadata.fullyDeletedClusters().contains(deleted.logicalClusterId()),
+                () -> metadata.fullyDeletedClusters().contains(deleted1.logicalClusterId()) && metadata.fullyDeletedClusters().contains(deleted2.logicalClusterId()),
                 TEST_MAX_WAIT_MS,
-                "Expect that the tenant is gone");
+                "Expect that the tenants are gone");
     }
 
-
     // We "delete" tenants by generating new metadata with a delete date
-    private LogicalClusterMetadata getDeleteLogicalCluster() throws IOException {
+    private LogicalClusterMetadata deleteLogicalCluster(LogicalClusterMetadata lkc) throws IOException {
         LogicalClusterMetadata deleted =
-                new LogicalClusterMetadata("lkc-abc", "pkc-abc", "abc",
-                        "my-account", "k8s-abc", LogicalClusterMetadata.KAFKA_LOGICAL_CLUSTER_TYPE,
-                        10485760L, 102400L, 204800L,
-                        LogicalClusterMetadata.DEFAULT_REQUEST_PERCENTAGE.longValue(),
-                        LogicalClusterMetadata.DEFAULT_NETWORK_QUOTA_OVERHEAD_PERCENTAGE,
-                        new LogicalClusterMetadata.LifecycleMetadata("abc", "pkc-abc", null,
+                new LogicalClusterMetadata(lkc.logicalClusterId(), lkc.physicalClusterId(), lkc.logicalClusterName(),
+                        lkc.accountId(), lkc.k8sClusterId(), lkc.logicalClusterType(),
+                        lkc.storageBytes(), lkc.producerByteRate(), lkc.consumerByteRate(),
+                        lkc.requestPercentage().longValue(), lkc.networkQuotaOverhead(),
+                        new LogicalClusterMetadata.LifecycleMetadata(lkc.lifecycleMetadata().logicalClusterName(),
+                                lkc.lifecycleMetadata().physicalK8sNamespace(),
+                                lkc.lifecycleMetadata().creationDate(),
                                 new Date()));
         Utils.updateLogicalClusterFile(deleted, tempFolder);
         return deleted;
