@@ -5,11 +5,11 @@
 package io.confluent.license;
 
 public class InvalidLicenseException extends Exception {
-  InvalidLicenseException(String message) {
+  public InvalidLicenseException(String message) {
     super(message);
   }
 
-  InvalidLicenseException(String message, Throwable cause) {
+  public InvalidLicenseException(String message, Throwable cause) {
     super(message, cause);
   }
 }
