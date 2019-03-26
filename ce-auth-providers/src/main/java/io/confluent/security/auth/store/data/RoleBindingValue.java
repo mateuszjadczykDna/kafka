@@ -5,7 +5,7 @@ package io.confluent.security.auth.store.data;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.confluent.kafka.security.authorizer.Resource;
+import io.confluent.security.authorizer.Resource;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;

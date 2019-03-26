@@ -2,8 +2,8 @@
 
 package io.confluent.kafka.server.plugins.auth.oauth;
 
-import io.confluent.common.security.util.PemUtils;
-import io.confluent.common.security.util.CloudUtils;
+import io.confluent.common.security.utils.PemUtils;
+import io.confluent.common.security.utils.CloudUtils;
 import io.confluent.kafka.multitenant.PhysicalClusterMetadata;
 import io.confluent.kafka.common.multitenant.oauth.OAuthBearerJwsToken;
 import kafka.server.KafkaConfig$;

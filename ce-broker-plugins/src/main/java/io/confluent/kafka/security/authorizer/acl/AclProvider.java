@@ -2,10 +2,10 @@
 
 package io.confluent.kafka.security.authorizer.acl;
 
-import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
-import io.confluent.kafka.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.provider.AccessRuleProvider;
+import io.confluent.security.authorizer.AccessRule;
 import java.util.Set;
 import java.util.stream.Collectors;
 import kafka.network.RequestChannel;

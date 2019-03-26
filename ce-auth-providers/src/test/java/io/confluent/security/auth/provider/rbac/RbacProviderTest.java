@@ -7,11 +7,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.RoleBindingKey;
 import io.confluent.security.auth.store.data.RoleBindingValue;

@@ -2,7 +2,7 @@
 
 package io.confluent.security.auth.provider.rbac;
 
-import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
+import io.confluent.security.authorizer.provider.MetadataProvider;
 import io.confluent.security.auth.metadata.AuthStore;
 import io.confluent.security.auth.metadata.AuthWriter;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;

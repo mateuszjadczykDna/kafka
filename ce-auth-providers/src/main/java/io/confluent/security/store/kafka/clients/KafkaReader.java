@@ -2,7 +2,7 @@
 
 package io.confluent.security.store.kafka.clients;
 
-import io.confluent.kafka.common.utils.ThreadUtils;
+import io.confluent.security.authorizer.utils.ThreadUtils;
 import io.confluent.security.store.KeyValueStore;
 import io.confluent.security.store.MetadataStoreStatus;
 import java.time.Duration;

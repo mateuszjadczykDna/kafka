@@ -2,10 +2,10 @@
 
 package io.confluent.kafka.security.authorizer.acl;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.Operation;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.ResourceType;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.Operation;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourceType;
 import java.util.HashMap;
 import java.util.Map;
 import kafka.security.auth.Acl;
@@ -23,10 +23,10 @@ public class AclMapper {
 
   private static final Map<kafka.security.auth.ResourceType, ResourceType> RESOURCE_TYPES;
   private static final Map<kafka.security.auth.Operation, Operation> OPERATIONS;
-  private static final Map<PermissionType, io.confluent.kafka.security.authorizer.PermissionType> PERMISSION_TYPES;
+  private static final Map<PermissionType, io.confluent.security.authorizer.PermissionType> PERMISSION_TYPES;
   private static final Map<ResourceType, kafka.security.auth.ResourceType> KAFKA_RESOURCE_TYPES;
   private static final Map<Operation, kafka.security.auth.Operation> KAFKA_OPERATIONS;
-  private static final Map<io.confluent.kafka.security.authorizer.PermissionType, PermissionType> KAFKA_PERMISSION_TYPES;
+  private static final Map<io.confluent.security.authorizer.PermissionType, PermissionType> KAFKA_PERMISSION_TYPES;
 
   static {
     KAFKA_RESOURCE_TYPES = new HashMap<>();
@@ -48,7 +48,7 @@ public class AclMapper {
 
     KAFKA_PERMISSION_TYPES = new HashMap<>();
     PERMISSION_TYPES = new HashMap<>();
-    for (io.confluent.kafka.security.authorizer.PermissionType permissionType : io.confluent.kafka.security.authorizer.PermissionType
+    for (io.confluent.security.authorizer.PermissionType permissionType : io.confluent.security.authorizer.PermissionType
         .values()) {
       PermissionType kafkaPermissionType = PermissionType$.MODULE$
           .fromString(permissionType.name());
@@ -66,7 +66,7 @@ public class AclMapper {
   }
 
   public static PermissionType kafkaPermissionType(
-      io.confluent.kafka.security.authorizer.PermissionType permissionType) {
+      io.confluent.security.authorizer.PermissionType permissionType) {
     return mapValueOrFail(KAFKA_PERMISSION_TYPES, permissionType);
   }
 
@@ -78,7 +78,7 @@ public class AclMapper {
     return mapValueOrFail(OPERATIONS, operation);
   }
 
-  public static io.confluent.kafka.security.authorizer.PermissionType permissionType(PermissionType permissionType) {
+  public static io.confluent.security.authorizer.PermissionType permissionType(PermissionType permissionType) {
     return mapValueOrFail(PERMISSION_TYPES, permissionType);
   }
 

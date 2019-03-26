@@ -638,8 +638,8 @@ for ( sv in availableScalaVersions ) {
 def connectPkgs = ['connect:api', 'connect:runtime', 'connect:transforms', 'connect:json', 'connect:file', 'connect:basic-auth-extension']
 def pkgs = ['clients', 'examples', 'log4j-appender', 'tools',
             'streams', 'streams:streams-scala', 'streams:test-utils', 'streams:examples',
-            'ce-security', 'ce-serializers', 'ce-licensing', 'ce-client-plugins', 'ce-broker-plugins',
-            'ce-auth-clients', 'ce-auth-providers', 'ce-metrics', 'ce-aegis'] + connectPkgs
+            'ce-serializers', 'ce-licensing', 'ce-kafka-client-plugins', 'ce-broker-plugins',
+            'ce-authorizer', 'ce-rest-authorizer', 'ce-rbac', 'ce-auth-providers', 'ce-metrics', 'ce-aegis'] + connectPkgs
 
 /** Create one task per default Scala version */
 def withDefScalaVersions(taskName) {
@@ -922,20 +922,22 @@ project(':core') {
     from(project(':streams:test-utils').configurations.runtime) { into("libs/") }
     from(project(':streams:examples').jar) { into("libs/") }
     from(project(':streams:examples').configurations.runtime) { into("libs/") }
-    from(project(':ce-security').jar) { into("libs/") }
-    from(project(':ce-security').configurations.runtime) { into("libs/") }
     from(project(':ce-metrics').jar) { into("libs/") }
     from(project(':ce-metrics').configurations.runtime) { into("libs/") }
     from(project(':ce-serializers').jar) { into("libs/") }
     from(project(':ce-serializers').configurations.runtime) { into("libs/") }
     from(project(':ce-licensing').jar) { into("libs/") }
     from(project(':ce-licensing').configurations.runtime) { into("libs/") }
-    from(project(':ce-client-plugins').jar) { into("libs/") }
-    from(project(':ce-client-plugins').configurations.runtime) { into("libs/") }
+    from(project(':ce-kafka-client-plugins').jar) { into("libs/") }
+    from(project(':ce-kafka-client-plugins').configurations.runtime) { into("libs/") }
     from(project(':ce-broker-plugins').jar) { into("libs/") }
     from(project(':ce-broker-plugins').configurations.runtime) { into("libs/") }
-    from(project(':ce-auth-clients').jar) { into("libs/") }
-    from(project(':ce-auth-clients').configurations.runtime) { into("libs/") }
+    from(project(':ce-authorizer').jar) { into("libs/") }
+    from(project(':ce-authorizer').configurations.runtime) { into("libs/") }
+    from(project(':ce-rest-authorizer').jar) { into("libs/") }
+    from(project(':ce-rest-authorizer').configurations.runtime) { into("libs/") }
+    from(project(':ce-rbac').jar) { into("libs/") }
+    from(project(':ce-rbac').configurations.runtime) { into("libs/") }
     from(project(':ce-auth-providers').jar) { into("libs/") }
     from(project(':ce-auth-providers').configurations.runtime) { into("libs/") }
     duplicatesStrategy 'exclude'
@@ -1790,37 +1792,6 @@ project(':connect:basic-auth-extension') {
   }
 }
 
-project(':ce-security') {
-  archivesBaseName = "ce-security"
-
-  dependencies {
-    compile libs.bcpkix
-    compile libs.jose4j
-    testCompile project(':clients').sourceSets.test.output
-    testCompile libs.junit
-  }
-
-  tasks.create(name: "copyDependantLibs", type: Copy) {
-    from (configurations.testRuntime) {
-      include('slf4j-log4j12*')
-      include('log4j*jar')
-    }
-    from (configurations.runtime) {
-    }
-    into "$buildDir/dependant-libs"
-    duplicatesStrategy 'exclude'
-  }
-
-  jar {
-    dependsOn 'copyDependantLibs'
-  }
-
-  checkstyle {
-    configProperties = checkstyleConfigProperties("import-control-ce.xml")
-  }
-}
-
-
 project(':ce-metrics') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "ce-metrics"
@@ -1926,7 +1897,7 @@ project(':ce-licensing') {
     compile project(':connect:api')
     compile project(':connect:runtime')
     compile project(':core')
-    compile project(':ce-client-plugins')
+    compile project(':ce-kafka-client-plugins')
 
     testCompile project(':clients').sourceSets.test.output
     testCompile project(':connect:runtime').sourceSets.test.output
@@ -1958,9 +1929,9 @@ project(':ce-licensing') {
   }
 }
 
-project(':ce-client-plugins') {
+project(':ce-kafka-client-plugins') {
   apply plugin: 'com.github.johnrengelman.shadow'
-  archivesBaseName = "ce-client-plugins"
+  archivesBaseName = "kafka-client-plugins"
 
   dependencies {
     compile project(':clients')
@@ -1995,7 +1966,7 @@ project(':ce-client-plugins') {
 
 project(':ce-broker-plugins') {
   apply plugin: 'com.github.johnrengelman.shadow'
-  archivesBaseName = "ce-broker-plugins"
+  archivesBaseName = "broker-plugins"
 
   dependencies {
     compile libs.bcpkix
@@ -2007,8 +1978,8 @@ project(':ce-broker-plugins') {
     compile project(':clients')
     compile project(':core')
     compile project(':ce-licensing')
-    compile project(':ce-security')
-    compile project(':ce-client-plugins')
+    compile project(':ce-kafka-client-plugins')
+    compile project(':ce-authorizer')
 
     testCompile project(':clients').sourceSets.test.output
     testCompile project(':core').sourceSets.test.output
@@ -2045,13 +2016,13 @@ project(':ce-broker-plugins') {
 
 }
 
-project(':ce-auth-clients') {
+project(':ce-authorizer') {
   apply plugin: 'com.github.johnrengelman.shadow'
-  archivesBaseName = "ce-auth-clients"
+  archivesBaseName = "authorizer"
 
   dependencies {
     compile project(':clients')
-    compile project(':ce-client-plugins')
+    compile project(':ce-kafka-client-plugins')
     compile libs.jacksonDatabind
     compile libs.jacksonJDK8Datatypes
     compile libs.jaxrsApi
@@ -2059,7 +2030,87 @@ project(':ce-auth-clients') {
     testCompile libs.powermockEasymock
     testCompile libs.powermockJunit4
     testCompile project(':clients').sourceSets.test.output
-    testCompile project(':ce-client-plugins').sourceSets.test.output
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.testRuntime) {
+      include('slf4j-log4j12*')
+      include('log4j*jar')
+    }
+    from (configurations.runtime) {
+    }
+    into "$buildDir/dependant-libs"
+    duplicatesStrategy 'exclude'
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
+
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+
+  checkstyleTest {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+}
+
+project(':ce-rest-authorizer') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+  archivesBaseName = "rest-authorizer"
+
+  dependencies {
+    compile project(':clients')
+    compile project(':ce-authorizer')
+    compile libs.jacksonDatabind
+    compile libs.jacksonJDK8Datatypes
+    compile libs.jaxrsApi
+    testCompile libs.junit
+    testCompile libs.powermockEasymock
+    testCompile libs.powermockJunit4
+    testCompile project(':clients').sourceSets.test.output
+  }
+
+  tasks.create(name: "copyDependantLibs", type: Copy) {
+    from (configurations.testRuntime) {
+      include('slf4j-log4j12*')
+      include('log4j*jar')
+    }
+    from (configurations.runtime) {
+    }
+    into "$buildDir/dependant-libs"
+    duplicatesStrategy 'exclude'
+  }
+
+  jar {
+    dependsOn 'copyDependantLibs'
+  }
+
+  checkstyle {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+
+  checkstyleTest {
+    configProperties = checkstyleConfigProperties("import-control-ce.xml")
+  }
+}
+
+project(':ce-rbac') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+  archivesBaseName = "rbac"
+
+  dependencies {
+    compile project(':clients')
+    compile project(':ce-authorizer')
+    compile libs.jacksonDatabind
+    compile libs.jacksonJDK8Datatypes
+    compile libs.jaxrsApi
+    testCompile libs.junit
+    testCompile libs.powermockEasymock
+    testCompile libs.powermockJunit4
+    testCompile project(':clients').sourceSets.test.output
+    testCompile project(':ce-authorizer').sourceSets.test.output
   }
 
   tasks.create(name: "copyDependantLibs", type: Copy) {
@@ -2089,7 +2140,7 @@ project(':ce-auth-clients') {
 
 project(':ce-auth-providers') {
   apply plugin: 'com.github.johnrengelman.shadow'
-  archivesBaseName = "ce-auth-providers"
+  archivesBaseName = "auth-providers"
 
   dependencies {
     compile libs.bcpkix
@@ -2099,8 +2150,8 @@ project(':ce-auth-providers') {
     compile libs.jbcrypt
     compile libs.jose4j
     compile project(':clients')
-    compile project(':ce-client-plugins')
-    compile project(':ce-auth-clients')
+    compile project(':ce-authorizer')
+    compile project(':ce-rbac')
 
     testCompile project(':clients').sourceSets.test.output
     testCompile project(':core').sourceSets.test.output
@@ -2151,7 +2202,7 @@ project(':ce-auth-providers') {
 }
 
 project(':ce-aegis') {
-  archivesBaseName = "ce-aegis"
+  archivesBaseName = "aegis"
 
   dependencies {
     compile libs.argparse4j

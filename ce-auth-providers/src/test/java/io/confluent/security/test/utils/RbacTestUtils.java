@@ -2,7 +2,7 @@
 
 package io.confluent.security.test.utils;
 
-import io.confluent.kafka.security.authorizer.Resource;
+import io.confluent.security.authorizer.Resource;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.RoleBindingKey;
 import io.confluent.security.auth.store.data.RoleBindingValue;

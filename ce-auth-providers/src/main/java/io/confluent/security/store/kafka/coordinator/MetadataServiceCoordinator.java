@@ -3,7 +3,7 @@
 package io.confluent.security.store.kafka.coordinator;
 
 import io.confluent.security.store.kafka.coordinator.MetadataServiceAssignment.AssignmentError;
-import io.confluent.security.rbac.utils.JsonMapper;
+import io.confluent.security.authorizer.utils.JsonMapper;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.time.Duration;

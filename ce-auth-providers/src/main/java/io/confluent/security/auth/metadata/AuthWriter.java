@@ -2,7 +2,7 @@
 
 package io.confluent.security.auth.metadata;
 
-import io.confluent.kafka.security.authorizer.Resource;
+import io.confluent.security.authorizer.Resource;
 import java.util.Collection;
 import java.util.concurrent.CompletionStage;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;

@@ -2,12 +2,12 @@
 
 package io.confluent.security.auth.store.cache;
 
-import io.confluent.kafka.security.authorizer.Operation;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.PermissionType;
-import io.confluent.kafka.security.authorizer.ResourceType;
-import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
+import io.confluent.security.authorizer.Operation;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.PermissionType;
+import io.confluent.security.authorizer.ResourceType;
+import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.auth.metadata.AuthCache;
 import io.confluent.security.auth.store.data.AuthEntryType;
 import io.confluent.security.auth.store.data.AuthKey;

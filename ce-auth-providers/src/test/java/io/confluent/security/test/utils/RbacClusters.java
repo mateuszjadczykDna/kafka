@@ -4,14 +4,14 @@ package io.confluent.security.test.utils;
 
 import static org.junit.Assert.assertTrue;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.kafka.security.authorizer.ConfluentKafkaAuthorizer;
-import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
+import io.confluent.security.authorizer.Resource;
 import io.confluent.security.auth.metadata.MetadataServiceConfig;
 import io.confluent.security.auth.provider.rbac.RbacProvider;
 import io.confluent.security.auth.store.data.UserKey;

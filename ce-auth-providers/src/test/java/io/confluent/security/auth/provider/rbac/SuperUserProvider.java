@@ -2,9 +2,9 @@
 
 package io.confluent.security.auth.provider.rbac;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.provider.AccessRuleProvider;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;

@@ -2,7 +2,7 @@
 
 package io.confluent.security.auth.metadata;
 
-import io.confluent.kafka.security.authorizer.Authorizer;
+import io.confluent.security.authorizer.Authorizer;
 import java.io.Closeable;
 import org.apache.kafka.common.Configurable;
 

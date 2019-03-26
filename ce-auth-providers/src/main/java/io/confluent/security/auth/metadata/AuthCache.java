@@ -2,8 +2,8 @@
 
 package io.confluent.security.auth.metadata;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.Resource;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.Resource;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.RoleBinding;
 import io.confluent.security.rbac.Scope;

@@ -98,10 +98,12 @@
     </subpackage>
 
     <subpackage name="multitenant">
+      <allow pkg="io.confluent.security.authorizer" />
       <allow pkg="org.apache.kafka.test" />
     </subpackage>
 
     <subpackage name="security">
+      <allow pkg="io.confluent.security.authorizer" />
       <allow pkg="org.apache.kafka.test" />
     </subpackage>
 
@@ -112,9 +114,9 @@
 
   <subpackage name="security">
     <allow pkg="io.confluent.kafka.common" />
-    <allow pkg="io.confluent.kafka.security" />
     <allow pkg="io.confluent.kafka.test" />
     <allow pkg="io.confluent.license" />
+    <allow pkg="io.confluent.security.authorizer" />
     <allow pkg="io.confluent.security.minikdc" />
     <allow pkg="io.confluent.security.rbac" />
     <allow pkg="io.confluent.security.test" />
@@ -127,6 +129,10 @@
     <subpackage name="auth">
       <allow pkg="io.confluent.security.auth" />
       <allow pkg="io.confluent.security.store" />
+
+      <subpackage name="provider.ldap">
+        <allow pkg="io.confluent.kafka.security.ldap.authorizer" />
+      </subpackage>
     </subpackage>
 
     <subpackage name="store">
@@ -135,6 +141,7 @@
 
     <subpackage name="test">
       <allow pkg="io.confluent.kafka.security.ldap.authorizer" />
+      <allow pkg="io.confluent.kafka.security.authorizer" />
       <allow pkg="io.confluent.security" />
     </subpackage>
 

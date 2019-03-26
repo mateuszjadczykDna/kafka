@@ -2,10 +2,10 @@
 
 package io.confluent.security.auth.provider.ldap;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.provider.ProviderFailedException;
 import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig.SearchMode;
-import io.confluent.kafka.common.utils.RetryBackoff;
+import io.confluent.security.auth.utils.RetryBackoff;
 
 import io.confluent.security.auth.store.data.UserKey;
 import io.confluent.security.auth.store.data.UserValue;

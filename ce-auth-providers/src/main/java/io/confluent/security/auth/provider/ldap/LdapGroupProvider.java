@@ -2,9 +2,9 @@
 
 package io.confluent.security.auth.provider.ldap;
 
-import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.GroupProviders;
-import io.confluent.kafka.security.authorizer.provider.GroupProvider;
-import io.confluent.kafka.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.provider.ConfluentBuiltInProviders.GroupProviders;
+import io.confluent.security.authorizer.provider.GroupProvider;
+import io.confluent.security.authorizer.AccessRule;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;

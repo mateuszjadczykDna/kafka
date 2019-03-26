@@ -2,15 +2,15 @@
 
 package io.confluent.security.auth.provider.rbac;
 
-import io.confluent.kafka.security.authorizer.Authorizer;
-import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
-import io.confluent.kafka.security.authorizer.EmbeddedAuthorizer;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
-import io.confluent.kafka.security.authorizer.provider.AccessRuleProvider;
-import io.confluent.kafka.security.authorizer.provider.GroupProvider;
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.provider.MetadataProvider;
+import io.confluent.security.authorizer.Authorizer;
+import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
+import io.confluent.security.authorizer.EmbeddedAuthorizer;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
+import io.confluent.security.authorizer.provider.AccessRuleProvider;
+import io.confluent.security.authorizer.provider.GroupProvider;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.provider.MetadataProvider;
 import io.confluent.security.auth.metadata.AuthCache;
 import io.confluent.security.auth.metadata.AuthStore;
 import io.confluent.security.auth.metadata.MetadataServer;

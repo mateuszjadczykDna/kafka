@@ -3,10 +3,10 @@
 package io.confluent.kafka.security.ldap.authorizer;
 
 
-import io.confluent.kafka.security.authorizer.ConfluentAuthorizerConfig;
-import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
-import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.GroupProviders;
 import io.confluent.kafka.security.authorizer.ConfluentKafkaAuthorizer;
+import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
+import io.confluent.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
+import io.confluent.security.authorizer.provider.ConfluentBuiltInProviders.GroupProviders;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.common.utils.Time;

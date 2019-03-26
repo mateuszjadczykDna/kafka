@@ -3,7 +3,7 @@
 package io.confluent.security.store.kafka.clients;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import io.confluent.security.rbac.utils.JsonMapper;
+import io.confluent.security.authorizer.utils.JsonMapper;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;

@@ -2,10 +2,10 @@
 
 package io.confluent.security.test.integration.rbac;
 
-import io.confluent.kafka.security.authorizer.AccessRule;
-import io.confluent.kafka.security.authorizer.Resource;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.Resource;
 import io.confluent.security.test.utils.RbacClusters;
 import io.confluent.security.test.utils.RbacClusters.Config;
 import java.util.Arrays;

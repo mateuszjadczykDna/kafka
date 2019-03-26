@@ -3,11 +3,11 @@
 package io.confluent.kafka.multitenant.authorizer;
 
 import io.confluent.kafka.multitenant.MultiTenantPrincipal;
-import io.confluent.kafka.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
-import io.confluent.kafka.security.authorizer.acl.AclProvider;
 import io.confluent.kafka.security.authorizer.acl.AclMapper;
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.AccessRule;
+import io.confluent.kafka.security.authorizer.acl.AclProvider;
+import io.confluent.security.authorizer.provider.ConfluentBuiltInProviders.AccessRuleProviders;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.AccessRule;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;

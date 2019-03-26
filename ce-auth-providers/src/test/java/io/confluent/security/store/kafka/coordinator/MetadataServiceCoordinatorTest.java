@@ -8,7 +8,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.kafka.test.utils.KafkaTestUtils;
-import io.confluent.security.rbac.utils.JsonMapper;
+import io.confluent.security.authorizer.utils.JsonMapper;
 import io.confluent.security.store.kafka.KafkaStoreConfig;
 import io.confluent.security.store.kafka.coordinator.MetadataServiceAssignment.AssignmentError;
 import java.net.URL;

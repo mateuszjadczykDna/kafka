@@ -2,7 +2,7 @@
 
 package io.confluent.security.store;
 
-import io.confluent.kafka.security.authorizer.provider.ProviderFailedException;
+import io.confluent.security.authorizer.provider.ProviderFailedException;
 
 public class MetadataStoreException extends ProviderFailedException {
 

@@ -8,9 +8,9 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import io.confluent.kafka.security.authorizer.Resource;
-import io.confluent.kafka.security.authorizer.provider.InvalidScopeException;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.AuthKey;
 import io.confluent.security.auth.store.data.AuthValue;
