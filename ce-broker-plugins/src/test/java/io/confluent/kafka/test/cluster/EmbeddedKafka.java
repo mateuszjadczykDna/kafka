@@ -42,6 +42,7 @@ import org.apache.kafka.common.utils.Utils;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Option;
 
 /**
  * Runs an in-memory, "embedded" instance of a Kafka broker, which listens at `127.0.0.1:9092` by
@@ -160,7 +161,7 @@ public class EmbeddedKafka {
   private KafkaZkClient createZkClient() {
     return KafkaZkClient.apply(zkConnect(), false, DEFAULT_ZK_SESSION_TIMEOUT_MS,
         DEFAULT_ZK_CONNECTION_TIMEOUT_MS, Integer.MAX_VALUE, Time.SYSTEM, "testMetricGroup",
-        "testMetricType");
+        "testMetricType", Option.empty());
   }
 
   public KafkaServer kafkaServer() {
