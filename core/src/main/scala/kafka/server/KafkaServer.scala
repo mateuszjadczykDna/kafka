@@ -416,7 +416,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
     def createZkClient(zkConnect: String, isSecure: Boolean) =
       KafkaZkClient(zkConnect, isSecure, config.zkSessionTimeoutMs, config.zkConnectionTimeoutMs,
-        config.zkMaxInFlightRequests, time)
+        config.zkMaxInFlightRequests, time, name = Some("Kafka server"))
 
     val chrootIndex = config.zkConnect.indexOf("/")
     val chrootOption = {
