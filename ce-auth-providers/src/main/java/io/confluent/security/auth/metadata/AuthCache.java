@@ -6,6 +6,7 @@ import io.confluent.security.authorizer.AccessRule;
 import io.confluent.security.authorizer.Resource;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.RoleBinding;
+import io.confluent.security.rbac.RoleBindingFilter;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.rbac.UserMetadata;
 import java.util.Collection;
@@ -63,6 +64,14 @@ public interface AuthCache {
    * @return Set of roles currently assigned at the specified scope
    */
   Set<RoleBinding> rbacRoleBindings(Scope scope);
+
+  /**
+   * Returns role bindings that match the specified filter.
+   *
+   * @param filter The filter used for matching role bindings
+   * @return Set of role bindings that match the filter
+   */
+  Set<RoleBinding> rbacRoleBindings(RoleBindingFilter filter);
 
   /**
    * Returns metadata for the specified user principal if available or null if user is not known.

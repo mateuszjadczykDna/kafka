@@ -39,12 +39,6 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
   private static final ConfigDef CONFIG;
 
-  public static final String SCOPE_PROP = "confluent.authorizer.scope";
-  private static final String SCOPE_DEFAULT = "";
-  private static final String SCOPE_DOC = "The scope used for role-based authorization"
-      + " of requests on the broker. This should be broker's cluster scope."
-      + " This may be empty if RBAC provider is not enabled.";
-
   public static final String GROUP_PROVIDER_PROP = "confluent.authorizer.group.provider";
   private static final String GROUP_PROVIDER_DEFAULT = GroupProviders.NONE.name();
   private static final String GROUP_PROVIDER_DOC = "Group provider for the authorizer to map users to groups. "
@@ -91,8 +85,6 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
   static {
     CONFIG = new ConfigDef()
-        .define(SCOPE_PROP, Type.STRING, SCOPE_DEFAULT,
-            Importance.HIGH, SCOPE_DOC)
         .define(ALLOW_IF_NO_ACLS_PROP, Type.BOOLEAN, ALLOW_IF_NO_ACLS_DEFAULT,
             Importance.MEDIUM, ALLOW_IF_NO_ACLS_DOC)
         .define(SUPER_USERS_PROP, Type.STRING, SUPER_USERS_DEFAULT,
@@ -109,14 +101,12 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
             atLeast(0), Importance.LOW, INIT_TIMEOUT_DOC);
   }
   public final boolean allowEveryoneIfNoAcl;
-  public final String scope;
   public Set<KafkaPrincipal> superUsers;
   public final Duration initTimeout;
 
   public ConfluentAuthorizerConfig(Map<?, ?> props) {
     super(CONFIG, props);
 
-    scope = getString(SCOPE_PROP);
     allowEveryoneIfNoAcl = getBoolean(ALLOW_IF_NO_ACLS_PROP);
 
     if (getList(ACCESS_RULE_PROVIDERS_PROP).isEmpty())
@@ -135,7 +125,7 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
     initTimeout = Duration.ofMillis(getInt(INIT_TIMEOUT_PROP));
   }
 
-  public final Providers createProviders() {
+  public final Providers createProviders(String scope) {
     List<String> authProviderNames = getList(ACCESS_RULE_PROVIDERS_PROP);
     // Multitenant ACLs are included in the MultiTenantProvider, so include only the MultiTenantProvider
     if (authProviderNames.contains(AccessRuleProviders.ACL.name())
@@ -148,6 +138,7 @@ public class ConfluentAuthorizerConfig extends AbstractConfig {
 
     List<AccessRuleProvider> accessRuleProviders =
         ConfluentBuiltInProviders.loadAccessRuleProviders(authProviderNames);
+    accessRuleProviders.forEach(provider -> provider.configureScope(scope));
     Set<Provider> providers = new HashSet<>(accessRuleProviders);
 
     String groupFeature = getString(GROUP_PROVIDER_PROP);

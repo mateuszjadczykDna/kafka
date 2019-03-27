@@ -3,9 +3,10 @@
 package io.confluent.security.auth.store.cache;
 
 import io.confluent.security.authorizer.Operation;
-import io.confluent.security.authorizer.Resource;
 import io.confluent.security.authorizer.AccessRule;
 import io.confluent.security.authorizer.PermissionType;
+import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import io.confluent.security.authorizer.ResourceType;
 import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.auth.metadata.AuthCache;
@@ -22,6 +23,7 @@ import io.confluent.security.rbac.AccessPolicy;
 import io.confluent.security.rbac.RbacRoles;
 import io.confluent.security.rbac.Role;
 import io.confluent.security.rbac.RoleBinding;
+import io.confluent.security.rbac.RoleBindingFilter;
 import io.confluent.security.rbac.Scope;
 import io.confluent.security.rbac.UserMetadata;
 import io.confluent.security.store.KeyValueStore;
@@ -59,14 +61,14 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
   private static final Logger log = LoggerFactory.getLogger(DefaultAuthCache.class);
 
   private static final String WILDCARD_HOST = "*";
-  private static final NavigableMap<Resource, Set<AccessRule>> NO_RULES = Collections.emptyNavigableMap();
+  private static final NavigableMap<ResourcePattern, Set<AccessRule>> NO_RULES = Collections.emptyNavigableMap();
 
   private final RbacRoles rbacRoles;
   private final Scope rootScope;
   private final Map<KafkaPrincipal, UserMetadata> users;
   private final Map<RoleBindingKey, RoleBindingValue> roleBindings;
   private final Map<Scope, Set<KafkaPrincipal>> rbacSuperUsers;
-  private final Map<Scope, NavigableMap<Resource, Set<AccessRule>>> rbacAccessRules;
+  private final Map<Scope, NavigableMap<ResourcePattern, Set<AccessRule>>> rbacAccessRules;
   private final Map<Integer, StatusValue> partitionStatus;
 
   public DefaultAuthCache(RbacRoles rbacRoles, Scope rootScope) {
@@ -143,18 +145,18 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
     Set<AccessRule> resourceRules = new HashSet<>();
     Scope nextScope = resourceScope;
     while (nextScope != null) {
-      NavigableMap<Resource, Set<AccessRule>> rules = rbacRules(nextScope);
+      NavigableMap<ResourcePattern, Set<AccessRule>> rules = rbacRules(nextScope);
       if (rules != null) {
         String resourceName = resource.name();
         ResourceType resourceType = resource.resourceType();
 
-        addMatchingRules(rules.get(resource), resourceRules, matchingPrincipals);
-        addMatchingRules(rules.get(Resource.all(resourceType)), resourceRules, matchingPrincipals);
-        addMatchingRules(rules.get(Resource.ALL), resourceRules, matchingPrincipals);
+        addMatchingRules(rules.get(resource.toResourcePattern()), resourceRules, matchingPrincipals);
+        addMatchingRules(rules.get(ResourcePattern.all(resourceType)), resourceRules, matchingPrincipals);
+        addMatchingRules(rules.get(ResourcePattern.ALL), resourceRules, matchingPrincipals);
 
         rules.subMap(
-            new Resource(resourceType.name(), resourceName, PatternType.PREFIXED), true,
-            new Resource(resourceType.name(), resourceName.substring(0, 1), PatternType.PREFIXED), true)
+            new ResourcePattern(resourceType.name(), resourceName, PatternType.PREFIXED), true,
+            new ResourcePattern(resourceType.name(), resourceName.substring(0, 1), PatternType.PREFIXED), true)
             .entrySet().stream()
             .filter(e -> resourceName.startsWith(e.getKey().name()))
             .forEach(e -> addMatchingRules(e.getValue(), resourceRules, matchingPrincipals));
@@ -185,10 +187,20 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
     Set<RoleBinding> bindings = new HashSet<>();
     roleBindings.entrySet().stream()
         .filter(e -> scope.name().equals(e.getKey().scope()))
-        .forEach(e -> {
-          RoleBindingKey key = e.getKey();
-          Collection<Resource> resources = e.getValue().resources();
-          bindings.add(new RoleBinding(key.principal(), key.role(), key.scope(), resources));
+        .forEach(e -> bindings.add(roleBinding(e.getKey(), e.getValue())));
+    return bindings;
+  }
+
+  @Override
+  public Set<RoleBinding> rbacRoleBindings(RoleBindingFilter filter) {
+    ensureNotFailed();
+    Set<RoleBinding> bindings = new HashSet<>();
+    roleBindings.entrySet().stream()
+        .map(e -> roleBinding(e.getKey(), e.getValue()))
+        .forEach(binding -> {
+          RoleBinding matching = filter.matchingBinding(binding, rbacRoles.role(binding.role()).hasResourceScope());
+          if (matching != null)
+            bindings.add(matching);
         });
     return bindings;
   }
@@ -306,9 +318,9 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
     // Add new binding and access policies
     KafkaPrincipal principal = key.principal();
     RoleBindingValue oldValue = roleBindings.put(key, value);
-    NavigableMap<Resource, Set<AccessRule>> scopeRules =
+    NavigableMap<ResourcePattern, Set<AccessRule>> scopeRules =
         rbacAccessRules.computeIfAbsent(scope, s -> new ConcurrentSkipListMap<>());
-    Map<Resource, Set<AccessRule>> rules = accessRules(key, value);
+    Map<ResourcePattern, Set<AccessRule>> rules = accessRules(key, value);
     rules.forEach((r, a) ->
         scopeRules.computeIfAbsent(r, x -> ConcurrentHashMap.newKeySet()).addAll(a));
 
@@ -363,25 +375,25 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
   }
 
   // Visibility for testing
-  NavigableMap<Resource, Set<AccessRule>> rbacRules(Scope scope) {
+  NavigableMap<ResourcePattern, Set<AccessRule>> rbacRules(Scope scope) {
     return rbacAccessRules.getOrDefault(scope, NO_RULES);
   }
 
-  private Map<Resource, Set<AccessRule>> accessRules(RoleBindingKey roleBindingKey,
-                                                     RoleBindingValue roleBindingValue) {
-    Map<Resource, Set<AccessRule>> accessRules = new HashMap<>();
+  private Map<ResourcePattern, Set<AccessRule>> accessRules(RoleBindingKey roleBindingKey,
+                                                            RoleBindingValue roleBindingValue) {
+    Map<ResourcePattern, Set<AccessRule>> accessRules = new HashMap<>();
     KafkaPrincipal principal = roleBindingKey.principal();
-    Collection<? extends Resource> resources;
+    Collection<ResourcePattern> resources;
     AccessPolicy accessPolicy = accessPolicy(roleBindingKey);
     if (accessPolicy != null) {
       if (roleBindingValue.resources().isEmpty()) {
         resources = accessPolicy.allowedOperations(ResourceType.CLUSTER).isEmpty() ?
-            Collections.emptySet() : Collections.singleton(Resource.CLUSTER);
+            Collections.emptySet() : Collections.singleton(ResourcePattern.CLUSTER);
 
       } else {
         resources = roleBindingValue.resources();
       }
-      for (Resource resource : resources) {
+      for (ResourcePattern resource : resources) {
         Set<AccessRule> resourceRules = new HashSet<>();
         for (Operation op : accessPolicy.allowedOperations(resource.resourceType())) {
           AccessRule rule = new AccessRule(principal, PermissionType.ALLOW, WILDCARD_HOST, op,
@@ -395,9 +407,9 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
   }
 
   private void removeDeletedAccessPolicies(KafkaPrincipal principal, Scope scope) {
-    NavigableMap<Resource, Set<AccessRule>> scopeRules = rbacRules(scope);
+    NavigableMap<ResourcePattern, Set<AccessRule>> scopeRules = rbacRules(scope);
     if (scopeRules != null) {
-      Map<Resource, Set<AccessRule>> deletedRules = new HashMap<>();
+      Map<ResourcePattern, Set<AccessRule>> deletedRules = new HashMap<>();
       scopeRules.forEach((resource, rules) -> {
         Set<AccessRule> principalRules = rules.stream()
             .filter(a -> a.principal().equals(principal))
@@ -421,5 +433,9 @@ public class DefaultAuthCache implements AuthCache, KeyValueStore<AuthKey, AuthV
         }
       });
     }
+  }
+
+  private RoleBinding roleBinding(RoleBindingKey key, RoleBindingValue value) {
+    return new RoleBinding(key.principal(), key.role(), key.scope(), value.resources());
   }
 }

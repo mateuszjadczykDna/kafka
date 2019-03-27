@@ -4,7 +4,6 @@ package io.confluent.kafka.security.authorizer.acl;
 
 import io.confluent.security.authorizer.AccessRule;
 import io.confluent.security.authorizer.Operation;
-import io.confluent.security.authorizer.Resource;
 import io.confluent.security.authorizer.ResourceType;
 import java.util.HashMap;
 import java.util.Map;
@@ -80,10 +79,6 @@ public class AclMapper {
 
   public static io.confluent.security.authorizer.PermissionType permissionType(PermissionType permissionType) {
     return mapValueOrFail(PERMISSION_TYPES, permissionType);
-  }
-
-  public static Resource resource(kafka.security.auth.Resource resource) {
-    return new Resource(resourceType(resource.resourceType()), resource.name(), resource.patternType());
   }
 
   private static <K, V> V mapValueOrFail(Map<K, V> map, K key) {

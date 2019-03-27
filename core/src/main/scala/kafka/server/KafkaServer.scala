@@ -54,7 +54,7 @@ import org.apache.kafka.common.security.scram.internals.ScramMechanism
 import org.apache.kafka.common.security.token.delegation.internals.DelegationTokenCache
 import org.apache.kafka.common.security.{JaasContext, JaasUtils}
 import org.apache.kafka.common.utils.{AppInfoParser, LogContext, Time}
-import org.apache.kafka.common.{ClusterResource, Node}
+import org.apache.kafka.common.{ClusterResource, ClusterResourceListener, Node}
 import org.apache.kafka.common.config.internals.ConfluentConfigs
 import org.apache.kafka.server.multitenant.MultiTenantMetadata
 
@@ -333,6 +333,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         /* Get the authorizer and initialize it if one is specified.*/
         authorizer = Option(config.authorizerClassName).filter(_.nonEmpty).map { authorizerClassName =>
           val authZ = CoreUtils.createObject[Authorizer](authorizerClassName)
+          authZ match {
+            case clusterListener: ClusterResourceListener => clusterListener.onUpdate(new ClusterResource(clusterId))
+            case _ =>
+          }
           authZ.configure(config.originals())
           authZ
         }

@@ -4,7 +4,7 @@ package io.confluent.security.rbac;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -18,7 +18,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 public class RoleBinding {
 
   private final KafkaPrincipal principal;
-  private final Collection<Resource> resources;
+  private final Collection<ResourcePattern> resources;
   private final String role;
   private final String scope;
 
@@ -26,7 +26,7 @@ public class RoleBinding {
   public RoleBinding(@JsonProperty("principal") KafkaPrincipal principal,
                      @JsonProperty("role") String role,
                      @JsonProperty("scope") String scope,
-                     @JsonProperty("resources") Collection<Resource> resources) {
+                     @JsonProperty("resources") Collection<ResourcePattern> resources) {
     this.principal = Objects.requireNonNull(principal, "principal must not be null");
     if (role == null || role.isEmpty())
       throw new IllegalArgumentException("Role must be non-empty for role binding");
@@ -54,7 +54,7 @@ public class RoleBinding {
   }
 
   @JsonProperty
-  public Collection<Resource> resources() {
+  public Collection<ResourcePattern> resources() {
     return resources;
   }
 

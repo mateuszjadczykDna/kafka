@@ -97,7 +97,7 @@ public class TenantAclProvider extends AclProvider {
     ResourceType resourceType = AclMapper.kafkaResourceType(resource.resourceType());
     if (AclMapper.kafkaResourceType(resource.resourceType()) == Cluster$.MODULE$) {
       String prefixedCluster = tenantPrefix + resource.name();
-      resource = new Resource(resource.resourceType(), prefixedCluster, resource.patternType());
+      resource = new Resource(resource.resourceType(), prefixedCluster);
     }
 
     return JavaConversions.setAsJavaSet(getMatchingAcls(resourceType, resource.name())).stream()

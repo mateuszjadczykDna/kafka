@@ -6,16 +6,16 @@
 {
   "roles" : [
     {
-      "name" : "Super User",
+      "name" : "SuperUser",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "isSuperUser" : "true"
       }
     },
     {
-      "name" : "Cluster Admin",
+      "name" : "ClusterAdmin",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "allowedOperations" : [
           {
             "resourceType" : "Cluster",
@@ -27,7 +27,7 @@
     {
       "name" : "Operator",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "allowedOperations" : [
           {
             "resourceType" : "Topic",
@@ -39,7 +39,7 @@
     {
       "name" : "Reader",
       "policy" : {
-        "scope" : "Resource",
+        "scopeType" : "Resource",
         "allowedOperations" : [
           {
             "resourceType" : "Topic",
@@ -51,7 +51,7 @@
     {
       "name" : "Writer",
       "policy" : {
-        "scope" : "Resource",
+        "scopeType" : "Resource",
         "allowedOperations" : [
           {
             "resourceType" : "Topic",

@@ -35,7 +35,7 @@ public class Role {
 
   @JsonIgnore
   public boolean hasResourceScope() {
-    return AccessPolicy.RESOURCE_SCOPE.equals(accessPolicy.scope());
+    return AccessPolicy.RESOURCE_SCOPE.equals(accessPolicy.scopeType());
   }
 
   @Override

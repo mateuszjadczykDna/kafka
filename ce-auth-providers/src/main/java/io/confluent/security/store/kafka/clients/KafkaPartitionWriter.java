@@ -191,7 +191,6 @@ public class KafkaPartitionWriter<K, V> {
       return new CachedRecord<>(key, cache.get(key), generationId);
     else
       throw new TimeoutException("Timed out waiting for pending writes to be completed and refreshed");
-
   }
 
   /**
@@ -372,7 +371,7 @@ public class KafkaPartitionWriter<K, V> {
   }
 
   private boolean waitUntil(Predicate<Boolean> predicate,
-                                         boolean failIfNotMaster) {
+                            boolean failIfNotMaster) {
     try {
       int expectedGenerationId = generationId;
       if (generationId == NOT_MASTER_WRITER) {

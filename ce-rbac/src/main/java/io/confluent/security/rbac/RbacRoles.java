@@ -34,11 +34,6 @@ public class RbacRoles {
     return roles.get(roleName);
   }
 
-  public boolean isSuperUser(String roleName) {
-    Role role = role(roleName);
-    return role != null && role.accessPolicy().isSuperUser();
-  }
-
   public Collection<Role> roles() {
     return roles.values();
   }
@@ -62,10 +57,19 @@ public class RbacRoles {
   }
 
   void addRole(Role role) {
-    String scope = role.accessPolicy().scope();
-    if (AccessPolicy.SCOPES.stream().noneMatch(scope::equalsIgnoreCase)) {
-      throw new InvalidRoleDefinitionException(String.format("Unknown scope for role definition %s: %s", role, scope));
+    AccessPolicy accessPolicy = role.accessPolicy();
+    String scopeType = accessPolicy.scopeType();
+    if (scopeType == null || AccessPolicy.SCOPE_TYPES.stream().noneMatch(scopeType::equalsIgnoreCase)) {
+      throw new InvalidRoleDefinitionException(String.format("Unknown scope for role definition %s: %s", role, scopeType));
     }
+    accessPolicy.allowedOperations().forEach(resourceOp -> {
+      if (resourceOp.resourceType() == null || resourceOp.resourceType().isEmpty())
+        throw new InvalidRoleDefinitionException("Resource type not specified in role definition ops for " + role);
+      resourceOp.operations().forEach(op -> {
+        if (op.isEmpty())
+          throw new InvalidRoleDefinitionException("Operation name not specified in role definition ops for " + role);
+      });
+    });
     this.roles.put(role.name(), role);
   }
 

@@ -19,9 +19,9 @@ import static org.junit.Assert.assertTrue;
 public class RbacRolesTest {
 
   private static final String ADMIN_ROLE = "{ \"name\" : \"admin\" , \"policy\" : " +
-      "{ \"scope\" : \"Cluster\", \"allowedOperations\" : [{ \"resourceType\" : \"Topic\", \"operations\" : [\"All\"]}] }}";
+      "{ \"scopeType\" : \"Cluster\", \"allowedOperations\" : [{ \"resourceType\" : \"Topic\", \"operations\" : [\"All\"]}] }}";
   private static final String DEVELOPER_ROLE = "{ \"name\" : \"developer\" , \"policy\" : " +
-      "{ \"scope\" : \"Resource\", \"allowedOperations\" : [{ \"resourceType\" : \"Metrics\", \"operations\" : [\"Monitor\"]}] }}";
+      "{ \"scopeType\" : \"Resource\", \"allowedOperations\" : [{ \"resourceType\" : \"Metrics\", \"operations\" : [\"Monitor\"]}] }}";
 
   private RbacRoles rbacRoles = new RbacRoles(Collections.emptyList());
 
@@ -33,7 +33,7 @@ public class RbacRolesTest {
     assertEquals("admin", role.name());
     AccessPolicy accessPolicy = role.accessPolicy();
     assertNotNull(accessPolicy);
-    assertEquals("Cluster", accessPolicy.scope());
+    assertEquals("Cluster", accessPolicy.scopeType());
     verifyAccessPolicy(accessPolicy, "Topic", "All");
 
     addRoles(DEVELOPER_ROLE);
@@ -41,7 +41,7 @@ public class RbacRolesTest {
     Role role2 = rbacRoles.role("developer");
     AccessPolicy accessPolicy2 = role2.accessPolicy();
     assertNotNull(accessPolicy2);
-    assertEquals("Resource", accessPolicy2.scope());
+    assertEquals("Resource", accessPolicy2.scopeType());
     verifyAccessPolicy(accessPolicy2, "Metrics", "Monitor");
 
     assertEquals(accessPolicy, accessPolicy(JsonMapper.objectMapper().writeValueAsString(accessPolicy)));
@@ -59,15 +59,15 @@ public class RbacRolesTest {
   public void testDefaultRoles() throws Exception {
     RbacRoles rbacRoles = RbacRoles.loadDefaultPolicy();
 
-    assertEquals("Cluster", rbacRoles.role("Super User").accessPolicy().scope());
-    assertEquals("Cluster", rbacRoles.role("User Admin").accessPolicy().scope());
-    assertEquals("Cluster", rbacRoles.role("Cluster Admin").accessPolicy().scope());
-    assertEquals("Cluster", rbacRoles.role("Operator").accessPolicy().scope());
-    assertEquals("Cluster", rbacRoles.role("Security Admin").accessPolicy().scope());
-    assertEquals("Resource", rbacRoles.role("Resource Owner").accessPolicy().scope());
-    assertEquals("Resource", rbacRoles.role("Developer").accessPolicy().scope());
+    assertEquals("Cluster", rbacRoles.role("SuperUser").accessPolicy().scopeType());
+    assertEquals("Cluster", rbacRoles.role("UserAdmin").accessPolicy().scopeType());
+    assertEquals("Cluster", rbacRoles.role("ClusterAdmin").accessPolicy().scopeType());
+    assertEquals("Cluster", rbacRoles.role("Operator").accessPolicy().scopeType());
+    assertEquals("Cluster", rbacRoles.role("SecurityAdmin").accessPolicy().scopeType());
+    assertEquals("Resource", rbacRoles.role("ResourceOwner").accessPolicy().scopeType());
+    assertEquals("Resource", rbacRoles.role("Developer").accessPolicy().scopeType());
 
-    assertTrue(rbacRoles.role("User Admin").accessPolicy()
+    assertTrue(rbacRoles.role("UserAdmin").accessPolicy()
         .allowedOperations(new ResourceType("Cluster")).contains(new Operation("Alter")));
     assertTrue(rbacRoles.role("Developer").accessPolicy()
         .allowedOperations(new ResourceType("Group")).contains(new Operation("Read")));

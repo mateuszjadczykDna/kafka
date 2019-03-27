@@ -9,7 +9,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.kafka.test.utils.KafkaTestUtils;
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
+import io.confluent.security.authorizer.ResourcePatternFilter;
+import io.confluent.security.authorizer.ResourceType;
 import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.AuthKey;
@@ -25,6 +27,7 @@ import io.confluent.security.test.utils.RbacTestUtils;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
@@ -94,20 +97,20 @@ public class KafkaAuthWriterTest {
     String clusterA = "testOrg/clusterA";
     String clusterB = "testOrg/clusterB";
 
-    authWriter.addRoleBinding(alice, "Cluster Admin", clusterA).toCompletableFuture().join();
-    assertEquals(Collections.emptySet(), rbacResources(alice, "Cluster Admin", clusterA));
+    authWriter.addRoleBinding(alice, "ClusterAdmin", clusterA).toCompletableFuture().join();
+    assertEquals(Collections.emptySet(), rbacResources(alice, "ClusterAdmin", clusterA));
 
     authWriter.addRoleBinding(bob, "Operator", clusterB).toCompletableFuture().join();
     assertEquals(Collections.emptySet(), rbacResources(bob, "Operator", clusterB));
     assertNull(rbacResources(bob, "Operator", clusterA));
-    assertNull(rbacResources(bob, "Cluster Admin", clusterB));
+    assertNull(rbacResources(bob, "ClusterAdmin", clusterB));
 
     authWriter.addRoleBinding(alice, "Operator", clusterA).toCompletableFuture().join();
     assertEquals(Collections.emptySet(), rbacResources(alice, "Operator", clusterA));
-    assertEquals(Collections.emptySet(), rbacResources(alice, "Cluster Admin", clusterA));
+    assertEquals(Collections.emptySet(), rbacResources(alice, "ClusterAdmin", clusterA));
 
-    RbacTestUtils.deleteRoleBinding(authCache, alice, "Cluster Admin", clusterA);
-    assertNull(rbacResources(alice, "Cluster Admin", clusterA));
+    RbacTestUtils.deleteRoleBinding(authCache, alice, "ClusterAdmin", clusterA);
+    assertNull(rbacResources(alice, "ClusterAdmin", clusterA));
     assertEquals(Collections.emptySet(), rbacResources(alice, "Operator", clusterA));
     RbacTestUtils.deleteRoleBinding(authCache, alice, "Operator", clusterA);
     assertNull(rbacResources(alice, "Operator", clusterA));
@@ -122,24 +125,24 @@ public class KafkaAuthWriterTest {
     // Assign role without resources, add resources
     authWriter.addRoleBinding(alice, "Reader", clusterA).toCompletableFuture().join();
     assertEquals(Collections.emptySet(), rbacResources(alice, "Reader", clusterA));
-    Collection<Resource> aliceResources = resources("aliceTopicA", "aliceGroupB");
+    Collection<ResourcePattern> aliceResources = resources("aliceTopicA", "aliceGroupB");
     authWriter.addRoleResources(alice, "Reader", clusterA, aliceResources).toCompletableFuture().join();
     assertEquals(aliceResources, rbacResources(alice, "Reader", clusterA));
-    Collection<Resource> resources2 = resources("aliceTopicA", "aliceGroupD");
+    Collection<ResourcePattern> resources2 = resources("aliceTopicA", "aliceGroupD");
     authWriter.addRoleResources(alice, "Reader", clusterA, resources2).toCompletableFuture().join();
     assertEquals(3, rbacResources(alice, "Reader", clusterA).size());
     aliceResources.addAll(resources2);
     assertEquals(aliceResources, rbacResources(alice, "Reader", clusterA));
 
     // Add resources without assigning first, this should assign role with resources
-    Collection<Resource> bobResources = resources("bobTopic", "bobGroup");
+    Collection<ResourcePattern> bobResources = resources("bobTopic", "bobGroup");
     authWriter.addRoleResources(bob, "Writer", clusterB, bobResources).toCompletableFuture().join();
     assertEquals(bobResources, rbacResources(bob, "Writer", clusterB));
     assertNull(rbacResources(bob, "Writer", clusterA));
 
     // Set resources with group principal
     KafkaPrincipal finance = new KafkaPrincipal("Group", "finance");
-    Collection<Resource> financeResources = resources("financeTopic", "financeGroup");
+    Collection<ResourcePattern> financeResources = resources("financeTopic", "financeGroup");
     authWriter.setRoleResources(finance, "Writer", clusterB, financeResources).toCompletableFuture().join();
     assertEquals(financeResources, rbacResources(finance, "Writer", clusterB));
     financeResources = resources("financeTopic2", "financeGroup");
@@ -157,15 +160,57 @@ public class KafkaAuthWriterTest {
     assertNull(rbacResources(bob, "Writer", clusterB));
 
     // Remove role resources
-    authWriter.removeRoleResources(alice, "Reader", clusterA, resources("some.topic", "some.group")).toCompletableFuture().join();
+    authWriter.removeRoleResources(alice, "Reader", clusterA,
+        resourceFilters("some.topic", "some.group")).toCompletableFuture().join();
     assertEquals(aliceResources, rbacResources(alice, "Reader", clusterA));
-    authWriter.removeRoleResources(alice, "Reader", clusterA, Collections.singleton(groupResource("aliceGroupB"))).toCompletableFuture().join();
+    authWriter.removeRoleResources(alice, "Reader", clusterA,
+        Collections.singleton(groupResource("aliceGroupB").toFilter())).toCompletableFuture().join();
     aliceResources.remove(groupResource("aliceGroupB"));
     assertEquals(aliceResources, rbacResources(alice, "Reader", clusterA));
-    authWriter.removeRoleResources(alice, "Reader", clusterA, aliceResources).toCompletableFuture().join();
+    authWriter.removeRoleResources(alice, "Reader", clusterA,
+        aliceResources.stream().map(ResourcePattern::toFilter).collect(Collectors.toSet())).toCompletableFuture().join();
     assertEquals(Collections.emptySet(), rbacResources(alice, "Reader", clusterA));
     authWriter.removeRoleBinding(alice, "Reader", clusterA).toCompletableFuture().join();
     assertNull(rbacResources(alice, "Reader", clusterA));
+  }
+
+  @Test
+  public void testResourceRemoveFilter() throws Exception {
+    String clusterA = "testOrg/clusterA";
+
+    ResourceType topicType = new ResourceType("Topic");
+    ResourceType groupType = new ResourceType("Group");
+    ResourcePattern prefixedFinanceTopic = new ResourcePattern(topicType, "finance", PatternType.PREFIXED);
+    ResourcePattern prefixedFinanceGroup = new ResourcePattern(groupType, "finance", PatternType.PREFIXED);
+    ResourcePattern literalFinanceGroup = new ResourcePattern(topicType, "financeTopicA", PatternType.LITERAL);
+    ResourcePattern literalAliceGroup = new ResourcePattern(groupType, "aliceGroup", PatternType.LITERAL);
+    authWriter.addRoleBinding(alice, "Reader", clusterA).toCompletableFuture().join();
+    assertEquals(Collections.emptySet(), rbacResources(alice, "Reader", clusterA));
+    Collection<ResourcePattern> aliceResources = new HashSet<>();
+    aliceResources.add(prefixedFinanceTopic);
+    aliceResources.add(prefixedFinanceGroup);
+    aliceResources.add(literalFinanceGroup);
+    aliceResources.add(literalAliceGroup);
+    authWriter.addRoleResources(alice, "Reader", clusterA, aliceResources).toCompletableFuture().join();
+    assertEquals(aliceResources, rbacResources(alice, "Reader", clusterA));
+
+    authWriter.removeRoleResources(alice, "Reader", clusterA,
+        Utils.mkSet(new ResourcePatternFilter(topicType, "financeTopicA", PatternType.MATCH)))
+        .toCompletableFuture().join();
+    assertEquals(Utils.mkSet(prefixedFinanceGroup, literalAliceGroup), rbacResources(alice, "Reader", clusterA));
+
+    authWriter.setRoleResources(alice, "Reader", clusterA, aliceResources).toCompletableFuture().join();
+    authWriter.removeRoleResources(alice, "Reader", clusterA,
+        Utils.mkSet(new ResourcePatternFilter(null, "financeTopicA", PatternType.MATCH)))
+        .toCompletableFuture().join();
+    assertEquals(Utils.mkSet(literalAliceGroup), rbacResources(alice, "Reader", clusterA));
+
+    authWriter.setRoleResources(alice, "Reader", clusterA, aliceResources).toCompletableFuture().join();
+    authWriter.removeRoleResources(alice, "Reader", clusterA,
+        Utils.mkSet(new ResourcePatternFilter(null, "financeTopicA", PatternType.ANY)))
+        .toCompletableFuture().join();
+    assertEquals(Utils.mkSet(literalAliceGroup, prefixedFinanceGroup, prefixedFinanceTopic),
+        rbacResources(alice, "Reader", clusterA));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -175,7 +220,7 @@ public class KafkaAuthWriterTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void testClusterScopeRemoveResources() throws Exception {
-    authWriter.removeRoleResources(bob, "Operator", "testOrg/clusterA", resources("topicA", "groupB"));
+    authWriter.removeRoleResources(bob, "Operator", "testOrg/clusterA", resourceFilters("topicA", "groupB"));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -200,7 +245,7 @@ public class KafkaAuthWriterTest {
 
   @Test(expected = InvalidRoleBindingException.class)
   public void testUnknownRoleRemoveResources() throws Exception {
-    authWriter.removeRoleResources(bob, "SomeRole", "testOrg/clusterA", resources("topicA", "groupB"));
+    authWriter.removeRoleResources(bob, "SomeRole", "testOrg/clusterA", resourceFilters("topicA", "groupB"));
   }
 
   @Test(expected = InvalidRoleBindingException.class)
@@ -225,7 +270,7 @@ public class KafkaAuthWriterTest {
 
   @Test(expected = InvalidScopeException.class)
   public void testUnknownScopeRemoveResources() throws Exception {
-    authWriter.removeRoleResources(alice, "Reader", "anotherOrg/clusterA", resources("topicA", "groupB"));
+    authWriter.removeRoleResources(alice, "Reader", "anotherOrg/clusterA", resourceFilters("topicA", "groupB"));
   }
 
   @Test(expected = InvalidScopeException.class)
@@ -250,7 +295,7 @@ public class KafkaAuthWriterTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void testInvalidScopeRemoveResources() throws Exception {
-    authWriter.removeRoleResources(alice, "Reader", "//", resources("topicA", "groupB"));
+    authWriter.removeRoleResources(alice, "Reader", "//", resourceFilters("topicA", "groupB"));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -312,22 +357,26 @@ public class KafkaAuthWriterTest {
     verifyFailure(stage, NotMasterWriterException.class);
   }
 
-  private Collection<Resource> rbacResources(KafkaPrincipal principal, String role, String scope) {
+  private Collection<ResourcePattern> rbacResources(KafkaPrincipal principal, String role, String scope) {
     RoleBindingValue assignment =
         (RoleBindingValue) authCache.get(new RoleBindingKey(principal, role, scope));
     return assignment == null ? null : assignment.resources();
   }
 
-  private Collection<Resource> resources(String topic, String consumerGroup) {
+  private Collection<ResourcePattern> resources(String topic, String consumerGroup) {
     return Utils.mkSet(topicResource(topic), groupResource(consumerGroup));
   }
 
-  private Resource topicResource(String topic) {
-    return new Resource("Topic", topic, PatternType.LITERAL);
+  private Collection<ResourcePatternFilter> resourceFilters(String topic, String consumerGroup) {
+    return Utils.mkSet(topicResource(topic).toFilter(), groupResource(consumerGroup).toFilter());
   }
 
-  private Resource groupResource(String group) {
-    return new Resource("Group", group, PatternType.LITERAL);
+  private ResourcePattern topicResource(String topic) {
+    return new ResourcePattern("Topic", topic, PatternType.LITERAL);
+  }
+
+  private ResourcePattern groupResource(String group) {
+    return new ResourcePattern("Group", group, PatternType.LITERAL);
   }
 
   private void verifyFailure(CompletionStage<Void> stage, Class<? extends Exception> exceptionClass) throws Exception {

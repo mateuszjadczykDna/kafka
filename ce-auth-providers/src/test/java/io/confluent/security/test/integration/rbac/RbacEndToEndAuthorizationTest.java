@@ -5,7 +5,7 @@ package io.confluent.security.test.integration.rbac;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import io.confluent.security.authorizer.AccessRule;
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import io.confluent.security.test.utils.RbacClusters;
 import io.confluent.security.test.utils.RbacClusters.Config;
 import java.util.Arrays;
@@ -20,7 +20,6 @@ import org.junit.Test;
 
 public class RbacEndToEndAuthorizationTest {
 
-  private static final String CLUSTER = "confluent/core/testCluster";
   private static final String BROKER_USER = "kafka";
   private static final String SUPER_USER = "root";
   private static final String DEVELOPER1 = "app1-developer";
@@ -35,6 +34,7 @@ public class RbacEndToEndAuthorizationTest {
   private static final String APP2_CONSUMER_GROUP = "app2-consumer-group";
 
   private RbacClusters rbacClusters;
+  private String clusterId;
 
   @Before
   public void setUp() throws Throwable {
@@ -46,13 +46,12 @@ public class RbacEndToEndAuthorizationTest {
         OPERATOR
     );
     Config config = new Config()
-        .authorizerScope(CLUSTER)
-        .metadataServiceScope("confluent")
         .users(BROKER_USER, otherUsers);
     rbacClusters = new RbacClusters(config);
 
     rbacClusters.kafkaCluster.createTopic(APP1_TOPIC, 2, 1);
     rbacClusters.kafkaCluster.createTopic(APP2_TOPIC, 2, 1);
+    clusterId = rbacClusters.kafkaClusterId();
 
     initializeRoles();
   }
@@ -82,9 +81,9 @@ public class RbacEndToEndAuthorizationTest {
   @Test
   public void testProduceConsumeWithGroupRoles() throws Throwable {
     rbacClusters.updateUserGroup(DEVELOPER2, DEVELOPER_GROUP);
-    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", CLUSTER,
-        Utils.mkSet(new Resource("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL),
-            new Resource("Topic", APP1_TOPIC, PatternType.LITERAL)));
+    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", clusterId,
+        Utils.mkSet(new ResourcePattern("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL),
+            new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL)));
     rbacClusters.waitUntilAccessAllowed(DEVELOPER2, APP1_TOPIC);
     rbacClusters.produceConsume(DEVELOPER2, APP1_TOPIC, APP1_CONSUMER_GROUP, true);
   }
@@ -97,17 +96,17 @@ public class RbacEndToEndAuthorizationTest {
   }
 
   private void initializeRoles() throws Exception {
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "Developer", CLUSTER,
-        Utils.mkSet(new Resource("Topic", APP1_TOPIC, PatternType.LITERAL),
-            new Resource("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL)));
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "Developer", CLUSTER,
-        Utils.mkSet(new Resource("Topic", "app2", PatternType.PREFIXED),
-            new Resource("Group", "app2", PatternType.PREFIXED)));
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER, "Resource Owner", CLUSTER,
-        Utils.mkSet(new Resource("Topic", "*", PatternType.LITERAL),
-            new Resource("Group", "*", PatternType.LITERAL)));
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, OPERATOR, "Operator", CLUSTER, Collections.emptySet());
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, SUPER_USER, "Super User", CLUSTER, Collections.emptySet());
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "Developer", clusterId,
+        Utils.mkSet(new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL),
+            new ResourcePattern("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "Developer", clusterId,
+        Utils.mkSet(new ResourcePattern("Topic", "app2", PatternType.PREFIXED),
+            new ResourcePattern("Group", "app2", PatternType.PREFIXED)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER, "ResourceOwner", clusterId,
+        Utils.mkSet(new ResourcePattern("Topic", "*", PatternType.LITERAL),
+            new ResourcePattern("Group", "*", PatternType.LITERAL)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, OPERATOR, "Operator", clusterId, Collections.emptySet());
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, SUPER_USER, "SuperUser", clusterId, Collections.emptySet());
 
     rbacClusters.waitUntilAccessAllowed(DEVELOPER1, APP1_TOPIC);
     rbacClusters.waitUntilAccessAllowed(DEVELOPER2, APP2_TOPIC);
@@ -117,17 +116,17 @@ public class RbacEndToEndAuthorizationTest {
 
   private void createAdditionalRoles(String cluster) throws Exception {
     rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "Developer", cluster,
-        Utils.mkSet(new Resource("Topic", APP1_TOPIC, PatternType.LITERAL),
-            new Resource("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL)));
+        Utils.mkSet(new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL),
+            new ResourcePattern("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL)));
     rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "Developer", cluster,
-        Utils.mkSet(new Resource("Topic", "app2", PatternType.PREFIXED),
-            new Resource("Group", "app2", PatternType.PREFIXED)));
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER, "Resource Owner", cluster,
-        Utils.mkSet(new Resource("Topic", "*", PatternType.LITERAL),
-            new Resource("Group", "*", PatternType.LITERAL)));
+        Utils.mkSet(new ResourcePattern("Topic", "app2", PatternType.PREFIXED),
+            new ResourcePattern("Group", "app2", PatternType.PREFIXED)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER, "ResourceOwner", cluster,
+        Utils.mkSet(new ResourcePattern("Topic", "*", PatternType.LITERAL),
+            new ResourcePattern("Group", "*", PatternType.LITERAL)));
     rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, OPERATOR, "Operator", cluster,
         Collections.emptySet());
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, SUPER_USER, "Super User", cluster,
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, SUPER_USER, "SuperUser", cluster,
         Collections.emptySet());
   }
 }

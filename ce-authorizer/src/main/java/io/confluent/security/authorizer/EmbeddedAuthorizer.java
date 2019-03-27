@@ -60,7 +60,7 @@ public class EmbeddedAuthorizer implements Authorizer {
   private Set<KafkaPrincipal> superUsers;
   private Duration initTimeout;
   private boolean usesMetadataFromThisKafkaCluster;
-  private String scope;
+  private volatile String scope;
 
   static {
     IMPLICIT_ALLOWED_OPS = new HashMap<>();
@@ -80,6 +80,11 @@ public class EmbeddedAuthorizer implements Authorizer {
     this.time = time;
     this.providersCreated = new HashSet<>();
     this.superUsers = Collections.emptySet();
+    this.scope = ""; // Scope is only required for broker authorizers using RBAC
+  }
+
+  public void configureScope(String scope) {
+    this.scope = scope;
   }
 
   @Override
@@ -87,13 +92,12 @@ public class EmbeddedAuthorizer implements Authorizer {
     ConfluentAuthorizerConfig authorizerConfig = new ConfluentAuthorizerConfig(configs);
     allowEveryoneIfNoAcl = authorizerConfig.allowEveryoneIfNoAcl;
     superUsers = authorizerConfig.superUsers;
-    scope = authorizerConfig.scope;
 
     licenseValidator = licenseValidator();
     if (licenseValidator != null) {
       initializeAndValidateLicense(configs, licensePropName());
     }
-    ConfluentAuthorizerConfig.Providers providers = authorizerConfig.createProviders();
+    ConfluentAuthorizerConfig.Providers providers = authorizerConfig.createProviders(scope);
     providersCreated.addAll(providers.accessRuleProviders);
     if (providers.groupProvider != null)
       providersCreated.add(providers.groupProvider);
