@@ -37,7 +37,8 @@ public class MockConsumerBuilder implements TierTopicConsumerBuilder {
      * @param topicName the tier topic name.
      * @return a KafkaConsumer
      */
-    public Consumer<byte[], byte[]> setupConsumer(TierTopicManagerCommitter committer,
+    public Consumer<byte[], byte[]> setupConsumer(String bootstrapServers,
+                                                  TierTopicManagerCommitter committer,
                                                   String topicName,
                                                   String clientIdSuffix) {
         MockConsumer<byte[], byte[]> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);

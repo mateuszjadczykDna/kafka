@@ -8,7 +8,8 @@ import kafka.tier.TierTopicManagerCommitter;
 import org.apache.kafka.clients.consumer.Consumer;
 
 public interface TierTopicConsumerBuilder {
-    Consumer<byte[], byte[]> setupConsumer(TierTopicManagerCommitter committer,
+    Consumer<byte[], byte[]> setupConsumer(String bootstrapServers,
+                                           TierTopicManagerCommitter committer,
                                            String topicName,
                                            String clientIdSuffix);
 }

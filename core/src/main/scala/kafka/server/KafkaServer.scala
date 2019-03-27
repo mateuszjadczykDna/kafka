@@ -22,6 +22,7 @@ import java.net.{InetAddress, SocketTimeoutException}
 import java.util
 import java.util.concurrent._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.function.Supplier
 
 import com.yammer.metrics.core.Gauge
 import kafka.api.{KAFKA_0_9_0, KAFKA_2_2_IV0}
@@ -318,13 +319,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         transactionCoordinator.startup()
 
         if (config.tierFeature) {
-          val tierBrokerListener = "PLAINTEXT"
-          val tierTopicManagerConfig = new TierTopicManagerConfig(config,
-            brokerInfo.broker.brokerEndPoint(new ListenerName(tierBrokerListener)).connectionString(),
-            _clusterId)
+          val tierTopicManagerConfig = new TierTopicManagerConfig(config, _clusterId)
 
           /* tiered storage components */
-          tierTopicManager = new TierTopicManager(tierMetadataManager, tierTopicManagerConfig, metrics)
+          tierTopicManager = new TierTopicManager(tierMetadataManager, tierTopicManagerConfig, tieredBootstrapServersSupplier, metrics)
           tierTopicManager.startup()
 
           val tierArchiverConfig = TierArchiverConfig()
@@ -397,6 +395,19 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         isStartingUp.set(false)
         shutdown()
         throw e
+    }
+  }
+
+  private def tieredBootstrapServersSupplier: Supplier[String] = {
+    new Supplier[String] {
+      override def get: String = {
+        if (config.tierMetadataBootstrapServers != null)
+          config.tierMetadataBootstrapServers
+        else
+          metadataCache.getAliveBrokers
+            .map { _.brokerEndPoint(config.interBrokerListenerName).connectionString() }
+            .mkString(",")
+      }
     }
   }
 

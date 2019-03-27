@@ -40,11 +40,8 @@ public class TierTopicManagerConfig {
     }
 
     public TierTopicManagerConfig(KafkaConfig config,
-                                  String defaultBootstrapServer,
                                   String clusterId) {
-        this(config.tierMetadataBootstrapServers() == null
-                        ? defaultBootstrapServer
-                        : config.tierMetadataBootstrapServers(),
+        this(config.tierMetadataBootstrapServers(),
                 config.tierMetadataNamespace(),
                 config.tierMetadataNumPartitions(),
                 config.tierMetadataReplicationFactor(),

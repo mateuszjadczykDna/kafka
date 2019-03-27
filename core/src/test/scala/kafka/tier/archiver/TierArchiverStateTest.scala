@@ -56,7 +56,7 @@ class TierArchiverStateTest {
     val properties = new Properties()
     properties.put(KafkaConfig.TierEnableProp, "true")
 
-    tierTopicManager.becomeReady()
+    tierTopicManager.becomeReady("fakebootstrap")
 
     tierMetadataManager.initState(topicPartition, new File(logDirs.get(0)), new LogConfig(properties))
     tierMetadataManager.becomeLeader(topicPartition, 1)
