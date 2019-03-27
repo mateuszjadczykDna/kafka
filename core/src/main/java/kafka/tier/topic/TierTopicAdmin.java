@@ -64,6 +64,7 @@ public class TierTopicAdmin {
                 log.debug("{} topic has already been created.", topicName);
                 return true;
             } else {
+                log.info("{} topic could not be created by tier topic manager", topicName, e);
                 return false;
             }
         }

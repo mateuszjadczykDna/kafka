@@ -7,8 +7,10 @@ package kafka.tier
 import java.nio.ByteBuffer
 
 import kafka.log.AbstractLog
+import kafka.server.KafkaServer
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.record.MemoryRecords.RecordFilter
 import org.apache.kafka.common.record.{BufferSupplier, MemoryRecords, Record, RecordBatch, SimpleRecord}
 import org.junit.Assert.assertTrue
@@ -54,4 +56,11 @@ object TierUtils {
     filtered.flip()
     MemoryRecords.readableRecords(filtered)
   }
+
+  def awaitTierTopicPartition(broker: KafkaServer, partition: Integer): Unit = {
+    TestUtils.waitUntilTrue(() => {
+      broker.replicaManager.getPartition(new TopicPartition(Topic.TIER_TOPIC_NAME, partition)).isDefined
+    }, "Timed out waiting for replicas to join ISR")
+  }
+
 }

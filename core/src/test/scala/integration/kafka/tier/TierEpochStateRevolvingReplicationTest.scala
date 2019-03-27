@@ -17,7 +17,6 @@
 
 package integration.kafka.tier
 
-import java.io.File
 import java.util.Properties
 
 import kafka.log.AbstractLog
@@ -26,6 +25,7 @@ import kafka.server.epoch.{LeaderEpochFileCache, EpochEntry}
 import kafka.server.{KafkaServer, KafkaConfig}
 import kafka.utils.{TestUtils, Logging}
 import kafka.utils.TestUtils._
+import kafka.tier.TierUtils
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer}
 import org.apache.kafka.common.TopicPartition
@@ -81,6 +81,10 @@ class TierEpochStateRevolvingReplicationTest extends ZooKeeperTestHarness with L
     // bounce leader to bump initial epoch
     bounce(leader)
 
+    // since we use RF = 3 on the tier topic,
+    // we must make sure the tier topic is up before we start stopping brokers
+    brokers.foreach(b => TierUtils.awaitTierTopicPartition(b, 0))
+
     awaitISR(tp, 3)
 
     producer.send(new ProducerRecord(topic, 0, null, msg)).get
@@ -127,17 +131,11 @@ class TierEpochStateRevolvingReplicationTest extends ZooKeeperTestHarness with L
     }
   }
 
-  private def waitForLogEndOffsetToMatch(b1: KafkaServer, b2: KafkaServer, partition: Int = 0): Unit = {
+  private def waitForLogEndOffsetToMatch(b1: KafkaServer, b2: KafkaServer, partition: Int): Unit = {
     TestUtils.waitUntilTrue(() => {
       getLog(b1, partition).logEndOffset == getLog(b2, partition).logEndOffset
     }, s"Logs didn't match ${getLog(b1, partition).logEndOffset} vs ${getLog(b2, partition).logEndOffset}. ${b1.config.brokerId} v ${b2.config.brokerId}",
       60000)
-  }
-
-  private def getLogFile(broker: KafkaServer, partition: Int): File = {
-    val log: AbstractLog = getLog(broker, partition)
-    log.flush()
-    log.dir.listFiles.filter(_.getName.endsWith(".log"))(0)
   }
 
   private def getLog(broker: KafkaServer, partition: Int): AbstractLog = {
