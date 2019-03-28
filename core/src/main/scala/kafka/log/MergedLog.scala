@@ -286,14 +286,20 @@ class MergedLog(private[log] val localLog: Log,
       // 2. contains the highwatermark: we only tier messages that have been ack'd by all replicas
       // 3. is the current active segment: we only tier immutable segments (that have been rolled already)
       // 4. the segment end offset is less than the recovery point. This ensures we only upload segments that have been fsync'd.
-
       val upperBoundOffset = Utils.min(firstUnstableOffset.map(_.messageOffset).getOrElse(logEndOffset), highWatermark, recoveryPoint)
-      // The last segment we picked could still contain messages we are not allowed to tier
-      // e.g. entire segment not fsynced, or it is the active segment
-      // dropping the last segment ensures we do not tier these segments
-      localLogSegments(firstUntieredOffset, upperBoundOffset)
-        .dropRight(1)
-    }.getOrElse(Iterable.empty)
+      val candidateSegments = localLogSegments(firstUntieredOffset, upperBoundOffset).toArray
+
+      candidateSegments.lastOption match {
+        case Some(lastSegment) =>
+          nextLocalLogSegment(lastSegment) match {
+            case Some(nextSegment) if (upperBoundOffset >= nextSegment.baseOffset) => candidateSegments   // all segments are tierable
+            case _ => candidateSegments.dropRight(1)   // last segment contains `upperBoundOffset` or this is the active segment, so exclude it
+          }
+
+        case None =>
+          Array.empty[LogSegment]
+      }
+    }.getOrElse(Array.empty[LogSegment]).toIterable
   }
 
   // Attempt to locate "startOffset" in tiered store. If found, returns corresponding metadata about the tiered
@@ -464,6 +470,9 @@ class MergedLog(private[log] val localLog: Log,
                               interBrokerProtocolVersion: ApiVersion): LogAppendInfo = {
     localLog.appendAsLeader(records, leaderEpoch, isFromClient, interBrokerProtocolVersion)
   }
+
+  // Get the segment following the given local segment
+  private def nextLocalLogSegment(segment: LogSegment): Option[LogSegment] = localLog.nextLogSegment(segment)
 
   def latestEpoch: Option[Int] = localLog.latestEpoch
 
