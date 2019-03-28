@@ -48,40 +48,7 @@ public class S3TierObjectStore implements TierObjectStore {
         this.client = client(config);
         this.bucket = config.s3bucket;
         this.enableMultiPartUpload = config.s3EnableMultipartUpload;
-        ensureBucket(false);
-    }
-
-    public void ensureBucket(boolean create) throws TierObjectStoreFatalException {
-        try {
-            client.getBucketAcl(bucket);
-        } catch (final AmazonServiceException aclException) {
-            if (aclException.getStatusCode() == 301) {
-                // Bucket exists, but redirect status indicates region mismatch
-                throw new TierObjectStoreFatalException("S3 bucket region does not match S3 client region", aclException);
-            } else if ("AccessDenied".equals(aclException.getErrorCode())) {
-                // Bucket exists, but client lacks valid credentials
-                throw new TierObjectStoreFatalException(
-                    "Invalid credentials for S3 bucket", aclException);
-            } else if (aclException.getStatusCode() == 404) {
-                // Bucket does not exist
-                if (create) {
-                    // create bucket if it does not exist
-                    try {
-                        client.createBucket(bucket);
-                    } catch (final AmazonClientException createException) {
-                        throw new TierObjectStoreFatalException("Failed to create S3 bucket",
-                                createException);
-                    }
-                } else {
-                    throw new TierObjectStoreFatalException(
-                            String.format("Bucket %s does not exist", bucket), aclException);
-                }
-            } else {
-                // Other getBucketAcl exception
-                throw new TierObjectStoreFatalException("Failed to test S3 bucket access",
-                    aclException);
-            }
-        }
+        expectBucket(bucket, config.s3Region);
     }
 
     @Override
@@ -219,6 +186,19 @@ public class S3TierObjectStore implements TierObjectStore {
         }
 
         return builder.build();
+    }
+
+    private void expectBucket(final String bucket, final String expectedRegion)
+            throws TierObjectStoreFatalException {
+        try {
+            String actualRegion = client.getBucketLocation(bucket);
+            if (!expectedRegion.equals(actualRegion)) {
+                log.warn("Bucket region {} does not match expected region {}",
+                        actualRegion, expectedRegion);
+            }
+        } catch (final AmazonClientException ex) {
+            throw new TierObjectStoreFatalException("Failed to access bucket " + bucket, ex);
+        }
     }
 
     private static class S3TierObjectStoreResponse implements TierObjectStoreResponse {
