@@ -54,6 +54,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -70,6 +71,7 @@ public class TierTopicManager implements Runnable {
     private final String topicName;
     private final TierTopicManagerConfig config;
     private final TierMetadataManager tierMetadataManager;
+    private final Supplier<String> bootstrapServersSupplier;
     private final TierTopicListeners resultListeners = new TierTopicListeners();
     private final TierTopicManagerCommitter committer;
     private final ConcurrentLinkedQueue<MigrationEntry> migrations = new ConcurrentLinkedQueue<>();
@@ -98,10 +100,12 @@ public class TierTopicManager implements Runnable {
     public TierTopicManager(TierTopicManagerConfig config,
                             TierTopicConsumerBuilder consumerBuilder,
                             TierTopicProducerBuilder producerBuilder,
+                            Supplier<String> bootstrapServersSupplier,
                             TierMetadataManager tierMetadataManager) throws IOException {
         this.config = config;
         this.topicName = topicName(config.tierNamespace);
         this.tierMetadataManager = tierMetadataManager;
+        this.bootstrapServersSupplier = bootstrapServersSupplier;
         this.committer = new TierTopicManagerCommitter(config, tierMetadataManager, shutdownInitiated);
         if (config.logDirs.size() > 1) {
             throw new UnsupportedOperationException("Multiple log.dirs detected. Tiered "
@@ -136,10 +140,12 @@ public class TierTopicManager implements Runnable {
      */
     public TierTopicManager(TierMetadataManager tierMetadataManager,
                             TierTopicManagerConfig config,
+                            Supplier<String> bootstrapServersSupplier,
                             Metrics metrics) throws IOException {
         this(config,
                 new ConsumerBuilder(config),
                 new ProducerBuilder(config),
+                bootstrapServersSupplier,
                 tierMetadataManager);
         setupMetrics(metrics);
     }
@@ -267,9 +273,13 @@ public class TierTopicManager implements Runnable {
     public void run() {
         try {
             while (!ready && !shutdown.get()) {
-                if (TierTopicAdmin.ensureTopicCreated(config.bootstrapServers, topicName,
+                String bootstrapServers = this.bootstrapServersSupplier.get();
+                if (bootstrapServers.isEmpty()) {
+                    log.warn("Failed to lookup bootstrap servers. Retrying in {}", TOPIC_CREATION_BACKOFF_MS);
+                    Thread.sleep(TOPIC_CREATION_BACKOFF_MS);
+                } else if (TierTopicAdmin.ensureTopicCreated(bootstrapServers, topicName,
                         config.numPartitions, config.replicationFactor)) {
-                    becomeReady();
+                    becomeReady(bootstrapServers);
                     final int producerPartitions = producer.partitionsFor(topicName).size();
                     if (producerPartitions != config.numPartitions) {
                         log.error("Number of partitions {} on tier topic: {} " +
@@ -362,14 +372,14 @@ public class TierTopicManager implements Runnable {
      * and producer before signalling ready.
      */
     // pubic for testing
-    public void becomeReady() {
-        primaryConsumer = consumerBuilder.setupConsumer(committer, topicName, "primary");
+    public void becomeReady(String boostrapServers) {
+        primaryConsumer = consumerBuilder.setupConsumer(boostrapServers, committer, topicName, "primary");
         primaryConsumer.assign(partitions());
         for (Map.Entry<Integer, Long> entry : committer.positions().entrySet()) {
             primaryConsumer.seek(new TopicPartition(topicName, entry.getKey()), entry.getValue());
         }
 
-        producer = producerBuilder.setupProducer();
+        producer = producerBuilder.setupProducer(boostrapServers);
         partitioner = new TierTopicPartitioner(config.numPartitions);
         ready = true;
     }
@@ -477,7 +487,9 @@ public class TierTopicManager implements Runnable {
                 }
 
                 if (!transitioned.isEmpty()) {
-                    catchUpConsumer = consumerBuilder.setupConsumer(committer, topicName, "catchup");
+                    catchUpConsumer = consumerBuilder.setupConsumer(bootstrapServersSupplier.get(),
+                            committer, topicName,
+                            "catchup");
                     catchUpConsumer.assign(requiredPartitions(transitioned));
 
                     log.info("Seeking consumer to beginning.");

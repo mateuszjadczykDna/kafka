@@ -24,11 +24,6 @@ public class MetadataServiceConfig extends AbstractConfig {
   private static final ConfigDef CONFIG;
   private static final String METADATA_SERVER_PREFIX = "confluent.metadata.server.";
 
-  public static final String SCOPE_PROP = "confluent.metadata.server.scope";
-  private static final String SCOPE_DEFAULT = "";
-  private static final String SCOPE_DOC = "The root scope of the metadata server."
-      + " By default, metadata from all scopes will be processed by this server";
-
   public static final String METADATA_SERVER_LISTENERS_PROP = "confluent.metadata.server.listeners";
   private static final String METADATA_SERVER_LISTENERS_DOC = "Comma-separated list of listener URLs"
       + " for metadata server to listener on if this broker hosts an embedded metadata server plugin."
@@ -49,9 +44,7 @@ public class MetadataServiceConfig extends AbstractConfig {
         .define(METADATA_SERVER_LISTENERS_PROP, Type.LIST,
             Importance.HIGH, METADATA_SERVER_LISTENERS_DOC)
         .define(METADATA_SERVER_ADVERTISED_LISTENERS_PROP, Type.LIST, METADATA_SERVER_ADVERTISED_LISTENERS_DEFAULT,
-            Importance.HIGH, METADATA_SERVER_ADVERTISED_LISTENERS_DOC)
-        .define(SCOPE_PROP, Type.STRING, SCOPE_DEFAULT,
-            Importance.MEDIUM, SCOPE_DOC);
+            Importance.HIGH, METADATA_SERVER_ADVERTISED_LISTENERS_DOC);
   }
 
   public final Scope scope;
@@ -60,11 +53,7 @@ public class MetadataServiceConfig extends AbstractConfig {
   @SuppressWarnings("unchecked")
   public MetadataServiceConfig(Map<?, ?> props) {
     super(CONFIG, props);
-    try {
-      scope = new Scope(getString(SCOPE_PROP));
-    } catch (Exception e) {
-      throw new ConfigException("Invalid scope for metadata server", e);
-    }
+    scope = Scope.ROOT_SCOPE;
 
     Map<String, URL> listeners = urls(getList(METADATA_SERVER_LISTENERS_PROP));
     Map<String, URL> advertisedListeners;

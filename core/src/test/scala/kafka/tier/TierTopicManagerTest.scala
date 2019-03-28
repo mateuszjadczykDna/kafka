@@ -7,6 +7,7 @@ package kafka.tier
 import java.io.File
 import java.util
 import java.util.Properties
+import java.util.function.Supplier
 
 import kafka.log.LogConfig
 import kafka.server.KafkaConfig
@@ -53,13 +54,15 @@ class TierTopicManagerTest {
       val consumerBuilder = new MockConsumerBuilder(tierTopicManagerConfig,
         producerBuilder.producer())
 
+      val bootstrapSupplier = new Supplier[String] { override def get: String = { "" } }
       val tierTopicManager = new TierTopicManager(
         tierTopicManagerConfig,
         consumerBuilder,
         producerBuilder,
+        bootstrapSupplier,
         tierMetadataManager)
 
-      tierTopicManager.becomeReady()
+      tierTopicManager.becomeReady(bootstrapSupplier.get())
 
       val archivedPartition1 = new TopicPartition("archivedTopic", 0)
       addReplica(archivedPartition1)

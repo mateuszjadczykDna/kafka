@@ -9,14 +9,14 @@ import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
-import io.confluent.security.authorizer.AccessRule;
-import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
-import io.confluent.security.authorizer.Resource;
 import io.confluent.security.auth.metadata.MetadataServiceConfig;
 import io.confluent.security.auth.provider.rbac.RbacProvider;
 import io.confluent.security.auth.store.data.UserKey;
 import io.confluent.security.auth.store.data.UserValue;
 import io.confluent.security.auth.store.kafka.KafkaAuthWriter;
+import io.confluent.security.authorizer.AccessRule;
+import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
+import io.confluent.security.authorizer.ResourcePattern;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.security.store.kafka.KafkaStoreConfig;
 import java.util.HashMap;
@@ -82,6 +82,10 @@ public class RbacClusters {
     kafkaCluster.startBrokers(1, serverConfig());
   }
 
+  public String kafkaClusterId() {
+    return kafkaCluster.kafkas().get(0).kafkaServer().clusterId();
+  }
+
   public void produceConsume(String user,
       String topic,
       String consumerGroup,
@@ -101,7 +105,7 @@ public class RbacClusters {
                          String userName,
                          String role,
                          String scope,
-                         Set<Resource> resources) throws Exception {
+                         Set<ResourcePattern> resources) throws Exception {
     KafkaPrincipal principal = new KafkaPrincipal(principalType, userName);
     authWriter.setRoleResources(
         principal,
@@ -191,7 +195,6 @@ public class RbacClusters {
     serverConfig.setProperty(KafkaConfig$.MODULE$.AuthorizerClassNameProp(),
         ConfluentKafkaAuthorizer.class.getName());
     serverConfig.setProperty("super.users", "User:" + config.brokerUser);
-    serverConfig.setProperty(ConfluentAuthorizerConfig.SCOPE_PROP, config.authorizerScope);
     serverConfig.setProperty(ConfluentAuthorizerConfig.ACCESS_RULE_PROVIDERS_PROP, "ACL,RBAC");
     serverConfig.setProperty(ConfluentAuthorizerConfig.GROUP_PROVIDER_PROP, "RBAC");
 
@@ -213,7 +216,6 @@ public class RbacClusters {
       serverConfig.setProperty(ConfluentAuthorizerConfig.ACCESS_RULE_PROVIDERS_PROP, "ACL");
       serverConfig.setProperty("super.users", "User:" + config.brokerUser);
       serverConfig.setProperty(ConfluentAuthorizerConfig.METADATA_PROVIDER_PROP, "RBAC");
-      serverConfig.setProperty(MetadataServiceConfig.SCOPE_PROP, config.metadataServiceScope);
       serverConfig.setProperty(MetadataServiceConfig.METADATA_SERVER_LISTENERS_PROP,
           "http://0.0.0.0:8000");
       serverConfig.setProperty(MetadataServiceConfig.METADATA_SERVER_ADVERTISED_LISTENERS_PROP,
@@ -245,21 +247,9 @@ public class RbacClusters {
 
   public static class Config {
     private final Properties metadataClusterPropOverrides = new Properties();
-    private String authorizerScope;
-    private String metadataServiceScope;
     private String brokerUser;
     private List<String> userNames;
     private boolean enableLdapGroups;
-
-    public Config authorizerScope(String scope) {
-      this.authorizerScope = scope;
-      return this;
-    }
-
-    public Config metadataServiceScope(String scope) {
-      this.metadataServiceScope = scope;
-      return this;
-    }
 
     public Config users(String brokerUser, List<String> userNames) {
       this.brokerUser = brokerUser;

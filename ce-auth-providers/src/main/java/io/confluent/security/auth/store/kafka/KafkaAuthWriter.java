@@ -2,7 +2,8 @@
 
 package io.confluent.security.auth.store.kafka;
 
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
+import io.confluent.security.authorizer.ResourcePatternFilter;
 import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.authorizer.utils.ThreadUtils;
 import io.confluent.security.auth.metadata.AuthWriter;
@@ -176,16 +177,17 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
 
   @Override
   public CompletionStage<Void> addRoleResources(KafkaPrincipal principal,
-                                       String role,
-                                       String scope,
-                                       Collection<Resource> newResources) {
+                                                String role,
+                                                String scope,
+                                                Collection<ResourcePattern> newResources) {
     log.debug("addRoleResources {} {} {} {}", principal, role, scope, newResources);
     validateRoleBindingUpdate(role, scope, newResources);
+    validateRoleResources(newResources);
 
     KafkaPartitionWriter<AuthKey, AuthValue> partitionWriter = partitionWriter(principal, role, scope);
     CachedRecord<AuthKey, AuthValue> existingRecord =
         waitForExistingBinding(partitionWriter, principal, role, scope);
-    Set<Resource> updatedResources = resources(existingRecord);
+    Set<ResourcePattern> updatedResources = resources(existingRecord);
     updatedResources.addAll(newResources);
 
     log.debug("New binding {} {} {} {}", principal, role, scope, updatedResources);
@@ -197,11 +199,12 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
 
   @Override
   public CompletionStage<Void> setRoleResources(KafkaPrincipal principal,
-                                       String role,
-                                       String scope,
-                                       Collection<Resource> resources) {
+                                                String role,
+                                                String scope,
+                                                Collection<ResourcePattern> resources) {
     log.debug("setRoleResources {} {} {} {}", principal, role, scope, resources);
     validateRoleBindingUpdate(role, scope, resources);
+    validateRoleResources(resources);
 
     KafkaPartitionWriter<AuthKey, AuthValue> partitionWriter = partitionWriter(principal, role, scope);
     RoleBindingKey key = new RoleBindingKey(principal, role, scope);
@@ -222,17 +225,17 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
 
   @Override
   public CompletionStage<Void> removeRoleResources(KafkaPrincipal principal,
-                                          String role,
-                                          String scope,
-                                          Collection<Resource> deletedResources) {
+                                                   String role,
+                                                   String scope,
+                                                   Collection<ResourcePatternFilter> deletedResources) {
     log.debug("removeRoleResources {} {} {} {}", principal, role, scope, deletedResources);
     validateRoleBindingUpdate(role, scope, deletedResources);
 
     KafkaPartitionWriter<AuthKey, AuthValue> partitionWriter = partitionWriter(principal, role, scope);
     CachedRecord<AuthKey, AuthValue> existingRecord =
         waitForExistingBinding(partitionWriter, principal, role, scope);
-    Set<Resource> updatedResources = resources(existingRecord);
-    updatedResources.removeAll(deletedResources);
+    Set<ResourcePattern> updatedResources = resources(existingRecord);
+    deletedResources.forEach(pattern -> updatedResources.removeIf(pattern::matches));
     RoleBindingValue value = new RoleBindingValue(updatedResources);
 
     log.debug("New binding {} {} {} {}", principal, role, scope, updatedResources);
@@ -367,15 +370,15 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
       return roleDefinition.accessPolicy();
   }
 
-  private void validateRoleBindingUpdate(String role, String scope, Collection<Resource> resources) {
+  private void validateRoleBindingUpdate(String role, String scope, Collection<?> resources) {
     if (!isMasterWriter.get() || !ready)
       throw new NotMasterWriterException("This node is currently not the master writer for Metadata Service."
-        + " This could be a transient exception during writer election.");
+          + " This could be a transient exception during writer election.");
 
     AccessPolicy accessPolicy = accessPolicy(role);
     if (!resources.isEmpty() && !accessPolicy.hasResourceScope())
       throw new IllegalArgumentException("Resources cannot be specified for role " + role +
-          " with scope " + accessPolicy.scope());
+          " with scope type " + accessPolicy.scopeType());
     else if (resources.isEmpty() && accessPolicy.hasResourceScope())
       log.debug("Role binding update of resource-scope role without any resources");
 
@@ -384,8 +387,19 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
     }
   }
 
-  private Set<Resource> resources(CachedRecord<AuthKey, AuthValue> record) {
-    Set<Resource> resources = new HashSet<>();
+  private void validateRoleResources(Collection<ResourcePattern> resources) {
+    resources.forEach(resource -> {
+      if (resource.name() == null || resource.name().isEmpty())
+        throw new IllegalArgumentException("Resource name for role binding must be non-empty");
+      if (resource.resourceType() == null || resource.resourceType().name() == null || resource.resourceType().name().isEmpty())
+        throw new IllegalArgumentException("Resource type for role binding must be non-empty");
+      if (resource.patternType() == null || !resource.patternType().isSpecific())
+        throw new IllegalArgumentException("Resource pattern type for role binding must be LITERAL or PREFIXED, got " + resource);
+    });
+  }
+
+  private Set<ResourcePattern> resources(CachedRecord<AuthKey, AuthValue> record) {
+    Set<ResourcePattern> resources = new HashSet<>();
     AuthValue value = record.value();
     if (value != null) {
       if (!(value instanceof RoleBindingValue))

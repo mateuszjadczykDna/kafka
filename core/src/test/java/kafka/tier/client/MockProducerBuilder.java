@@ -14,7 +14,7 @@ public class MockProducerBuilder implements TierTopicProducerBuilder {
 
     }
 
-    public MockProducer<byte[], byte[]> setupProducer() {
+    public MockProducer<byte[], byte[]> setupProducer(String bootstrapServers) {
         return producer;
     }
 

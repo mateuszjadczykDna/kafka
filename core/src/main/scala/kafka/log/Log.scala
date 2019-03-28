@@ -1910,6 +1910,13 @@ class Log(@volatile var dir: File,
     Log.logSegments(segments, from, to, lock).values.asScala
   }
 
+  /**
+    * Get the segment immediately following the given one.
+    * @param segment The given segment
+    * @return The following segment, if present
+    */
+  private[log] def nextLogSegment(segment: LogSegment): Option[LogSegment] = Option(segments.higherEntry(segment.baseOffset)).map(_.getValue)
+
   override def toString = "Log(" + dir + ")"
 
   /**

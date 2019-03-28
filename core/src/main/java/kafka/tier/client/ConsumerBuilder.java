@@ -24,11 +24,12 @@ public class ConsumerBuilder implements TierTopicConsumerBuilder {
      * @param topicName the tier topic name.
      * @return a KafkaConsumer
      */
-    public KafkaConsumer<byte[], byte[]> setupConsumer(TierTopicManagerCommitter committer,
+    public KafkaConsumer<byte[], byte[]> setupConsumer(String bootstrapServers,
+                                                       TierTopicManagerCommitter committer,
                                                        String topicName,
                                                        String clientIdSuffix) {
         final Properties properties = new Properties();
-        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, config.bootstrapServers);
+        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         properties.put(ConsumerConfig.CLIENT_ID_CONFIG,
                 clientId(config.clusterId, config.brokerId, clientIdSuffix));

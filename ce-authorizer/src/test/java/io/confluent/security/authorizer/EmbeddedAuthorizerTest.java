@@ -20,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
@@ -31,7 +30,7 @@ public class EmbeddedAuthorizerTest {
   private final EmbeddedAuthorizer authorizer = new EmbeddedAuthorizer();
   private final KafkaPrincipal principal = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "user1");
   private final KafkaPrincipal group = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "groupA");
-  private final Resource topic = new Resource(new ResourceType("Topic"), "testTopic", PatternType.LITERAL);
+  private final Resource topic = new Resource(new ResourceType("Topic"), "testTopic");
   private final String scope = "testScope";
 
   @After

@@ -9,8 +9,8 @@ import static org.junit.Assert.fail;
 
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.security.authorizer.AccessRule;
-import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.RoleBindingKey;
@@ -33,7 +33,7 @@ public class RbacProviderTest {
   private final String clusterA = "testOrg/clusterA";
   private RbacProvider rbacProvider;
   private DefaultAuthCache authCache;
-  private Resource topic = new Resource("Topic", "topicA", PatternType.LITERAL);
+  private Resource topic = new Resource("Topic", "topicA");
 
   @Before
   public void setUp() throws Exception {
@@ -51,16 +51,16 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleBinding(alice, "Super User", clusterA, null);
+    updateRoleBinding(alice, "SuperUser", clusterA, null);
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
 
     // Delete non-existing role
-    deleteRoleBinding(alice, "Super User", "testOrg/clusterB");
+    deleteRoleBinding(alice, "SuperUser", "testOrg/clusterB");
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
 
-    deleteRoleBinding(alice, "Super User", clusterA);
+    deleteRoleBinding(alice, "SuperUser", clusterA);
     assertFalse(rbacProvider.isSuperUser(alice, groups, clusterA));
   }
 
@@ -70,14 +70,14 @@ public class RbacProviderTest {
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
 
-    updateRoleBinding(admin, "Super User", clusterA, Collections.emptySet());
+    updateRoleBinding(admin, "SuperUser", clusterA, Collections.emptySet());
     assertTrue(rbacProvider.isSuperUser(alice, groups, clusterA));
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic));
 
     assertFalse(rbacProvider.isSuperUser(alice, Collections.emptySet(), clusterA));
 
-    deleteRoleBinding(admin, "Super User", clusterA);
+    deleteRoleBinding(admin, "SuperUser", clusterA);
     assertFalse(rbacProvider.isSuperUser(alice, groups, clusterA));
 
   }
@@ -87,7 +87,7 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleBinding(alice, "Cluster Admin", clusterA, Collections.emptySet());
+    updateRoleBinding(alice, "ClusterAdmin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
@@ -96,11 +96,11 @@ public class RbacProviderTest {
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
-    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic.toResourcePattern()));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleBinding(alice, "Cluster Admin", clusterA);
+    deleteRoleBinding(alice, "ClusterAdmin", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
@@ -116,7 +116,7 @@ public class RbacProviderTest {
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
 
-    updateRoleBinding(admin, "Cluster Admin", clusterA, Collections.emptySet());
+    updateRoleBinding(admin, "ClusterAdmin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
@@ -126,7 +126,7 @@ public class RbacProviderTest {
     verifyRules(accessRules(alice, groups, Resource.CLUSTER),
         "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
-    updateRoleBinding(admin, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(admin, "Operator", clusterA, Collections.singleton(topic.toResourcePattern()));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
@@ -142,7 +142,7 @@ public class RbacProviderTest {
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
 
-    deleteRoleBinding(admin, "Cluster Admin", clusterA);
+    deleteRoleBinding(admin, "ClusterAdmin", clusterA);
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic),
         "AlterConfigs", "DescribeConfigs");
@@ -154,35 +154,35 @@ public class RbacProviderTest {
 
   @Test
   public void testLiteralResourceAccessRules() {
-    verifyResourceAccessRules(new Resource("Topic", topic.name(), PatternType.LITERAL));
+    verifyResourceAccessRules(new ResourcePattern("Topic", topic.name(), PatternType.LITERAL));
   }
 
   @Test
   public void testWildcardResourceAccessRules() {
-    verifyResourceAccessRules(new Resource("Topic", "*", PatternType.LITERAL));
+    verifyResourceAccessRules(new ResourcePattern("Topic", "*", PatternType.LITERAL));
   }
 
   @Test
   public void testPrefixedResourceAccessRules() {
-    verifyResourceAccessRules(new Resource("Topic", "top", PatternType.PREFIXED));
+    verifyResourceAccessRules(new ResourcePattern("Topic", "top", PatternType.PREFIXED));
   }
 
   @Test
   public void testSingleCharPrefixedResourceAccessRules() {
-    verifyResourceAccessRules(new Resource("Topic", "t", PatternType.PREFIXED));
+    verifyResourceAccessRules(new ResourcePattern("Topic", "t", PatternType.PREFIXED));
   }
 
   @Test
   public void testFullNamePrefixedResourceAccessRules() {
-    verifyResourceAccessRules(new Resource("Topic", "topic", PatternType.PREFIXED));
+    verifyResourceAccessRules(new ResourcePattern("Topic", "topic", PatternType.PREFIXED));
   }
 
-  private void verifyResourceAccessRules(Resource roleResource) {
+  private void verifyResourceAccessRules(ResourcePattern roleResource) {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     KafkaPrincipal admin = new KafkaPrincipal(AccessRule.GROUP_PRINCIPAL_TYPE, "admin");
     Set<KafkaPrincipal> groups = Collections.singleton(admin);
     Set<KafkaPrincipal> emptyGroups = Collections.emptySet();
-    Set<Resource> resources = roleResource == null ?
+    Set<ResourcePattern> resources = roleResource == null ?
         Collections.emptySet() : Collections.singleton(roleResource);
 
     updateRoleBinding(alice, "Reader", clusterA, resources);
@@ -210,12 +210,12 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic.toResourcePattern()));
     verifyRules(accessRules(alice, groups, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
 
     String clusterB = "testOrg/clusterB";
-    updateRoleBinding(alice, "Cluster Admin", clusterB, Collections.emptySet());
+    updateRoleBinding(alice, "ClusterAdmin", clusterB, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER));
     verifyRules(accessRules(alice, groups, topic), "AlterConfigs", "DescribeConfigs");
 
@@ -228,12 +228,12 @@ public class RbacProviderTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic));
+    updateRoleBinding(alice, "Operator", clusterA, Collections.singleton(topic.toResourcePattern()));
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, Resource.CLUSTER));
 
     String clusterB = "testOrg/clusterB";
-    updateRoleBinding(alice, "Cluster Admin", clusterB, Collections.emptySet());
+    updateRoleBinding(alice, "ClusterAdmin", clusterB, Collections.emptySet());
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, Resource.CLUSTER));
     verifyRules(rbacProvider.accessRules(alice, groups, clusterA, topic), "AlterConfigs", "DescribeConfigs");
     verifyRules(rbacProvider.accessRules(alice, groups, clusterB, Resource.CLUSTER), "AlterConfigs", "DescribeConfigs");
@@ -257,11 +257,11 @@ public class RbacProviderTest {
         KafkaTestUtils.setFinalField(rbacProvider, RbacProvider.class, "authCache", authCache);
       }
     };
-    Map<String, Object> configs = Collections.singletonMap(ConfluentAuthorizerConfig.SCOPE_PROP, scope);
-    rbacProvider.configure(configs);
+    rbacProvider.configureScope(scope);
+    rbacProvider.configure(Collections.emptyMap());
   }
 
-  private void updateRoleBinding(KafkaPrincipal principal, String role, String scope, Set<Resource> resources) {
+  private void updateRoleBinding(KafkaPrincipal principal, String role, String scope, Set<ResourcePattern> resources) {
     RoleBindingKey key = new RoleBindingKey(principal, role, scope);
     RoleBindingValue value = new RoleBindingValue(resources == null ? Collections.emptySet() : resources);
     authCache.put(key, value);

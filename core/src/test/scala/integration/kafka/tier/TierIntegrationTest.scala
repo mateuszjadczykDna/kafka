@@ -7,6 +7,7 @@ package kafka.tier
 import java.io.File
 import java.nio.ByteBuffer
 import java.util
+import java.util.function.Supplier
 import java.util.{Collections, Optional}
 
 import kafka.log._
@@ -426,12 +427,14 @@ class TierIntegrationTest {
   private def setupTierTopicManager(tierMetadataManager: TierMetadataManager): (TierTopicManager, MockConsumerBuilder) = {
     val producerBuilder = new MockProducerBuilder()
     val consumerBuilder = new MockConsumerBuilder(tierTopicManagerConfig, producerBuilder.producer())
+    val bootstrapSupplier = new Supplier[String] { override def get: String = { "" } }
     val tierTopicManager = new TierTopicManager(
       tierTopicManagerConfig,
       consumerBuilder,
       producerBuilder,
+      bootstrapSupplier,
       tierMetadataManager)
-    tierTopicManager.becomeReady()
+    tierTopicManager.becomeReady(bootstrapSupplier.get())
     (tierTopicManager, consumerBuilder)
   }
 

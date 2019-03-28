@@ -2,7 +2,7 @@
 
 package io.confluent.security.test.utils;
 
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.RoleBindingKey;
 import io.confluent.security.auth.store.data.RoleBindingValue;
@@ -31,7 +31,7 @@ public class RbacTestUtils {
                                        KafkaPrincipal principal,
                                        String role,
                                        String scope,
-                                       Set<Resource> resources) {
+                                       Set<ResourcePattern> resources) {
     RoleBindingKey key = new RoleBindingKey(principal, role, scope);
     RoleBindingValue value = new RoleBindingValue(resources == null ? Collections.emptySet() : resources);
     authCache.put(key, value);

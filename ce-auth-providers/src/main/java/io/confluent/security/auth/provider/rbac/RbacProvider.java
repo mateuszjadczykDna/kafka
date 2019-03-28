@@ -22,6 +22,7 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
@@ -36,23 +37,31 @@ import org.slf4j.LoggerFactory;
 public class RbacProvider implements AccessRuleProvider, GroupProvider, MetadataProvider {
   private static final Logger log = LoggerFactory.getLogger(RbacProvider.class);
 
+  private Scope authScope;
   private AuthStore authStore;
   private AuthCache authCache;
 
   private MetadataServer metadataServer;
   private Collection<URL> metadataServerUrls;
 
+  public RbacProvider() {
+    this.authScope = Scope.ROOT_SCOPE;
+  }
+
   @Override
-  public void configure(Map<String, ?> configs) {
-    String scope = (String) configs.get(ConfluentAuthorizerConfig.SCOPE_PROP);
-    Scope authScope;
+  public void configureScope(String scope) {
+    if (scope == null || scope.isEmpty())
+      throw new ConfigException("Invalid scope for RBAC provider: " + scope);
     try {
       authScope = new Scope(scope);
     } catch (Exception e) {
       throw new ConfigException("Invalid scope for RBAC provider: " + scope, e);
     }
+  }
 
-    Scope authStoreScope = authScope;
+  @Override
+  public void configure(Map<String, ?> configs) {
+    Scope authStoreScope = Objects.requireNonNull(authScope, "authScope");
     if (providerName().equals(configs.get(ConfluentAuthorizerConfig.METADATA_PROVIDER_PROP))) {
       MetadataServiceConfig metadataServiceConfig = new MetadataServiceConfig(configs);
       metadataServer = createMetadataServer(metadataServiceConfig);

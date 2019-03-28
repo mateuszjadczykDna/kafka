@@ -24,17 +24,17 @@ public class AccessPolicy {
 
   public static final String CLUSTER_SCOPE = "Cluster";
   public static final String RESOURCE_SCOPE = "Resource";
-  static final Set<String> SCOPES = Utils.mkSet(CLUSTER_SCOPE, RESOURCE_SCOPE);
+  static final Set<String> SCOPE_TYPES = Utils.mkSet(CLUSTER_SCOPE, RESOURCE_SCOPE);
 
-  private final String scope;
+  private final String scopeType;
   private final boolean isSuperUser;
   private final Map<ResourceType, Collection<Operation>> allowedOperations;
 
   @JsonCreator
-  public AccessPolicy(@JsonProperty("scope") String scope,
+  public AccessPolicy(@JsonProperty("scopeType") String scopeType,
                       @JsonProperty("isSuperUser") boolean isSuperUser,
                       @JsonProperty("allowedOperations") Collection<ResourceOperations> allowedOperations) {
-    this.scope = scope;
+    this.scopeType = scopeType;
     this.isSuperUser = isSuperUser;
     if (isSuperUser) {
       this.allowedOperations = Collections.singletonMap(ResourceType.ALL, Collections.singleton(Operation.ALL));
@@ -46,8 +46,8 @@ public class AccessPolicy {
   }
 
   @JsonProperty
-  public String scope() {
-    return scope;
+  public String scopeType() {
+    return scopeType;
   }
 
   @JsonProperty
@@ -70,7 +70,7 @@ public class AccessPolicy {
 
   @JsonIgnore
   public boolean hasResourceScope() {
-    return AccessPolicy.RESOURCE_SCOPE.equalsIgnoreCase(scope);
+    return AccessPolicy.RESOURCE_SCOPE.equalsIgnoreCase(scopeType);
   }
 
   @Override
@@ -84,14 +84,14 @@ public class AccessPolicy {
 
     AccessPolicy that = (AccessPolicy) o;
 
-    return Objects.equals(this.scope, that.scope) &&
+    return Objects.equals(this.scopeType, that.scopeType) &&
         Objects.equals(this.isSuperUser, that.isSuperUser) &&
         Objects.equals(this.allowedOperations, that.allowedOperations);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(scope, isSuperUser, allowedOperations);
+    return Objects.hash(scopeType, isSuperUser, allowedOperations);
   }
 
   public static class ResourceOperations {

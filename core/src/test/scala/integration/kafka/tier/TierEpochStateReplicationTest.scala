@@ -17,23 +17,21 @@
 
 package integration.kafka.tier
 
-import java.io.File
 import java.util.Properties
 
 import kafka.log.AbstractLog
 import kafka.server.KafkaConfig._
 import kafka.server.epoch.{LeaderEpochFileCache, EpochEntry}
 import kafka.server.{KafkaServer, KafkaConfig}
+import kafka.tier.TierUtils
 import kafka.utils.{TestUtils, Logging}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
-import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.{TopicConfig, ConfluentTopicConfig}
 import org.apache.kafka.common.record.RecordBatch
-import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.junit.Assert.{assertTrue, assertEquals}
+import org.junit.Assert.assertEquals
 import org.junit.{Before, After, Test}
 
 import scala.collection.JavaConverters._
@@ -47,7 +45,6 @@ class TierEpochStateReplicationTest extends ZooKeeperTestHarness with Logging {
   val msgBigger = new Array[Byte](10000)
   var brokers: Seq[KafkaServer] = null
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
-  var consumer: KafkaConsumer[Array[Byte], Array[Byte]] = null
 
   @Before
   override def setUp() {
@@ -71,6 +68,11 @@ class TierEpochStateReplicationTest extends ZooKeeperTestHarness with Logging {
     properties.put(TopicConfig.SEGMENT_BYTES_CONFIG, "10000")
     properties.put(TopicConfig.RETENTION_BYTES_CONFIG, "-1")
 
+    // since we use RF = 2 on the tier topic,
+    // we must make sure the tier topic is up before we start stopping brokers
+    // otherwise no tiering will take place
+    // Tier topic partition 0 will lie on all brokers due to RF.
+    brokers.foreach(b => TierUtils.awaitTierTopicPartition(b, 0))
 
     //A single partition topic with 2 replicas
     TestUtils.createTopic(zkClient, topic, Map(0 -> Seq(100, 101)), brokers, properties)
@@ -128,23 +130,6 @@ class TierEpochStateReplicationTest extends ZooKeeperTestHarness with Logging {
     // even though we only replicated a portion from the leader
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1), EpochEntry(2, 2)), epochCache(leader).epochEntries)
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1), EpochEntry(2, 2)), epochCache(follower).epochEntries)
-  }
-
-  private def startConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
-    val consumerConfig = new Properties()
-    consumerConfig.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, getBrokerListStrFromServers(brokers))
-    consumerConfig.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, String.valueOf(getLogFile(brokers(1), 0).length() * 2))
-    consumerConfig.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, String.valueOf(getLogFile(brokers(1), 0).length() * 2))
-    consumer = new KafkaConsumer(consumerConfig, new ByteArrayDeserializer, new ByteArrayDeserializer)
-    consumer.assign(List(new TopicPartition(topic, 0)).asJava)
-    consumer.seek(new TopicPartition(topic, 0), 0)
-    consumer
-  }
-
-  private def getLogFile(broker: KafkaServer, partition: Int): File = {
-    val log: AbstractLog = getLog(broker, partition)
-    log.flush()
-    log.dir.listFiles.filter(_.getName.endsWith(".log"))(0)
   }
 
   private def getLog(broker: KafkaServer, partition: Int): AbstractLog = {

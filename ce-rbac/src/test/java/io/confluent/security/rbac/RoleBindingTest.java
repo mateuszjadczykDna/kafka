@@ -2,7 +2,7 @@
 
 package io.confluent.security.rbac;
 
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import io.confluent.security.authorizer.utils.JsonMapper;
 import io.confluent.security.authorizer.utils.JsonTestUtils;
 import java.util.Collection;
@@ -17,9 +17,9 @@ public class RoleBindingTest {
   @Test
   public void testAssignment() throws Exception {
     RoleBinding alice = roleBinding(
-        "{ \"principal\": \"User:Alice\", \"role\": \"Cluster Admin\", \"scope\": \"ClusterA\" }");
+        "{ \"principal\": \"User:Alice\", \"role\": \"ClusterAdmin\", \"scope\": \"ClusterA\" }");
     assertEquals(new KafkaPrincipal("User", "Alice"), alice.principal());
-    assertEquals("Cluster Admin", alice.role());
+    assertEquals("ClusterAdmin", alice.role());
     assertEquals("ClusterA", alice.scope());
     assertTrue(alice.resources().isEmpty());
     verifyEquals(alice, roleBinding(JsonMapper.objectMapper().writeValueAsString(alice)));
@@ -32,7 +32,7 @@ public class RoleBindingTest {
     assertEquals(new KafkaPrincipal("User", "Bob"), bob.principal());
     assertEquals("Developer", bob.role());
     assertEquals("ClusterB", bob.scope());
-    Collection<Resource> resources = bob.resources();
+    Collection<ResourcePattern> resources = bob.resources();
     assertEquals(3, resources.size());
     verifyEquals(bob, roleBinding(JsonMapper.objectMapper().writeValueAsString(bob)));
   }

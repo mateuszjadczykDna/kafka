@@ -4,16 +4,16 @@
 {
   "roles" : [
     {
-      "name" : "Super User",
+      "name" : "SuperUser",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "isSuperUser" : "true"
       }
     },
     {
-      "name" : "User Admin",
+      "name" : "UserAdmin",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "isSuperUser" : "false",
         "allowedOperations" : [
           {
@@ -28,9 +28,9 @@
       }
     },
     {
-      "name" : "Cluster Admin",
+      "name" : "ClusterAdmin",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "isSuperUser" : "false",
         "allowedOperations" : [
           {
@@ -47,25 +47,25 @@
     {
       "name" : "Operator",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "isSuperUser" : "false",
         "allowedOperations" : [
         ]
       }
     },
     {
-      "name" : "Security Admin",
+      "name" : "SecurityAdmin",
       "policy" : {
-        "scope" : "Cluster",
+        "scopeType" : "Cluster",
         "isSuperUser" : "false",
         "allowedOperations" : [
         ]
       }
     },
     {
-      "name" : "Resource Owner",
+      "name" : "ResourceOwner",
       "policy" : {
-        "scope" : "Resource",
+        "scopeType" : "Resource",
         "isSuperUser" : "false",
         "allowedOperations" : [
           {
@@ -90,7 +90,7 @@
     {
       "name" : "Developer",
       "policy" : {
-        "scope" : "Resource",
+        "scopeType" : "Resource",
         "isSuperUser" : "false",
         "allowedOperations" : [
           {

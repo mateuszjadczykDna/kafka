@@ -2,7 +2,8 @@
 
 package io.confluent.security.auth.metadata;
 
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
+import io.confluent.security.authorizer.ResourcePatternFilter;
 import java.util.Collection;
 import java.util.concurrent.CompletionStage;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -40,7 +41,7 @@ public interface AuthWriter {
    * @param resources Resources to add to role binding
    * @return a stage that is completed when update completes
    */
-  CompletionStage<Void> addRoleResources(KafkaPrincipal principal, String role, String scope, Collection<Resource> resources);
+  CompletionStage<Void> addRoleResources(KafkaPrincipal principal, String role, String scope, Collection<ResourcePattern> resources);
 
   /**
    * Removes a role binding. If the specified role has resource-level scope, role
@@ -60,10 +61,10 @@ public interface AuthWriter {
    * @param principal User or group principal from which role is removed
    * @param role Name of role
    * @param scope Scope at which role is assigned
-   * @param resources Resources being removed for the role binding
+   * @param resources Filter for resources being removed for the role binding
    * @return a stage that is completed when update completes
    */
-  CompletionStage<Void> removeRoleResources(KafkaPrincipal principal, String role, String scope, Collection<Resource> resources);
+  CompletionStage<Void> removeRoleResources(KafkaPrincipal principal, String role, String scope, Collection<ResourcePatternFilter> resources);
 
   /**
    * Sets resources for an existing role binding. If the role doesn't exist, a new role
@@ -75,6 +76,6 @@ public interface AuthWriter {
    * @param resources Updated collection of resources for the role binding
    * @return a stage that is completed when update completes
    */
-  CompletionStage<Void> setRoleResources(KafkaPrincipal principal, String role, String scope, Collection<Resource> resources);
+  CompletionStage<Void> setRoleResources(KafkaPrincipal principal, String role, String scope, Collection<ResourcePattern> resources);
 
 }

@@ -9,7 +9,6 @@ import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import io.confluent.security.authorizer.AccessRule;
-import io.confluent.security.authorizer.Resource;
 import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
 import io.confluent.security.test.utils.LdapTestUtils;
 import io.confluent.security.test.utils.RbacClusters;
@@ -34,7 +33,6 @@ import org.junit.Test;
 
 public class ConfluentKafkaAuthorizerTest {
 
-  private static final String CLUSTER = "confluent/core/testCluster";
   private static final String BROKER_USER = "kafka";
   private static final String DEVELOPER1 = "app1-developer";
   private static final String RESOURCE_OWNER1 = "resourceOwner1";
@@ -47,6 +45,7 @@ public class ConfluentKafkaAuthorizerTest {
 
   private RbacClusters.Config rbacConfig;
   private RbacClusters rbacClusters;
+  private String clusterId;
 
   @Before
   public void setUp() throws Throwable {
@@ -56,8 +55,6 @@ public class ConfluentKafkaAuthorizerTest {
         RESOURCE_OWNER1
     );
     rbacConfig = new RbacClusters.Config()
-        .authorizerScope(CLUSTER)
-        .metadataServiceScope("confluent")
         .users(BROKER_USER, otherUsers);
   }
 
@@ -130,6 +127,7 @@ public class ConfluentKafkaAuthorizerTest {
   }
 
   private void initializeRbacClusters() throws Exception {
+    this.clusterId = rbacClusters.kafkaClusterId();
     rbacClusters.kafkaCluster.createTopic(APP1_TOPIC, 2, 1);
     rbacClusters.kafkaCluster.createTopic(APP2_TOPIC, 2, 1);
 
@@ -137,13 +135,13 @@ public class ConfluentKafkaAuthorizerTest {
   }
 
   private void initializeRoles() throws Exception {
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER1, "Resource Owner", CLUSTER,
-        Utils.mkSet(new Resource("Topic", "*", PatternType.LITERAL),
-            new Resource("Group", "*", PatternType.LITERAL)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER1, "ResourceOwner", clusterId,
+        Utils.mkSet(new io.confluent.security.authorizer.ResourcePattern("Topic", "*", PatternType.LITERAL),
+            new io.confluent.security.authorizer.ResourcePattern("Group", "*", PatternType.LITERAL)));
 
-    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", CLUSTER,
-        Utils.mkSet(new Resource("Topic", "app2", PatternType.PREFIXED),
-            new Resource("Group", "app2", PatternType.PREFIXED)));
+    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", clusterId,
+        Utils.mkSet(new io.confluent.security.authorizer.ResourcePattern("Topic", "app2", PatternType.PREFIXED),
+            new io.confluent.security.authorizer.ResourcePattern("Group", "app2", PatternType.PREFIXED)));
 
     rbacClusters.updateUserGroup(DEVELOPER1, DEVELOPER_GROUP);
     rbacClusters.waitUntilAccessAllowed(RESOURCE_OWNER1, APP1_TOPIC);

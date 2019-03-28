@@ -19,6 +19,7 @@ import java.util.Objects;
  */
 public class Scope {
 
+  public static final Scope ROOT_SCOPE = new Scope("");
   public static final String SCOPE_SEPARATOR = "/";
 
   private final String name;

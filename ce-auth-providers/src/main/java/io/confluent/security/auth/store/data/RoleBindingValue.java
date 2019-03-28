@@ -5,7 +5,7 @@ package io.confluent.security.auth.store.data;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.confluent.security.authorizer.Resource;
+import io.confluent.security.authorizer.ResourcePattern;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -14,15 +14,15 @@ import java.util.Set;
 
 public class RoleBindingValue extends AuthValue {
 
-  private final Set<Resource> resources;
+  private final Set<ResourcePattern> resources;
 
   @JsonCreator
-  public RoleBindingValue(@JsonProperty("resources") Collection<Resource> resources) {
+  public RoleBindingValue(@JsonProperty("resources") Collection<ResourcePattern> resources) {
     this.resources = resources == null ? Collections.emptySet() : new HashSet<>(resources);
   }
 
   @JsonProperty
-  public Collection<Resource> resources() {
+  public Collection<ResourcePattern> resources() {
     return resources;
   }
 

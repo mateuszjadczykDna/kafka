@@ -5,7 +5,6 @@ package io.confluent.security.authorizer;
 import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.apache.kafka.common.resource.PatternType;
 
 /**
  * Represents an authorizable action, which is an operation performed on a resource.
@@ -48,7 +47,7 @@ public class Action {
   }
 
   public Resource resource() {
-    return new Resource(resourceType, resourceName, PatternType.LITERAL);
+    return new Resource(resourceType, resourceName);
   }
 
   @Override

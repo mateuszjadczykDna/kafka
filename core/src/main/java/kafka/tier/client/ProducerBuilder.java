@@ -21,9 +21,9 @@ public class ProducerBuilder implements TierTopicProducerBuilder {
      * Setup the internal kafka producer for the tier topic manager.
      * @return a KafkaProducer
      */
-    public KafkaProducer<byte[], byte[]> setupProducer() {
+    public KafkaProducer<byte[], byte[]> setupProducer(String bootstrapServers) {
         final Properties properties = new Properties();
-        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, config.bootstrapServers);
+        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
                 "org.apache.kafka.common.serialization.ByteArraySerializer");
         properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,

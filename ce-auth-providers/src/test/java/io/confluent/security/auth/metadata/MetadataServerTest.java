@@ -25,8 +25,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
@@ -39,7 +37,7 @@ public class MetadataServerTest {
   private EmbeddedAuthorizer authorizer;
   private RbacProvider metadataRbacProvider;
   private MockMetadataServer metadataServer;
-  private Resource topic = new Resource("Topic", "topicA", PatternType.LITERAL);
+  private Resource topic = new Resource("Topic", "topicA");
 
   @After
   public void tearDown() {
@@ -49,19 +47,7 @@ public class MetadataServerTest {
 
   @Test
   public void testMetadataServer() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, clusterA));
-    verifyMetadataServer(clusterA, "testOrg/clusterB");
-  }
-
-  @Test
-  public void testMetadataServerWithDifferentScopeFromBroker() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, "testOrg"));
-    verifyMetadataServer("testOrg", "otherOrg");
-  }
-
-  @Test
-  public void testMetadataServerEmptyScope() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, ""));
+    createEmbeddedAuthorizer(Collections.emptyMap());
     verifyMetadataServer("", null);
   }
 
@@ -69,7 +55,7 @@ public class MetadataServerTest {
   public void testMetadataServerOnBrokerWithoutRbacAccessControl() {
     createEmbeddedAuthorizer(Collections.singletonMap(
         ConfluentAuthorizerConfig.ACCESS_RULE_PROVIDERS_PROP, "SUPER_USERS"));
-    verifyMetadataServer(clusterA, "otherOrg");
+    verifyMetadataServer("", "otherOrg");
   }
 
   private void verifyMetadataServer(String cacheScope, String invalidScope) {
@@ -87,7 +73,7 @@ public class MetadataServerTest {
     KafkaPrincipal alice = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "Alice");
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
-    RbacTestUtils.updateRoleBinding(metadataAuthCache, alice, "Cluster Admin", clusterA, Collections.emptySet());
+    RbacTestUtils.updateRoleBinding(metadataAuthCache, alice, "ClusterAdmin", clusterA, Collections.emptySet());
     verifyRules(accessRules(alice, groups, Resource.CLUSTER), "Alter", "Describe", "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
 
@@ -101,7 +87,7 @@ public class MetadataServerTest {
 
     if (invalidScope != null) {
       Action describeAnotherScope = new Action(invalidScope, ResourceType.CLUSTER, "kafka-cluster", new Operation("AlterConfigs"));
-      assertEquals(Collections.singletonList(AuthorizeResult.UNKNOWN_SCOPE),
+      assertEquals(Collections.singletonList(AuthorizeResult.DENIED),
           metadataServer.embeddedAuthorizer.authorize(alice, "localhost", Collections.singletonList(describeAnotherScope)));
     }
   }
@@ -124,32 +110,15 @@ public class MetadataServerTest {
     assertEquals("http://localhost:8090", metadataServer.configs.get("advertised.listeners"));
   }
 
-  @Test
-  public void testEmptyScope() {
-    // Empty scope should work for metadata server
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, ""));
-  }
-
-  @Test(expected = ConfigException.class)
-  public void testInvalidScope() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, "/"));
-  }
-
-  @Test(expected = ConfigException.class)
-  public void testMismatchedScopes() {
-    createEmbeddedAuthorizer(Collections.singletonMap(MetadataServiceConfig.SCOPE_PROP, "anotherOrg"));
-  }
-
   private void createEmbeddedAuthorizer(Map<String, Object> configOverrides) {
     authorizer = new EmbeddedAuthorizer();
     Map<String, Object> configs = new HashMap<>();
-    configs.put(ConfluentAuthorizerConfig.SCOPE_PROP, clusterA);
     configs.put(ConfluentAuthorizerConfig.ACCESS_RULE_PROVIDERS_PROP, "MOCK_RBAC");
     configs.put(ConfluentAuthorizerConfig.METADATA_PROVIDER_PROP, "MOCK_RBAC");
-    configs.put(MetadataServiceConfig.SCOPE_PROP, clusterA);
     configs.put(MetadataServiceConfig.METADATA_SERVER_LISTENERS_PROP, "http://localhost:8090");
     configs.put("listeners", "PLAINTEXT://localhost:9092");
     configs.putAll(configOverrides);
+    authorizer.configureScope(clusterA);
     authorizer.configure(configs);
     authorizer.start();
     try {

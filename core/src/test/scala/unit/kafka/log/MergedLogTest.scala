@@ -64,7 +64,6 @@ class MergedLogTest {
     log.close()
   }
 
-
   @Test
   def testCannotUploadPastRecoveryPoint(): Unit = {
     val noopScheduler = new Scheduler { // noopScheduler allows us to roll segments without scheduling a background flush
@@ -89,15 +88,38 @@ class MergedLogTest {
     log.onHighWatermarkIncremented(log.localLog.activeSegment.readNextOffset - 1)
     log.flush(4) // flushes up to 3, because the logic is flushing up to the provided offset - 1
 
-    assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment - 1 segment",
-      Vector(0, 1, 2),
+    assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment segment",
+      Vector(0, 1, 2, 3),
       log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector)
 
     log.flush(8) // flushes up to 7, because the logic is flushing up to the provided offset - 1
 
-    assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment - 1 segment",
-      Vector(0, 1, 2, 3, 4, 5, 6),
+    assertEquals("Expected tierable segments to include everything up to the segment before the last flushed segment segment",
+      Vector(0, 1, 2, 3, 4, 5, 6, 7),
       log.tierableLogSegments.map(ls => ls.readNextOffset - 1).toVector)
+  }
+
+  @Test
+  def testCannotUploadPastHighwatermark: Unit = {
+    val logConfig = LogTest.createLogConfig(segmentBytes = Int.MaxValue, tierEnable = true, tierLocalHotsetBytes = 1)
+    val log = createMergedLog(logConfig)
+    val numSegments = 5
+
+    for (segment <- 0 until numSegments) {
+      for (message <- 0 until messagesPerSegment)
+        log.appendAsLeader(createRecords(segment, message), leaderEpoch = 0)
+      log.roll()
+    }
+
+    // Wait until recovery point has advanced so that tierable segments are bounded by the hwm only
+    TestUtils.waitUntilTrue(() => log.recoveryPoint == log.logEndOffset, "Timed out waiting for recovery point to advance")
+
+    var expectedTierableSegments = 0
+    log.localLogSegments.foreach { segment =>
+      log.onHighWatermarkIncremented(segment.baseOffset + 1)
+      assertEquals(expectedTierableSegments, log.tierableLogSegments.size)
+      expectedTierableSegments += 1
+    }
   }
 
   @Test
