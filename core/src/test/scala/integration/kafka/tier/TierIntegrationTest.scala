@@ -5,11 +5,13 @@
 package kafka.tier
 
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util
 import java.util.function.Supplier
 import java.util.{Collections, Optional}
 
+import javax.management.{MBeanServer, ObjectName}
 import kafka.log._
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel, ReplicaManager}
 import kafka.tier.archiver.TierArchiverState.{BeforeUpload, TierArchiverStateComparator}
@@ -55,6 +57,8 @@ class TierIntegrationTest {
   var tierTopicManager: TierTopicManager = _
   var consumerBuilder: MockConsumerBuilder = _
   val maxWaitTimeMs = 2000L
+
+  val mBeanServer: MBeanServer = ManagementFactory.getPlatformMBeanServer
 
   def setup(numLogs: Integer = 2, maxConcurrentUploads: Integer = 10): Unit = {
     val tierObjectStore = new MockInMemoryTierObjectStore(new TierObjectStoreConfig())
@@ -144,16 +148,12 @@ class TierIntegrationTest {
   def testArchiverUploadAndMaterialize(): Unit = {
     setup(numLogs = 10)
     val numBatches = 6
-
-    // Create replica manager and test logs
-
     val leaderEpoch = 1
 
     // Write batches
     logs.foreach { log => writeRecordBatches(log, leaderEpoch, 0L, numBatches, 4) }
 
     waitForImmigration(logs, leaderEpoch, tierArchiver, tierTopicManager, consumerBuilder)
-
 
     logs.foreach { log =>
       assertEquals(s"topic manager should materialize entry for ${log.topicPartition}",
@@ -341,6 +341,55 @@ class TierIntegrationTest {
     }
   }
 
+  @Test
+  def testArchiverTotalLag(): Unit = {
+    val numLogs = 5
+    val batches = 6
+    val recordsPerBatch = 4
+    val leaderEpoch = 1
+
+    setup(numLogs)
+
+    val bean = tierArchiver.metricName("TotalLag", Map.empty).getMBeanName
+    def totalLag: Long = mBeanServer
+      .getAttribute(new ObjectName(bean), "Value")
+      .asInstanceOf[Long]
+
+    def awaitMaterializeBatchAndAssertLag(archivedBatches: Int): Unit = {
+      archiveAndMaterializeUntilTrue(() => {
+        logs.forall { log =>
+          tierTopicManager.partitionState(log.topicPartition).numSegments() == archivedBatches
+        }
+      }, s"Should materialize segments for batch $archivedBatches", tierArchiver, tierTopicManager, consumerBuilder)
+
+      // one more tick for the transition from AfterUpload to BeforeUpload
+      tierArchiver.processTransitions()
+
+      // -1 because the final segment will not be archived
+      assertEquals(numLogs * (batches - archivedBatches - 1) * recordsPerBatch, totalLag)
+    }
+
+    // when tracking no partitions, lag should be zero
+    assertEquals(0, totalLag)
+
+    // immigrate all test logs
+    waitForImmigration(logs, leaderEpoch, tierArchiver, tierTopicManager, consumerBuilder)
+
+    assertEquals(0, totalLag)
+
+    // write batches
+    logs.foreach { log =>
+      writeRecordBatches(log, leaderEpoch, 0L, batches, recordsPerBatch)
+    }
+
+    // assert initial lag based on the sum of expected log end offsets
+    // minus the last segment
+    assertEquals(numLogs * (batches - 1) * recordsPerBatch, totalLag)
+
+    // assert lag after each batch is materialized by the archiver
+    (1 until batches).foreach(awaitMaterializeBatchAndAssertLag)
+  }
+
   /**
     *  For a sequence of logs, do the following:
     *  1. Ensure the archiver is the leader for each log TopicPartition.
@@ -355,7 +404,6 @@ class TierIntegrationTest {
                                  consumerBuilder: MockConsumerBuilder): Unit = {
     // Immigrate all test logs
     logs.foreach { log =>
-
       tierMetadataManager.becomeLeader(log.topicPartition, leaderEpoch)
     }
 

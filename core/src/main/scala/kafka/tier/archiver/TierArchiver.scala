@@ -7,6 +7,8 @@ package kafka.tier.archiver
 import java.util.concurrent._
 import java.util.function.Predicate
 
+import com.yammer.metrics.core.Gauge
+import kafka.metrics.KafkaMetricsGroup
 import kafka.server.ReplicaManager
 import kafka.tier.archiver.TierArchiverState.{BeforeLeader, TierArchiverStateComparator}
 import kafka.tier.exceptions.{TierArchiverFatalException, TierArchiverFencedException}
@@ -43,14 +45,32 @@ class TierArchiver(config: TierArchiverConfig,
                    tierMetadataManager: TierMetadataManager,
                    tierTopicManager: TierTopicManager,
                    tierObjectStore: TierObjectStore,
-                   time: Time = Time.SYSTEM) extends ShutdownableThread(name = "tier-archiver") {
+                   time: Time = Time.SYSTEM) extends ShutdownableThread(name = "tier-archiver") with KafkaMetricsGroup {
   private[tier] val blockingTaskExecutor = Executors.newScheduledThreadPool(config.maxConcurrentUploads)
   private[tier] val immigrationEmigrationQueue = new ConcurrentLinkedQueue[ImmigratingOrEmigratingTopicPartitions]()
 
   // consists of states between status transitions, and sorts by priority to facilitate scheduling.
   private[tier] val pausedStates = new PriorityBlockingQueue[TierArchiverState](11, TierArchiverStateComparator)
-  // consists of running status transitions that have yet to be completed.
-  private[tier] val stateTransitionsInProgress = mutable.Map.empty[TopicPartition, CompletableFuture[TierArchiverState]]
+  // maps topic partitions to a tuple of state and pending status transition.
+  private[tier] val stateTransitionsInProgress = mutable.Map.empty[TopicPartition, (TierArchiverState, CompletableFuture[TierArchiverState])]
+  private[this] val lock = new Object
+
+  // set up metrics
+  removeMetric("TotalLag")
+  newGauge("TotalLag",
+    new Gauge[Long] {
+      def value(): Long = {
+        lock.synchronized {
+          val paused = pausedStates.toArray(Array.empty[TierArchiverState])
+          val pending = stateTransitionsInProgress.map { case (_, (state, _)) => state }
+          (pending ++ paused)
+            .foldLeft(0L) { (acc, state) =>
+              acc + state.lag
+            }
+        }
+      }
+    }
+  )
 
   tierMetadataManager.addListener(new TierMetadataManager.ChangeListener {
     override def onBecomeLeader(topicPartition: TopicPartition, leaderEpoch: Int): Unit = handleImmigration(topicPartition, leaderEpoch)
@@ -94,7 +114,9 @@ class TierArchiver(config: TierArchiverConfig,
               t.topicPartition == emigrationEvent.topicPartition
             }
           })
-          stateTransitionsInProgress.remove(emigrationEvent.topicPartition).map(_.cancel(true))
+          stateTransitionsInProgress.remove(emigrationEvent.topicPartition).map { case (_, future) =>
+            future.cancel(true)
+          }
           didWork = true
       }
     }
@@ -109,7 +131,7 @@ class TierArchiver(config: TierArchiverConfig,
     */
   def pauseDoneStates(): Boolean = {
     var didWork = false
-    for ((topicPartition, future) <- stateTransitionsInProgress) {
+    for ((topicPartition, (_, future)) <- stateTransitionsInProgress) {
       if (future.isDone) {
         Try(future.get()) match {
           case Success(nextState: TierArchiverState) =>
@@ -140,7 +162,7 @@ class TierArchiver(config: TierArchiverConfig,
     while (stateTransitionsInProgress.size < config.maxConcurrentUploads && !pausedStates.isEmpty) {
       val state = pausedStates.poll()
       if (state != null) {
-        stateTransitionsInProgress.put(state.topicPartition, state.nextState())
+        stateTransitionsInProgress.put(state.topicPartition, (state, state.nextState()))
         didWork = true
       }
     }
@@ -156,8 +178,10 @@ class TierArchiver(config: TierArchiverConfig,
 
   override def doWork(): Unit = {
     if (config.enableArchiver && tierTopicManager.isReady) {
-      processTransitions()
-      pause(config.updateIntervalMs, TimeUnit.MILLISECONDS)
+      lock.synchronized {
+        processTransitions()
+        pause(config.updateIntervalMs, TimeUnit.MILLISECONDS)
+      }
     }
   }
 

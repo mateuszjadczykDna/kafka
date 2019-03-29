@@ -302,6 +302,10 @@ class MergedLog(private[log] val localLog: Log,
     }.getOrElse(Array.empty[LogSegment]).toIterable
   }
 
+  def baseOffsetFirstUntierableSegment: Option[Long] = {
+    tierableLogSegments.lastOption.flatMap(seg => nextLocalLogSegment(seg).map(_.baseOffset))
+  }
+
   // Attempt to locate "startOffset" in tiered store. If found, returns corresponding metadata about the tiered
   // segment, along with any aborted transaction metadata for the read. Note that the aborted transaction information
   // is only partial and must be combined with aborted transaction information in tiered segments.
@@ -662,6 +666,13 @@ sealed trait AbstractLog {
     * @return Iterator over tierable local segments
     */
   def tierableLogSegments: Iterable[LogSegment]
+
+
+  /**
+   * Get the base offset of the first untiered segment, if one exists
+   * @return the base offset.
+   */
+  def baseOffsetFirstUntierableSegment: Option[Long]
 
   /**
     * @return The current active segment. The active segment is always local.

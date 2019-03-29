@@ -32,6 +32,22 @@ import scala.util.Random
 sealed trait TierArchiverState extends Logging {
   val topicPartition: TopicPartition
 
+  def lag: Long
+
+  def calculateLag (topicPartition: TopicPartition,
+                    replicaManager: ReplicaManager,
+                    tierPartitionState: TierPartitionState): Long = {
+    replicaManager
+      .getLog(topicPartition)
+      .flatMap(l => l.baseOffsetFirstUntierableSegment.map(firstUntiered => {
+        if (!tierPartitionState.endOffset.isPresent)
+          firstUntiered
+        else
+        firstUntiered - 1 - tierPartitionState.endOffset.get
+      }))
+      .getOrElse(0L)
+  }
+
   def relativePriority(other: TierArchiverState): Int
 
   def nextState(): CompletableFuture[TierArchiverState]
@@ -123,6 +139,8 @@ object TierArchiverState {
                                 blockingTaskExecutor: ScheduledExecutorService,
                                 config: TierArchiverConfig) extends RetriableTierArchiverState(config) {
 
+    override def lag: Long = calculateLag(topicPartition, replicaManager, tierTopicManager.partitionState(topicPartition))
+
     // Priority: BeforeLeader (this) > AfterUpload > BeforeUpload
     override def relativePriority(other: TierArchiverState): Int = {
       other match {
@@ -169,7 +187,7 @@ object TierArchiverState {
                                 blockingTaskExecutor: ScheduledExecutorService,
                                 config: TierArchiverConfig) extends RetriableTierArchiverState(config) {
 
-    def lag: Long = highWatermark - archivedOffset
+    override def lag: Long = calculateLag(topicPartition, replicaManager, tierPartitionState)
 
     // Priority: BeforeLeader > AfterUpload > BeforeUpload (this)
     // When comparing two BeforeUpload states, prioritize the state with greater lag higher.
@@ -234,12 +252,7 @@ object TierArchiverState {
       })
     }
 
-    private def archivedOffset: Long = tierPartitionState.endOffset.orElse(-1L)
 
-    private def highWatermark: Long = replicaManager
-      .getLog(topicPartition)
-      .flatMap { log => log.getHighWatermark }
-      .getOrElse(0L)
 
     private def putSegment(logSegment: LogSegment, leaderEpochCacheFile: Option[File], blockingTaskExecutor: ScheduledExecutorService): CompletableFuture[TierObjectMetadata] = {
 
@@ -297,6 +310,8 @@ object TierArchiverState {
                                tierEpoch: Int,
                                blockingTaskExecutor: ScheduledExecutorService,
                                config: TierArchiverConfig) extends TierArchiverState {
+
+    override def lag: Long = calculateLag(topicPartition, replicaManager, tierPartitionState)
 
     // Priority: BeforeLeader > AfterUpload (this) > BeforeUpload
     override def relativePriority(other: TierArchiverState): Int = {
