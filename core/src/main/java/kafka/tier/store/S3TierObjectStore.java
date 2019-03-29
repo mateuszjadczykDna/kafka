@@ -41,12 +41,14 @@ public class S3TierObjectStore implements TierObjectStore {
     private final static int PART_UPLOAD_SIZE = 5 * 1024 * 1024;
     private final static Logger log = LoggerFactory.getLogger(S3TierObjectStore.class);
     private final String bucket;
+    private final String sseAlgorithm;
     private final boolean enableMultiPartUpload;
     private AmazonS3 client;
 
     public S3TierObjectStore(TierObjectStoreConfig config) {
         this.client = client(config);
         this.bucket = config.s3bucket;
+        this.sseAlgorithm = config.s3SseAlgorithm;
         this.enableMultiPartUpload = config.s3EnableMultipartUpload;
         expectBucket(bucket, config.s3Region);
     }
@@ -114,8 +116,16 @@ public class S3TierObjectStore implements TierObjectStore {
                 fileType.getSuffix());
     }
 
+    private ObjectMetadata putObjectMetadata() {
+        final ObjectMetadata metadata = new ObjectMetadata();
+        if (sseAlgorithm != null)
+            metadata.setSSEAlgorithm(sseAlgorithm);
+        return metadata;
+    }
+
     private void putFile(String key, File file) {
         final PutObjectRequest request = new PutObjectRequest(bucket, key, file);
+        request.setMetadata(putObjectMetadata());
         log.debug("Uploading object to s3://{}/{}", bucket, key);
         client.putObject(request);
     }
@@ -129,6 +139,7 @@ public class S3TierObjectStore implements TierObjectStore {
         final List<PartETag> partETags = new ArrayList<>();
         final InitiateMultipartUploadRequest initiateMultipartUploadRequest =
                 new InitiateMultipartUploadRequest(bucket, key, objectMetadata);
+        initiateMultipartUploadRequest.setObjectMetadata(putObjectMetadata());
         final InitiateMultipartUploadResult initiateMultipartUploadResult =
                 client.initiateMultipartUpload(initiateMultipartUploadRequest);
 

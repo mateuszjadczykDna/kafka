@@ -193,6 +193,7 @@ object Defaults {
   val TierBackend = ""
   val TierS3Bucket = null
   val TierS3Region = null
+  val TierS3SseAlgorithm = "AES256"
   val TierS3EnableMultipartUpload = true
   val TierS3AwsAccessKeyId = null
   val TierS3AwsSecretAccessKey = null
@@ -279,13 +280,15 @@ object Defaults {
 }
 
 object KafkaConfig {
-
   private val LogConfigPrefix = "log."
   private val ConfluentPrefix = "confluent."
 
   def main(args: Array[String]) {
     System.out.println(configDef.toHtmlTable(DynamicBrokerConfig.dynamicConfigUpdateModes))
   }
+
+  /** ********* Constants ***********/
+  val TIER_S3_SSE_ALGORITHM_NONE = "none"
 
   /** ********* Zookeeper Configuration ***********/
   val ZkConnectProp = "zookeeper.connect"
@@ -448,7 +451,8 @@ object KafkaConfig {
   /** Tiered storage S3 configs **/
   val TierS3BucketProp = ConfluentPrefix + "tier.s3.bucket"
   val TierS3RegionProp = ConfluentPrefix + "tier.s3.region"
-  val TierS3EnableMultipartUploadProp = "tier.s3.enable.multipart.upload"
+  val TierS3SseAlgorithmProp = ConfluentPrefix + "tier.s3.sse.algorithm"
+  val TierS3EnableMultipartUploadProp = ConfluentPrefix + "tier.s3.enable.multipart.upload"
   val TierS3AwsAccessKeyIdProp = ConfluentPrefix + "tier.s3.aws.access.key.id"
   val TierS3AwsSecretAccessKeyProp = ConfluentPrefix + "tier.s3.aws.secret.access.key"
   val TierS3EndpointOverrideProp = ConfluentPrefix + "tier.s3.aws.endpoint.override"
@@ -804,6 +808,7 @@ object KafkaConfig {
   val TierMetadataReplicationFactorDoc = "The replication factor for the Tier Topic (set higher to ensure availability)."
   val TierS3BucketDoc = "The S3 bucket to use for tiered storage."
   val TierS3RegionDoc = "The S3 region to use for tiered storage."
+  val TierS3SseAlgorithmDoc = "The S3 server side encryption algorithm to use to protect objects at rest. Currently supports AES256 and none. Defaults to AES256."
   val TierS3EnableMultipartUploadDoc = "Enabled multipart S3 uploads in the S3 tier object store implementation. Disabling this feature is often useful when using S3 compatibility layers, such as provided by GCS."
   val TierS3AwsAccessKeyIdDoc = "The S3 AWS access key id directly via the Kafka configuration. If not set, the access key id will be supplied via the AWS default provider chain e.g. AWS_ACCESS_KEY_ID environment variable, ~/.aws/config, etc"
   val TierS3AwsSecretAccessKeyDoc = "The S3 AWS secret access key directly via the Kafka configuration. If not set, the secret access key will be supplied via the AWS default provider chain e.g. AWS_SECRET_ACCESS_KEY environment variable, ~/.aws/config, etc"
@@ -1095,6 +1100,7 @@ object KafkaConfig {
       .defineInternal(TierMetadataReplicationFactorProp, SHORT, Defaults.TierMetadataReplicationFactor, atLeast(1), HIGH, TierMetadataReplicationFactorDoc)
       .defineInternal(TierS3BucketProp, STRING, Defaults.TierS3Bucket, HIGH, TierS3BucketDoc)
       .defineInternal(TierS3RegionProp, STRING, Defaults.TierS3Region, HIGH, TierS3RegionDoc)
+      .defineInternal(TierS3SseAlgorithmProp, STRING, Defaults.TierS3SseAlgorithm, in("AES256", TIER_S3_SSE_ALGORITHM_NONE), HIGH, TierS3SseAlgorithmDoc)
       .defineInternal(TierS3EnableMultipartUploadProp, BOOLEAN, Defaults.TierS3EnableMultipartUpload, LOW, TierS3EnableMultipartUploadDoc)
       .defineInternal(TierS3AwsAccessKeyIdProp, STRING, Defaults.TierS3AwsAccessKeyId, MEDIUM, TierS3AwsAccessKeyIdDoc)
       .defineInternal(TierS3AwsSecretAccessKeyProp, STRING, Defaults.TierS3AwsSecretAccessKey, MEDIUM, TierS3AwsSecretAccessKeyDoc)
@@ -1425,6 +1431,7 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val tierMetadataReplicationFactor = getShort(KafkaConfig.TierMetadataReplicationFactorProp)
   val tierS3Bucket = getString(KafkaConfig.TierS3BucketProp)
   val tierS3Region = getString(KafkaConfig.TierS3RegionProp)
+  val tierS3SseAlgorithm = getString(KafkaConfig.TierS3SseAlgorithmProp)
   val tierS3EnableMultipartUpload = getBoolean(KafkaConfig.TierS3EnableMultipartUploadProp)
   val tierS3AwsAccessKeyId = getString(KafkaConfig.TierS3AwsAccessKeyIdProp)
   val tierS3AwsSecretAccessKey = getString(KafkaConfig.TierS3AwsSecretAccessKeyProp)
