@@ -118,6 +118,7 @@ public class WorkerTest extends ThreadedTest {
     @Mock private Converter taskKeyConverter;
     @Mock private Converter taskValueConverter;
     @Mock private HeaderConverter taskHeaderConverter;
+    @Mock private ConnectorConfig connectorConfig;
 
     @Before
     public void setup() {
@@ -829,7 +830,10 @@ public class WorkerTest extends ThreadedTest {
 
     @Test
     public void testProducerConfigsWithoutOverrides() {
-        assertEquals(defaultProducerConfigs, Worker.producerConfigs(config));
+        EasyMock.expect(connectorConfig.originalsWithPrefix("producer.")).andReturn(
+            new HashMap<String, Object>());
+        PowerMock.replayAll();
+        assertEquals(defaultProducerConfigs, Worker.producerConfigs(config, connectorConfig));
     }
 
     @Test
@@ -842,14 +846,39 @@ public class WorkerTest extends ThreadedTest {
         Map<String, String> expectedConfigs = new HashMap<>(defaultProducerConfigs);
         expectedConfigs.put("acks", "-1");
         expectedConfigs.put("linger.ms", "1000");
-        assertEquals(expectedConfigs, Worker.producerConfigs(configWithOverrides));
+        EasyMock.expect(connectorConfig.originalsWithPrefix("producer.")).andReturn(
+            new HashMap<String, Object>());
+        PowerMock.replayAll();
+        assertEquals(expectedConfigs, Worker.producerConfigs(configWithOverrides, connectorConfig));
+    }
+
+    @Test
+    public void testProducerConfigsWithClientOverrides() {
+        Map<String, String> props = new HashMap<>(workerProps);
+        props.put("producer.acks", "-1");
+        props.put("producer.linger.ms", "1000");
+        WorkerConfig configWithOverrides = new StandaloneConfig(props);
+
+        Map<String, String> expectedConfigs = new HashMap<>(defaultProducerConfigs);
+        expectedConfigs.put("acks", "-1");
+        expectedConfigs.put("linger.ms", "5000");
+        expectedConfigs.put("batch.size", "1000");
+        Map<String, Object> connConfig = new HashMap<String, Object>();
+        connConfig.put("linger.ms", "5000");
+        connConfig.put("batch.size", "1000");
+        EasyMock.expect(connectorConfig.originalsWithPrefix("producer.")).andReturn(connConfig);
+        PowerMock.replayAll();
+        assertEquals(expectedConfigs, Worker.producerConfigs(configWithOverrides, connectorConfig));
     }
 
     @Test
     public void testConsumerConfigsWithoutOverrides() {
         Map<String, String> expectedConfigs = new HashMap<>(defaultConsumerConfigs);
         expectedConfigs.put("group.id", "connect-test");
-        assertEquals(expectedConfigs, Worker.consumerConfigs(new ConnectorTaskId("test", 1), config));
+        EasyMock.expect(connectorConfig.originalsWithPrefix("consumer.")).andReturn(
+            new HashMap<String, Object>());
+        PowerMock.replayAll();
+        assertEquals(expectedConfigs, Worker.consumerConfigs(new ConnectorTaskId("test", 1), config, connectorConfig));
     }
 
     @Test
@@ -863,7 +892,31 @@ public class WorkerTest extends ThreadedTest {
         expectedConfigs.put("group.id", "connect-test");
         expectedConfigs.put("auto.offset.reset", "latest");
         expectedConfigs.put("max.poll.records", "1000");
-        assertEquals(expectedConfigs, Worker.consumerConfigs(new ConnectorTaskId("test", 1), configWithOverrides));
+        EasyMock.expect(connectorConfig.originalsWithPrefix("consumer.")).andReturn(
+            new HashMap<String, Object>());
+        PowerMock.replayAll();
+        assertEquals(expectedConfigs, Worker.consumerConfigs(new ConnectorTaskId("test", 1), configWithOverrides, connectorConfig));
+    }
+
+    @Test
+    public void testConsumerConfigsWithClientOverrides() {
+        Map<String, String> props = new HashMap<>(workerProps);
+        props.put("consumer.auto.offset.reset", "latest");
+        props.put("consumer.max.poll.records", "5000");
+        WorkerConfig configWithOverrides = new StandaloneConfig(props);
+
+        Map<String, String> expectedConfigs = new HashMap<>(defaultConsumerConfigs);
+        expectedConfigs.put("group.id", "connect-test");
+        expectedConfigs.put("auto.offset.reset", "latest");
+        expectedConfigs.put("max.poll.records", "5000");
+        expectedConfigs.put("max.poll.interval.ms", "1000");
+
+        Map<String, Object> connConfig = new HashMap<String, Object>();
+        connConfig.put("max.poll.records", "5000");
+        connConfig.put("max.poll.interval.ms", "1000");
+        EasyMock.expect(connectorConfig.originalsWithPrefix("consumer.")).andReturn(connConfig);
+        PowerMock.replayAll();
+        assertEquals(expectedConfigs, Worker.consumerConfigs(new ConnectorTaskId("test", 1), configWithOverrides, connectorConfig));
     }
 
     private void assertStatistics(Worker worker, int connectors, int tasks) {

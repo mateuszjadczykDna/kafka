@@ -77,7 +77,7 @@ public class DeadLetterQueueReporter implements ErrorReporter {
                                                          ErrorHandlingMetrics errorHandlingMetrics) {
         String topic = sinkConfig.dlqTopicName();
 
-        try (AdminClient admin = AdminClient.create(workerConfig.originals())) {
+        try (AdminClient admin = AdminClient.create(producerProps)) {
             if (!admin.listTopics().names().get().contains(topic)) {
                 log.error("Topic {} doesn't exist. Will attempt to create topic.", topic);
                 NewTopic schemaTopicRequest = new NewTopic(topic, DLQ_NUM_DESIRED_PARTITIONS, sinkConfig.dlqTopicReplicationFactor());
