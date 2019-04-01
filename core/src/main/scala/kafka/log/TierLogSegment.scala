@@ -5,10 +5,9 @@
 package kafka.log
 
 import kafka.server.TierFetchDataInfo
-import kafka.tier.fetcher.TierFetchMetadata
 import kafka.tier.domain.TierObjectMetadata
+import kafka.tier.fetcher.TierFetchMetadata
 import kafka.tier.store.TierObjectStore
-import org.apache.kafka.common.record.MemoryRecords
 
 class TierLogSegment private[log] (private val segment: TierObjectMetadata,
                                    private val tierObjectStore: TierObjectStore) {
@@ -34,7 +33,7 @@ class TierLogSegment private[log] (private val segment: TierObjectMetadata,
         transactionMetadata = None,
         segmentBaseOffset = baseOffset,
         segmentSize = segment.size)
-      Some(TierFetchDataInfo(fetchMetadata, MemoryRecords.EMPTY, tierObjectStore, None))
+      Some(TierFetchDataInfo(fetchMetadata, None))
     }
   }
 

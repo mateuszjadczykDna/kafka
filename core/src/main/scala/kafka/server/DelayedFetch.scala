@@ -29,14 +29,7 @@ import org.apache.kafka.common.requests.FetchRequest.PartitionData
 
 import scala.collection._
 
-sealed trait UnifiedFetchPartitionStatus {
-  val fetchInfo: PartitionData
-}
-case class TierFetchPartitionStatus(fetchInfo: PartitionData) extends UnifiedFetchPartitionStatus {
-
-  override def toString = "[fetchInfo: " + fetchInfo + "]"
-}
-case class FetchPartitionStatus(startOffsetMetadata: LogOffsetMetadata, fetchInfo: PartitionData) extends UnifiedFetchPartitionStatus {
+case class FetchPartitionStatus(startOffsetMetadata: LogOffsetMetadata, fetchInfo: PartitionData) {
 
   override def toString = "[startOffsetMetadata: " + startOffsetMetadata + ", " +
                           "fetchInfo: " + fetchInfo + "]"
@@ -52,7 +45,7 @@ case class FetchMetadata(fetchMinBytes: Int,
                          fetchIsolation: FetchIsolation,
                          isFromFollower: Boolean,
                          replicaId: Int,
-                         fetchPartitionStatus: Seq[(TopicPartition, UnifiedFetchPartitionStatus)]) {
+                         fetchPartitionStatus: Seq[(TopicPartition, FetchPartitionStatus)]) {
 
   override def toString = "FetchMetadata(minBytes=" + fetchMinBytes + ", " +
     "maxBytes=" + fetchMaxBytes + ", " +
@@ -69,7 +62,7 @@ class DelayedFetch(delayMs: Long,
                    fetchMetadata: FetchMetadata,
                    replicaManager: ReplicaManager,
                    quota: ReplicaQuota,
-                   requestIdOpt: Option[UUID],
+                   tierFetchIdOpt: Option[UUID],
                    responseCallback: Seq[(TopicPartition, FetchPartitionData)] => Unit)
   extends DelayedOperation(delayMs) {
 
@@ -89,18 +82,18 @@ class DelayedFetch(delayMs: Long,
   override def tryComplete(): Boolean = {
     var accumulatedSize = 0
     fetchMetadata.fetchPartitionStatus.foreach {
-      case (_, _: TierFetchPartitionStatus) => // Ignored as completion for a TierFetchPartitionStatus
-      // is determined by replicaManager.tierFetchIsComplete()
-
       case (topicPartition, fetchStatus: FetchPartitionStatus) =>
         val fetchOffset = fetchStatus.startOffsetMetadata
         val fetchLeaderEpoch = fetchStatus.fetchInfo.currentLeaderEpoch
         try {
-          if (fetchOffset != LogOffsetMetadata.UnknownOffsetMetadata) {
-            val partition = replicaManager.getPartitionOrException(topicPartition,
-              expectLeader = fetchMetadata.fetchOnlyLeader)
-            val offsetSnapshot = partition.fetchOffsetSnapshot(fetchLeaderEpoch, fetchMetadata.fetchOnlyLeader)
+          // For both tier and non-tier fetches, we attempt to get the partition.
+          // this ensures we'll correctly propagate any exceptions for tiered fetches if
+          // the leader changes or the replica is not available.
+          val partition = replicaManager.getPartitionOrException(topicPartition,
+            expectLeader = fetchMetadata.fetchOnlyLeader)
+          val offsetSnapshot = partition.fetchOffsetSnapshot(fetchLeaderEpoch, fetchMetadata.fetchOnlyLeader)
 
+          if (fetchOffset != LogOffsetMetadata.UnknownOffsetMetadata) {
             val endOffset = fetchMetadata.fetchIsolation match {
               case FetchLogEnd => offsetSnapshot.logEndOffset
               case FetchHighWatermark => offsetSnapshot.highWatermark
@@ -147,24 +140,21 @@ class DelayedFetch(delayMs: Long,
         }
     }
 
-    if (requestIdOpt.isDefined) {
-      val requestId = requestIdOpt.get
-      val tierFetchRequestIsDone = replicaManager.tierFetchIsComplete(requestId).getOrElse(false)
-      if (tierFetchRequestIsDone) {
-        // Case G, our tiered storage fetch request is done.
+    tierFetchIdOpt.map { tierFetchId =>
+      // Case G, our tiered storage fetch request is done.
+      if (replicaManager.tierFetchIsComplete(tierFetchId).get)
         return forceComplete()
-      }
     }
 
     // Case D (only if there is no ongoing tier fetch, otherwise we always wait for the tier fetch to complete.
-    if (accumulatedSize >= fetchMetadata.fetchMinBytes && requestIdOpt.isEmpty)
+    if (accumulatedSize >= fetchMetadata.fetchMinBytes && tierFetchIdOpt.isEmpty)
       forceComplete()
     else
       false
   }
 
   override def onExpiration() {
-    requestIdOpt.foreach(reqId => replicaManager.cancelTierFetch(reqId))
+    tierFetchIdOpt.foreach(reqId => replicaManager.cancelTierFetch(reqId))
     if (fetchMetadata.isFromFollower)
       DelayedFetchMetrics.followerExpiredRequestMeter.mark()
     else
@@ -188,55 +178,26 @@ class DelayedFetch(delayMs: Long,
   }
 
   /**
-    * Construct a new TierLogReadResult from an existing TierLogReadResult and a TierFetchResult. This merges the
-    * data returned from the TierFetcher with the data returned from the log layer.
-    */
-  private def constructTierLogReadResult(tierFetchResult: TierFetchResult,
-                                         tierLogReadResult: TierLogReadResult): TierLogReadResult = {
-    val newTierFetchInfo = tierLogReadResult.info.copy(records = tierFetchResult.records)
-    if (tierLogReadResult.exception.isDefined) {
-      // If the log layer returned an exception, immediately return the tierLogReadResult
-      tierLogReadResult
-    } else if (tierFetchResult.exception != null) {
-      // The log layer returned no exception, but there was an exception with the tier fetch.
-      // Return the exception only, the `info` record data will be MemoryRecords.EMPTY.
-      tierLogReadResult.copy(
-        exception = Some(tierFetchResult.exception),
-        highWatermark = -1L,
-        leaderLogStartOffset = -1L,
-        leaderLogEndOffset = -1L,
-        followerLogStartOffset = -1L,
-        fetchTimeMs = -1L,
-        readSize = 0,
-        lastStableOffset = None)
-    } else {
-      // Neither the log layer, nor the fetch returned an exception. Copy the fetched data into the TierLogReadResult
-      // constructed by the log layer.
-      tierLogReadResult.copy(info = newTierFetchInfo)
-    }
-  }
-
-  /**
    * Upon completion, read whatever data is available and pass to the complete callback
    */
   override def onComplete() {
-    val tierFetchCompleted = requestIdOpt.flatMap(reqId => replicaManager.tierFetchIsComplete(reqId)).getOrElse(false)
+    val tierFetchCompleted = tierFetchIdOpt.flatMap(reqId => replicaManager.tierFetchIsComplete(reqId)).getOrElse(false)
     // If the tierFetch is not completed, then it's safe to assume that this request timed out. It should have been
     // canceled in `onExpiration()`. In order to prevent blocking the expiration thread, we will only retrieve
     // the results if doing so will not block.
     val tierFetcherReadResults: Option[util.Map[TopicPartition, TierFetchResult]] = if (tierFetchCompleted) {
-      requestIdOpt.flatMap(reqId => replicaManager.getTierFetchResults(reqId))
+      tierFetchIdOpt.flatMap(reqId => replicaManager.getTierFetchResults(reqId))
     } else None
 
     val logReadResults = collectLogReadResults()
-    val unifiedReadResults: Seq[(TopicPartition, AbstractLogReadResult)] = logReadResults.map {
+    val unifiedReadResults: Seq[(TopicPartition, LogReadResult)] = logReadResults.map {
       // For data fetched from tiered storage, we combine the tierFetcherReadResults with the TierLogReadResults
       // returned from the Partition/Log layer. This provides us with metadata like leader epoch and high watermark.
       case (tp, tierLogReadResult: TierLogReadResult) => {
         // We may have not gotten any results back for our tier fetch if we canceled early,
         // return empty batches in that case.
         val tierFetchResult = tierFetcherReadResults.map(_.get(tp)).getOrElse(TierFetchResult.emptyFetchResult())
-        tp -> constructTierLogReadResult(tierFetchResult, tierLogReadResult)
+        tp -> tierLogReadResult.intoLogReadResult(tierFetchResult)
       }
       // Data returned from local storage does not need to be changed
       case (tp, localLogReadResult: LogReadResult) => tp -> localLogReadResult

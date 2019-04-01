@@ -19,7 +19,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.{ConfluentTopicConfig, TopicConfig}
 import org.junit.Assert.{assertEquals, assertTrue}
-import org.junit.{Before, Ignore, Test}
+import org.junit.{Before, Test}
 
 import scala.collection.JavaConverters._
 
@@ -70,50 +70,79 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
   configureMock
 
   private val topic = UUID.randomUUID().toString
+  private val partitions: Int = 1
+  private var partitionToLeader: Map[Int, Int] = Map()
+  private def topicPartitions: Seq[TopicPartition] = Range(0,partitions).map(p => new TopicPartition(topic, p))
 
   @Before
   override def setUp(): Unit = {
     super.setUp()
     val props = new Properties
     props.put(ConfluentTopicConfig.TIER_ENABLE_CONFIG, "true")
-    props.put(TopicConfig.SEGMENT_BYTES_CONFIG, "5000000")
-    // Set hotset retention bytes adequately low, to allow us to delete some segments after they have been tiered
-    props.put(ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG, "10000")
+    props.put(TopicConfig.SEGMENT_BYTES_CONFIG, "10000")
+    // Set retention bytes adequately low, to allow us to delete some segments after they have been tiered
+    props.put(ConfluentTopicConfig.TIER_LOCAL_HOTSET_BYTES_CONFIG, "5000")
     props.put(TopicConfig.RETENTION_BYTES_CONFIG, "-1")
 
-    createTopic(topic, 2, 1, props)
+    partitionToLeader = createTopic(topic, partitions, 1, props)
+  }
+
+  private def produceRecords(nBatches: Int, recordsPerBatch: Int): Unit = {
+    val producer = createProducer()
+    try {
+      for (b <- 0 until nBatches) {
+        val producerRecords = (0 until recordsPerBatch).map(i => {
+          val m = recordsPerBatch * b + i
+          new ProducerRecord(topic, null, null,
+            "foo".getBytes(StandardCharsets.UTF_8),
+            s"$m".getBytes(StandardCharsets.UTF_8)
+          )
+        })
+        producerRecords.map(producer.send).map(_.get(10, TimeUnit.SECONDS))
+      }
+    } finally {
+      producer.close()
+    }
+  }
+
+  private def getLeaderForTopicPartition(leaderTopicPartition: TopicPartition): Int = {
+    partitionToLeader(leaderTopicPartition.partition())
+  }
+
+  /**
+    * Waits until minNumSegments across all topic partitions are tiered.
+    */
+  private def waitUntilSegmentsTiered(minNumSegments: Int = 1): Unit = {
+    TestUtils.waitUntilTrue(() => {
+      topicPartitions.forall(tp => {
+        val leaderId = getLeaderForTopicPartition(tp)
+        val server = serverForId(leaderId)
+        server.get.tierMetadataManager.tierPartitionState(tp).get().numSegments() > minNumSegments
+      })
+    }, s"timeout waiting for at least $minNumSegments to be archived and materialized", 60000L)
+  }
+
+  /**
+    * Delete old (tiered) segments on all brokers.
+    */
+  private def simulateRetention(): Unit = {
+    topicPartitions.foreach(tp => {
+      val leaderId = getLeaderForTopicPartition(tp)
+      val server = serverForId(leaderId)
+      val numDeleted = server.get.replicaManager.logManager.getLog(tp).get.deleteOldSegments()
+      assertTrue("tiered segments should have been deleted", numDeleted > 0)
+    })
   }
 
   @Test
-  @Ignore
-  def testArchiveAndFetch(): Unit = {
-    val producer = createProducer()
-
-    val nBatches = 10000
+  def testArchiveAndFetchSingleTopicPartition(): Unit = {
+    val nBatches = 100
     val recordsPerBatch = 100
+    produceRecords(nBatches, recordsPerBatch)
+    waitUntilSegmentsTiered(10)
+    simulateRetention()
 
-    for (b <- 0 until nBatches) {
-      val producerRecords = (0 until recordsPerBatch).map(i => {
-        val m = recordsPerBatch * b + i
-        new ProducerRecord(topic, null, null,
-          "abcdefghijklmnopqrstuvwxyz0123456789".getBytes(StandardCharsets.UTF_8),
-           s"$m".getBytes(StandardCharsets.UTF_8)
-        )
-      })
-      producerRecords.map(producer.send).map(_.get(10, TimeUnit.SECONDS))
-    }
-
-    val topicPartition = new TopicPartition(topic, 0)
-
-    TestUtils.waitUntilTrue(() => {
-      servers.head.tierMetadataManager.tierPartitionState(topicPartition).get().numSegments() > 2
-    }, "timeout waiting for at least two segments to be archived and materialized", 60000L)
-
-    val replicaManager = servers.head.replicaManager
-    val log = replicaManager.logManager.getLog(topicPartition)
-
-    val deletedSegments = log.get.deleteOldSegments()
-    assertTrue("tiered segments should have been deleted", deletedSegments > 0)
+    val topicPartition = topicPartitions.head
 
     val brokerList = TestUtils.bootstrapServers(servers, listenerName)
 
@@ -124,6 +153,7 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
     consumerProps.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "50000")
 
     val consumer = new KafkaConsumer[String, String](consumerProps)
+
     try {
       val partitions = new util.ArrayList[TopicPartition]()
       partitions.add(topicPartition)
@@ -131,7 +161,6 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
       consumer.assign(partitions)
       consumer.seekToBeginning(partitions)
       val valuesRead = new util.ArrayList[Int]()
-
       while (valuesRead.size() != nBatches * recordsPerBatch) {
         val records = consumer.poll(Duration.ofMillis(1000))
         records.forEach(new Consumer[ConsumerRecord[String, String]]() {

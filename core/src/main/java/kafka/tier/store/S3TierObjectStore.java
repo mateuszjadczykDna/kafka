@@ -182,9 +182,8 @@ public class S3TierObjectStore implements TierObjectStore {
                             Regions.fromName(config.s3Region).getName()
                     ));
             builder.setPathStyleAccessEnabled(true);
-        }
 
-        if (config.s3Region != null && config.s3EndpointOverride == null) {
+        } else if (config.s3Region != null && !config.s3Region.isEmpty()) {
             builder.setRegion(config.s3Region);
         }
 
