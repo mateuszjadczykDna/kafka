@@ -1,0 +1,17 @@
+[
+  {
+    "principal" : "{{ principal }}",
+    "role" : "ResourceOwner",
+    "scope" : "{{ cluster_id }}",
+    "resources" : [
+        {"resourceType": "Topic", "patternType": "PREFIXED", "name": "test"},
+        {"resourceType": "Group", "patternType": "LITERAL", "name": "test_group"}
+    ]
+  },
+  {
+    "principal" : "{{ principal }}",
+    "role" : "Operator",
+    "scope" : "{{ cluster_id }}"
+  }
+]
+

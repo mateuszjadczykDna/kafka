@@ -2199,6 +2199,7 @@ project(':ce-auth-providers') {
     configProperties = checkstyleConfigProperties("import-control-ce.xml")
   }
 
+  systemTestLibs.dependsOn('jar', 'testJar')
 }
 
 project(':ce-aegis') {

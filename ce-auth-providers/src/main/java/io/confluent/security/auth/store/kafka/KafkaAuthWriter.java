@@ -171,7 +171,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
 
   @Override
   public CompletionStage<Void> addRoleBinding(KafkaPrincipal principal, String role, String scope) {
-    log.debug("addRoleBinding {} {} {}", principal, role, scope);
+    log.debug("addRoleBinding principal={} role={} scope={}", principal, role, scope);
     return setRoleResources(principal, role, scope, Collections.emptySet());
   }
 
@@ -180,7 +180,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
                                                 String role,
                                                 String scope,
                                                 Collection<ResourcePattern> newResources) {
-    log.debug("addRoleResources {} {} {} {}", principal, role, scope, newResources);
+    log.debug("addRoleResources principal={} role={} scope={} resources={}", principal, role, scope, newResources);
     validateRoleBindingUpdate(role, scope, newResources);
     validateRoleResources(newResources);
 
@@ -202,7 +202,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
                                                 String role,
                                                 String scope,
                                                 Collection<ResourcePattern> resources) {
-    log.debug("setRoleResources {} {} {} {}", principal, role, scope, resources);
+    log.debug("setRoleResources principal={} role={} scope={} resources={}", principal, role, scope, resources);
     validateRoleBindingUpdate(role, scope, resources);
     validateRoleResources(resources);
 
@@ -214,7 +214,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
 
   @Override
   public CompletionStage<Void> removeRoleBinding(KafkaPrincipal principal, String role, String scope) {
-    log.debug("removeRoleBinding {} {} {}", principal, role, scope);
+    log.debug("removeRoleBinding principal={} role={} scope={}", principal, role, scope);
     validateRoleBindingUpdate(role, scope, Collections.emptySet());
 
     KafkaPartitionWriter<AuthKey, AuthValue> partitionWriter = partitionWriter(principal, role, scope);
@@ -228,7 +228,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
                                                    String role,
                                                    String scope,
                                                    Collection<ResourcePatternFilter> deletedResources) {
-    log.debug("removeRoleResources {} {} {} {}", principal, role, scope, deletedResources);
+    log.debug("removeRoleResources principal={} role={} scope={} resources={}", principal, role, scope, deletedResources);
     validateRoleBindingUpdate(role, scope, deletedResources);
 
     KafkaPartitionWriter<AuthKey, AuthValue> partitionWriter = partitionWriter(principal, role, scope);

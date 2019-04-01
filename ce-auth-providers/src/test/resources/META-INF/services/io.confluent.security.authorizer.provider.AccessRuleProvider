@@ -2,4 +2,4 @@
 
 io.confluent.security.auth.provider.rbac.MockRbacProvider
 io.confluent.security.auth.provider.rbac.SuperUserProvider
-
+io.confluent.security.auth.provider.rbac.FileBasedRbac$Provider

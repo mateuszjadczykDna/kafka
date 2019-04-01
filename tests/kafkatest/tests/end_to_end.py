@@ -50,7 +50,8 @@ class EndToEndTest(Test):
         group_metadata_config = {
             "partitions": num_nodes,
             "replication-factor": min(num_nodes, 3),
-            "configs": {"cleanup.policy": "compact"}
+            "configs": {"cleanup.policy": "compact"},
+            "if-not-exists" : True
         }
 
         topics = {

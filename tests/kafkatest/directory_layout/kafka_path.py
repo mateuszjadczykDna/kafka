@@ -41,6 +41,8 @@ CORE_LIBS_JAR_NAME = "core-libs"
 CORE_DEPENDANT_TEST_LIBS_JAR_NAME = "core-dependant-testlibs"
 TOOLS_JAR_NAME = "tools"
 TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME = "tools-dependant-libs"
+AUTH_PROVIDERS_JAR_NAME = "auth-providers"
+AUTH_PROVIDERS_DEPENDANT_TEST_LIBS_JAR_NAME = "auth-providers-dependant-libs"
 
 JARS = {
     "dev": {
@@ -48,7 +50,9 @@ JARS = {
         CORE_LIBS_JAR_NAME: "core/build/libs/*.jar",
         CORE_DEPENDANT_TEST_LIBS_JAR_NAME: "core/build/dependant-testlibs/*.jar",
         TOOLS_JAR_NAME: "tools/build/libs/kafka-tools*.jar",
-        TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME: "tools/build/dependant-libs*/*.jar"
+        TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME: "tools/build/dependant-libs*/*.jar",
+        AUTH_PROVIDERS_JAR_NAME: "ce-auth-providers/build/libs/auth-providers*.jar",
+        AUTH_PROVIDERS_DEPENDANT_TEST_LIBS_JAR_NAME: "ce-auth-providers/build/dependant-libs*/*.jar"
     }
 }
 

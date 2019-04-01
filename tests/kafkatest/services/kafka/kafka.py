@@ -213,6 +213,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
         self.listeners = ','.join(listeners)
         self.advertised_listeners = ','.join(advertised_listeners)
+        self.interbroker_bootstrap_servers = self.bootstrap_servers(self.interbroker_security_protocol)
 
     def prop_file(self, node):
         self.set_protocol_and_port(node)

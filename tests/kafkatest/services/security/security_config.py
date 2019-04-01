@@ -108,6 +108,7 @@ class SecurityConfig(TemplateRenderer):
     JAAS_CONF_PATH = "/mnt/security/jaas.conf"
     KRB5CONF_PATH = "/mnt/security/krb5.conf"
     KEYTAB_PATH = "/mnt/security/keytab"
+    ROLES_PATH = "/mnt/security/roles.json"
 
     # This is initialized only when the first instance of SecurityConfig is created
     ssl_stores = None
@@ -296,6 +297,9 @@ class SecurityConfig(TemplateRenderer):
                 return "\"-Djava.security.krb5.conf=%s\"" % SecurityConfig.KRB5CONF_PATH
         else:
             return ""
+
+    def rbac_roles(self, cluster_id, principal):
+        return self.render('roles.json', cluster_id=cluster_id, principal=principal)
 
     def props(self, prefix=''):
         """
