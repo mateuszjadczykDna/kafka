@@ -1,9 +1,11 @@
 # soak_clients
 
-The soak_clients package contains functionality for two kind of cronjobs:
+The soak_clients package consists of the following components:
 * [clients spawner](./soak_clients/main.go) - Creates Trogdor tasks (via its REST API) that are used for soak testing
 * [status_reporter](./soak_clients/status_reporter.go) - Periodically queries the currently running Trogdor tasks and reports their status
+* [performance_tests](./performance/main.go) - Creates Trogdor tasks (via its REST API) that are used for performance testing
 
+All of them are callable through the [soak_clients CLI](./main.go) 
 
 ### clients spawner
 The clients spawning code takes in a JSON definition of the type of tasks we want to run. An example of the specification can be found [here](./soak_clients/config/baseline.json).
@@ -14,3 +16,6 @@ We split tasks by two types:
   * if we were to configure `short_lived_task_reschedule_delay_ms` to 30 minutes, we would have only two short-lived tasks in the same example period (13:00-13:15, 13:45-14:00)  
 
 We define the amount of tasks on a per-topic basis inside the `topics` field. There we also define the total produce/consume throughput we want the topic to have. Said throughput then gets split evenly across every task. Note that this means you may not always have the desired throughput because the short-lived tasks will not be running during `short_lived_task_reschedule_delay_ms`
+
+### performance tests
+[README.md](./performance/README.md)

@@ -1,0 +1,13 @@
+{
+  "test_type": "ProgressiveWorkload",
+  "test_name": "test",
+  "test_parameters": {
+    "workload_type": "Produce",
+    "step_duration_ms": 100,
+    "partition_count": 10,
+    "step_cooldown_ms": 60000,
+    "start_throughput_mbs": 10,
+    "end_throughput_mbs": 20,
+    "throughput_increase_per_step_mbs": 5
+  }
+}

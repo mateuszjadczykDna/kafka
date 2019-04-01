@@ -146,8 +146,25 @@ func TestTaskIdName(t *testing.T) {
 	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0.topic-1", taskId.Name())
 	taskId.duplicateId = 1
 	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0.topic-1.1", taskId.Name())
-	taskId.loadLoopIteration = 2
-	assert.Equal(t, "test.2014-07-16T20:55:46Z.agent-0.topic-1.2L.1", taskId.Name())
+}
+
+func TestProduceOptions_MessagesPerSec(t *testing.T) {
+	// 1 KB Producer messages
+	options := ProducerOptions{
+		ValueGenerator: ValueGeneratorSpec{
+			Size: 100,
+		},
+		KeyGenerator: KeyGeneratorSpec{
+			Size: 900,
+		},
+	}
+
+	assert.Equal(t, uint64(10), options.MessagesPerSec(0.01))
+	assert.Equal(t, uint64(100), options.MessagesPerSec(0.1))
+	assert.Equal(t, uint64(550), options.MessagesPerSec(0.55))
+	assert.Equal(t, uint64(1000), options.MessagesPerSec(1))
+	assert.Equal(t, uint64(12000), options.MessagesPerSec(12))
+
 }
 
 func TestParseStatuses(t *testing.T) {

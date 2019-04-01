@@ -38,7 +38,7 @@ data:
       "long_lived_producer_count": 6,
       "short_lived_producer_count": 6,
       "long_lived_consumer_count": 6,
-      "short_lived_consumer_count": 6,
+      "short_lived_consumer_count": 6
     },
     {
       "name": "baseline_soak_medium_topic_25p",
@@ -112,5 +112,30 @@ data:
       "idempotence_enabled": true
     }
   ]
+}
+'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Chart.Name }}-performance-test-config
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}
+    release: {{ .Release.Name }}
+data:
+  performance_test.json: '
+{
+  "test_type": "ProgressiveWorkload",
+  "test_name": "progressive produce test 10-200mbs",
+  "test_parameters": {
+    "workload_type": "Produce",
+    "step_duration_ms": 150000,
+    "partition_count": 100,
+    "step_cooldown_ms": 30000,
+    "start_throughput_mbs": 10,
+    "end_throughput_mbs": 200,
+    "throughput_increase_per_step_mbs": 10
+  }
 }
 '

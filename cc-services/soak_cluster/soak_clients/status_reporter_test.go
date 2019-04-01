@@ -1,6 +1,7 @@
 package soak_clients
 
 import (
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/common"
 	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"github.com/pkg/errors"
 	"testing"
@@ -62,6 +63,7 @@ var sampleProduceTaskStatus = `
 `
 
 func TestPrintTasksPrintsError(t *testing.T) {
+	logger = common.InitLogger("soak-cluster-clients")
 	tasks := map[string]*trogdor.TaskStatus{
 		"task": {
 			State: "RUNNING",
@@ -71,6 +73,7 @@ func TestPrintTasksPrintsError(t *testing.T) {
 }
 
 func TestPrintTasksPrintsTasksWithError(t *testing.T) {
+	logger = common.InitLogger("soak-cluster-clients")
 	tasks := map[string]*trogdor.TaskStatus{
 		"task": {
 			State: "RUNNING",
@@ -81,6 +84,7 @@ func TestPrintTasksPrintsTasksWithError(t *testing.T) {
 }
 
 func TestPrintTasksPrintsTasks(t *testing.T) {
+	logger = common.InitLogger("soak-cluster-clients")
 	tasks := map[string]*trogdor.TaskStatus{
 		"consume_task_1": {
 			State:  "RUNNING",

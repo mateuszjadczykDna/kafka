@@ -1,13 +1,14 @@
 image:
   repository: confluent-docker.jfrog.io/confluentinc
   name: cc-soak-clients
-  tag: 0.100.0-2.3.0-SNAPSHOT-3-g6e41a7e2a
+  tag: 0.115.0-2.3.0-SNAPSHOT-14-g658ab6c4a
   pullPolicy: IfNotPresent
 trogdorCoordinatorPort: 9002
 apiKey: "null"
 apiSecret: "null"
 bootstrapServer: "null"
 topicConfigPath: "/mnt/config/topic/enterprise-topics.json"
+performanceTestConfigPath: "/mnt/config/performance/performance_test.json"
 shortLivedTaskMs: "900000"
 shortLivedTaskRescheduleDelayMs: "0"
 shortLivedTaskMinutes: "15" # sum of shortLivedTaskMs + shortLivedTaskRescheduleDelayMs; used to configure the frequency of the status reporter

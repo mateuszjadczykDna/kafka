@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	logutil "github.com/confluentinc/cc-utils/log"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/common"
 	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"strings"
 
@@ -91,12 +92,9 @@ var transactionalProducerOptions = trogdor.ProducerOptions{
 // Returns all the baseline tasks that should be ran on the Soak Cluster at all times
 // trogdorAgentsCount - the number of trogdor agents,
 // 	this should be the same as the replicas field in agentStatefulSet.yaml
-func baselineTasks(soakConfigPath string, trogdorAgentsCount int) ([]trogdor.TaskSpec, error) {
+func baselineTasks(soakConfigPath string, trogdorAgentsCount int, bootstrapServers string) ([]trogdor.TaskSpec, error) {
 	var tasks []trogdor.TaskSpec
-	var clientNodes []string
-	for agentID := 0; agentID < trogdorAgentsCount; agentID++ {
-		clientNodes = append(clientNodes, fmt.Sprintf("cc-trogdor-service-agent-%d", agentID))
-	}
+	clientNodes := common.TrogdorAgentPodNames(trogdorAgentsCount)
 
 	configuration := SoakTestConfig{}
 	err := configuration.parseConfig(soakConfigPath)
@@ -108,7 +106,8 @@ func baselineTasks(soakConfigPath string, trogdorAgentsCount int) ([]trogdor.Tas
 		newTasks := createTopicTasks(topicConfig, clientNodes, existingIDs,
 			configuration.LongLivedTaskDurationMs,
 			configuration.ShortLivedTaskDurationMs,
-			configuration.ShortLivedTaskRescheduleDelayMs)
+			configuration.ShortLivedTaskRescheduleDelayMs,
+			bootstrapServers)
 		tasks = append(tasks, newTasks...)
 	}
 
@@ -118,7 +117,7 @@ func baselineTasks(soakConfigPath string, trogdorAgentsCount int) ([]trogdor.Tas
 // Creates Trogdor Produce and Consume Bench Tasks from a TopicConfiguration
 // short-lived tasks are scheduled to run up until the long-lived tasks finish, taking into account a delay in re-scheduling
 func createTopicTasks(topicConfig TopicConfiguration, clientNodes []string, existingTaskIDs map[string]bool,
-	longLivedMs uint64, shortLivedMs uint64, shortLivedReschedDelayMs uint64) []trogdor.TaskSpec {
+	longLivedMs uint64, shortLivedMs uint64, shortLivedReschedDelayMs uint64, bootstrapServers string) []trogdor.TaskSpec {
 	var tasks []trogdor.TaskSpec
 	topic := trogdor.TopicSpec{
 		NumPartitions:     uint64(topicConfig.PartitionsCount),

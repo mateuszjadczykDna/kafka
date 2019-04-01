@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	logutil "github.com/confluentinc/cc-utils/log"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/common"
 	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"time"
 )
 
-func Report(topicConfigPath string) {
-	InitLogger()
+func Report(topicConfigPath string, trogdorCoordinatorHost string) {
+	logger = common.InitLogger("soak-cluster-clients")
 	logutil.Info(logger, "Querying for tasks...")
 	defer logutil.Info(logger, "Shutting down...")
 

@@ -3,6 +3,7 @@ package soak_clients
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/common"
 	"github.com/confluentinc/ce-kafka/cc-services/soak_cluster/trogdor"
 	"github.com/jinzhu/copier"
 	"github.com/stretchr/testify/assert"
@@ -21,11 +22,11 @@ const (
 var clientNodes = []string{"node1", "node2", "node3"}
 
 func TestBaselineTasks(t *testing.T) {
-	InitLogger()
+	logger = common.InitLogger("soak-clients-test")
 	topics := soakTestConfig([]string{"a", "b", "c"})
 	expectedTasks := calculateExpectedTasksCount(topics.Topics, topics.LongLivedTaskDurationMs, topics.ShortLivedTaskDurationMs, topics.ShortLivedTaskRescheduleDelayMs)
 	configPath := writeSoakTestConfigFile(t, topics)
-	tasks, err := baselineTasks(configPath, 10)
+	tasks, err := baselineTasks(configPath, 10, "")
 	if err != nil {
 		fmt.Println(err)
 		assert.Fail(t, "error while getting baseline tasks")
@@ -44,12 +45,12 @@ func assertCreateTopicTasks(t *testing.T, topicSpecification TopicConfiguration,
 	}
 	assert.Equal(t, *expectedCount, calculatedExpected) // verify calculateExpectedTasksCount output when expectedCount specified
 
-	tasks := createTopicTasks(topicSpecification, clientNodes, make(map[string]bool), longDuration, shortDuration, reschedDelay)
+	tasks := createTopicTasks(topicSpecification, clientNodes, make(map[string]bool), longDuration, shortDuration, reschedDelay, "")
 	assertTaskCount(t, tasks, *expectedCount, longDuration, shortDuration)
 }
 
 func TestCreateTopicTasksVariousDurations(t *testing.T) {
-	InitLogger()
+	logger = common.InitLogger("soak-clients-test")
 	topicSpecification := TopicConfiguration{
 		Name:                   "testTest",
 		PartitionsCount:        1000,
@@ -213,7 +214,7 @@ func TestConsecutiveTasks(t *testing.T) {
 		DurationMs:       5,
 		TaskCount:        3,
 		TopicSpec:        mediumTopic,
-		BootstrapServers: bootstrapServers,
+		BootstrapServers: "",
 		StartMs:          10,
 		MessagesPerSec:   750,
 		AdminConf:        adminConfig,
@@ -273,7 +274,7 @@ func TestConsecutiveTasksFailsIfStartMsIsZero(t *testing.T) {
 			ConsumerGroup: "cg-1",
 		},
 		DurationMs:       5,
-		BootstrapServers: bootstrapServers,
+		BootstrapServers: "",
 	}
 	_, err := consecutiveTasks(*startConfig, 25, shortLivedTaskRescheduleDelayMs)
 	assert.Error(t, err)

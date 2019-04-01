@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"time"
 )
@@ -81,31 +82,26 @@ type roundTripSpec struct {
 
 // a structured name of a Trogdor task
 type TaskId struct {
-	TaskType          string
-	StartMs           uint64
-	Desc              string // arbitrary task identifier
-	agentId           string
-	loadLoopIteration int
-	duplicateId       int // increasing number to avoid duplicate names
+	TaskType    string
+	StartMs     uint64
+	Desc        string // arbitrary task identifier
+	agentId     string
+	duplicateId int // increasing number to avoid duplicate names
 }
 
 // Returns the name of this Task in the following form:
-// {TASK_TYPE}.{START_TIMESTAMP}.{AGENT_ID}.{OPTIONAL_TASK_DESCRIPTION}.{OPTIONAL_LOADLOOP}.{OPTIONAL_DUPLICATE_ID}
+// {TASK_TYPE}.{START_TIMESTAMP}.{AGENT_ID}.{OPTIONAL_TASK_DESCRIPTION}.{OPTIONAL_DUPLICATE_ID}
 // e.g ShortLivedConsume.2014-07-16T20:55:46Z.cc-trogdor-service-agent-0.topic-1.2L.1
 func (t *TaskId) Name() string {
 	var description string
 	if t.Desc != "" {
 		description = fmt.Sprintf(".%s", t.Desc)
 	}
-	var loadLoop string
-	if t.loadLoopIteration != 0 {
-		loadLoop = fmt.Sprintf(".%dL", t.loadLoopIteration)
-	}
 	var duplicateId string
 	if t.duplicateId != 0 {
 		duplicateId = fmt.Sprintf(".%d", t.duplicateId)
 	}
-	optionalSuffix := fmt.Sprintf("%s%s%s", description, loadLoop, duplicateId)
+	optionalSuffix := fmt.Sprintf("%s%s", description, duplicateId)
 
 	return fmt.Sprintf("%s.%s.%s%s", t.TaskType,
 		time.Unix(int64(t.StartMs/1000), 0).UTC().Format(time.RFC3339), t.agentId, optionalSuffix)
@@ -199,6 +195,13 @@ type ProducerOptions struct {
 	KeyGenerator         KeyGeneratorSpec
 }
 
+// Returns the number of messages per second we would need in order to achieve the desired throughput in MBs
+func (po *ProducerOptions) MessagesPerSec(throughputMbPerSec float32) uint64 {
+	messageSizeBytes := po.KeyGenerator.Size + po.ValueGenerator.Size
+	throughputBytesPerSec := float64(throughputMbPerSec) * 1024 * 1024
+	return uint64(math.Round(throughputBytesPerSec / float64(messageSizeBytes)))
+}
+
 // a Scenario is a composition of multiple identical Trogdor tasks split across multiple Trogdor agents
 type ScenarioConfig struct {
 	ScenarioID       TaskId
@@ -208,7 +211,7 @@ type ScenarioConfig struct {
 	DurationMs       uint64
 	StartMs          uint64
 	BootstrapServers string
-	MessagesPerSec   uint64
+	MessagesPerSec   uint64 // the total messages per second we want this scenario to have
 	AdminConf        AdminConf
 	ProducerOptions  ProducerOptions
 	ConsumerOptions  ConsumerOptions

@@ -1,0 +1,69 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: "{{ .Chart.Name }}-clients-cli"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        release: {{ .Release.Name }}
+    spec:
+      volumes:
+        - name: "client-config-volume"
+          configMap:
+            name: "{{ .Chart.Name }}-client-config"
+        - name: "topic-config-volume"
+          configMap:
+            name: "{{ .Chart.Name }}-topic-config"
+        - name: "performance-test-volume"
+          configMap:
+            name: "{{ .Chart.Name }}-performance-test-config"
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- if eq .Values.image.tag "latest" }}
+          image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:{{ default .Chart.Version .Values.image.tag }}"
+          {{- else }}
+          image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:v{{ default .Chart.Version .Values.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: client-config-volume
+              mountPath: /mnt/config/client
+            - name: topic-config-volume
+              mountPath: /mnt/config/topic
+            - name: performance-test-volume
+              mountPath: /mnt/config/performance
+          restartPolicy: Always
+          command: ["tail"]
+          args: ["-f", "/dev/null"]
+          env:
+            - name: TROGDOR_HOST
+              value: "http://cc-trogdor-service-coordinator.{{.Release.Namespace}}.svc:{{ .Values.trogdorCoordinatorPort }}"
+            - name: PERFORMANCE_TEST_CONFIG_PATH
+              value: "{{ .Values.performanceTestConfigPath }}"
+            - name: TROGDOR_BOOTSTRAPSERVERS
+              value: "{{ .Values.bootstrapServer }}"
+            - name: TROGDOR_TOPIC_CONFIG_PATH
+              value: "{{ .Values.topicConfigPath }}"
+            - name: TROGDOR_AGENTS_COUNT
+              value: "{{ .Values.agentCount }}"
+            - name: TROGDOR_ADMIN_CONF
+              value: "/mnt/config/client/client_properties.json"
+            - name: DEBUG_LOGS
+              value: "{{ .Values.debugLogs }}"
+          readinessProbe:
+            exec:
+              command:
+              - /usr/bin/nc
+              - -z
+              - -w
+              - "2"
+              - 0.0.0.0

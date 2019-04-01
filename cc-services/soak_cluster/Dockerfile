@@ -1,4 +1,4 @@
-FROM confluent-docker.jfrog.io/confluentinc/cc-service-base:1.9
+FROM confluent-docker.jfrog.io/confluentinc/cc-service-base:1.10
 
 ARG version
 
@@ -22,3 +22,6 @@ FROM confluent-docker.jfrog.io/confluentinc/cc-built-base:0.0.2
 COPY --from=0 /soak-clients /
 
 ENTRYPOINT ["/soak-clients"]
+
+# keep container running
+CMD tail -f /dev/null
