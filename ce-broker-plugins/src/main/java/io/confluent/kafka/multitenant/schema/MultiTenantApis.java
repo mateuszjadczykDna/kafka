@@ -172,7 +172,7 @@ public class MultiTenantApis {
           break;
 
         case DELETE_TOPICS:
-          if (field != null && field.name.equals("topics")) {
+          if (field != null && field.name.equals("topic_names")) {
             return Optional.<TransformableType<TenantContext>>some(
                 new ArrayTenantTransformer(type, TenantContext.ValueType.TOPIC,
                     TenantTransform.ADD_PREFIX));
@@ -311,6 +311,14 @@ public class MultiTenantApis {
             if (field.name.equals("error_message")) {
               return Optional.some(new ErrorMessageSanitizer(type));
             }
+          }
+          break;
+
+        case DELETE_TOPICS:
+          if (field != null && field.name.equals("name")) {
+            return Optional.<TransformableType<TenantContext>>some(
+                    new StringTenantTransformer(type, TenantContext.ValueType.TOPIC,
+                            TenantTransform.REMOVE_PREFIX));
           }
           break;
 

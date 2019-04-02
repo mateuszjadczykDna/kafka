@@ -28,6 +28,10 @@ import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableTopicSet
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignment;
 import org.apache.kafka.common.message.CreateTopicsRequestData.CreatableReplicaAssignmentSet;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
+import org.apache.kafka.common.message.DeleteTopicsRequestData;
+import org.apache.kafka.common.message.DeleteTopicsResponseData;
+import org.apache.kafka.common.message.DeleteTopicsResponseData.DeletableTopicResult;
+import org.apache.kafka.common.message.DeleteTopicsResponseData.DeletableTopicResultSet;
 import org.apache.kafka.common.message.DescribeGroupsRequestData;
 import org.apache.kafka.common.message.DescribeGroupsResponseData;
 import org.apache.kafka.common.message.JoinGroupRequestData;
@@ -865,9 +869,12 @@ public class MultiTenantRequestContextTest {
   public void testDeleteTopicsRequest() {
     for (short ver = ApiKeys.DELETE_TOPICS.oldestVersion(); ver <= ApiKeys.DELETE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DELETE_TOPICS, ver);
-      DeleteTopicsRequest inbound = new DeleteTopicsRequest.Builder(mkSet("foo", "bar"), 30000).build(ver);
+      DeleteTopicsRequest inbound = new DeleteTopicsRequest.Builder(
+              new DeleteTopicsRequestData()
+                      .setTopicNames(Arrays.asList("foo", "bar")))
+              .build(ver);
       DeleteTopicsRequest intercepted = (DeleteTopicsRequest) parseRequest(context, inbound);
-      assertEquals(mkSet("tenant_foo", "tenant_bar"), intercepted.topics());
+      assertEquals(mkSet("tenant_foo", "tenant_bar"), new HashSet<>(intercepted.data().topicNames()));
       verifyRequestMetrics(ApiKeys.DELETE_TOPICS);
     }
   }
@@ -876,13 +883,16 @@ public class MultiTenantRequestContextTest {
   public void testDeleteTopicsResponse() throws IOException {
     for (short ver = ApiKeys.DELETE_TOPICS.oldestVersion(); ver <= ApiKeys.DELETE_TOPICS.latestVersion(); ver++) {
       MultiTenantRequestContext context = newRequestContext(ApiKeys.DELETE_TOPICS, ver);
-      Map<String, Errors> partitionErrors = new HashMap<>();
-      partitionErrors.put("tenant_foo", Errors.NONE);
-      partitionErrors.put("tenant_bar", Errors.NONE);
-      DeleteTopicsResponse outbound = new DeleteTopicsResponse(0, partitionErrors);
+      DeletableTopicResultSet deleted = new DeletableTopicResultSet();
+      deleted.add(new DeletableTopicResult().setName("tenant_foo").setErrorCode(Errors.NONE.code()));
+      deleted.add(new DeletableTopicResult().setName("tenant_bar").setErrorCode(Errors.NONE.code()));
+      DeleteTopicsResponse outbound = new DeleteTopicsResponse(new DeleteTopicsResponseData().setResponses(deleted));
       Struct struct = parseResponse(ApiKeys.DELETE_TOPICS, ver, context.buildResponse(outbound));
-      DeleteTopicsResponse intercepted = new DeleteTopicsResponse(struct);
-      assertEquals(mkSet("foo", "bar"), intercepted.errors().keySet());
+      DeleteTopicsResponse intercepted = new DeleteTopicsResponse(struct, ver);
+      assertEquals(mkSet("foo", "bar"),
+              intercepted.data().responses().stream()
+                      .map(DeletableTopicResult::name)
+                      .collect(Collectors.toSet()));
       verifyResponseMetrics(ApiKeys.DELETE_TOPICS, Errors.NONE);
     }
   }
