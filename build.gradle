@@ -1794,7 +1794,8 @@ project(':connect:basic-auth-extension') {
 
 project(':ce-metrics') {
   apply plugin: 'com.github.johnrengelman.shadow'
-  archivesBaseName = "ce-metrics"
+  archivesBaseName = "confluent-metrics"
+  version = cpVersion
 
   dependencies {
     compile libs.bcpkix
@@ -1833,7 +1834,8 @@ project(':ce-metrics') {
 
 project(':ce-serializers') {
   apply plugin: 'com.google.protobuf'
-  archivesBaseName = "ce-serializers"
+  archivesBaseName = "confluent-serializers-new"
+  version = cpVersion
 
   dependencies {
     compile libs.gson
@@ -1887,7 +1889,8 @@ project(':ce-serializers') {
 }
 
 project(':ce-licensing') {
-  archivesBaseName = "ce-licensing"
+  archivesBaseName = "confluent-licensing-new"
+  version = cpVersion
 
   dependencies {
     compile libs.jose4j
@@ -1932,6 +1935,7 @@ project(':ce-licensing') {
 project(':ce-kafka-client-plugins') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "kafka-client-plugins"
+  version = cpVersion
 
   dependencies {
     compile project(':clients')
@@ -1967,6 +1971,7 @@ project(':ce-kafka-client-plugins') {
 project(':ce-broker-plugins') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "broker-plugins"
+  version = cpVersion
 
   dependencies {
     compile libs.bcpkix
@@ -2019,6 +2024,7 @@ project(':ce-broker-plugins') {
 project(':ce-authorizer') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "authorizer"
+  version = cpVersion
 
   dependencies {
     compile project(':clients')
@@ -2059,6 +2065,7 @@ project(':ce-authorizer') {
 project(':ce-rest-authorizer') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "rest-authorizer"
+  version = cpVersion
 
   dependencies {
     compile project(':clients')
@@ -2099,6 +2106,7 @@ project(':ce-rest-authorizer') {
 project(':ce-rbac') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "rbac"
+  version = cpVersion
 
   dependencies {
     compile project(':clients')
@@ -2141,6 +2149,7 @@ project(':ce-rbac') {
 project(':ce-auth-providers') {
   apply plugin: 'com.github.johnrengelman.shadow'
   archivesBaseName = "auth-providers"
+  version = cpVersion
 
   dependencies {
     compile libs.bcpkix
@@ -2204,6 +2213,7 @@ project(':ce-auth-providers') {
 
 project(':ce-aegis') {
   archivesBaseName = "aegis"
+  version = cpVersion
 
   dependencies {
     compile libs.argparse4j

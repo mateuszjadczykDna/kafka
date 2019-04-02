@@ -41,6 +41,12 @@ def job = {
                 [$class: 'StringParameterValue', name: 'NODE_LABEL', value: "docker-oraclejdk8"]],
                 propagate: false, wait: false
     }
+
+    configFileProvider([configFile(fileId: 'Gradle Nexus Settings', variable: 'GRADLE_NEXUS_SETTINGS')]) {
+        stage("Update the Confluent Kafka repository") {
+            sh "./gradlew --init-script ${GRADLE_NEXUS_SETTINGS} uploadArchivesAll"
+        }
+    }
 }
 
 def post = {
