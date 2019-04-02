@@ -242,9 +242,11 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
   }
 
   // used by unit test
-  void configure(String logicalClustersDir, long reloadDelaysMs) {
+  void configure(String logicalClustersDir, long reloadDelaysMs, AdminClient adminClient) {
     this.reloadDelaysMs = reloadDelaysMs;
     this.logicalClustersDir = logicalClustersDir;
+    this.adminClient = adminClient;
+    this.deleteTopicBatchSize = 10;
   }
 
   @Override
@@ -383,7 +385,6 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
 
   /**
    * Return all logical clusters that are considered deleted and we won't try to delete again
-   * @return
    */
   public Set<String> fullyDeletedClusters() {
     ensureOpen();
@@ -593,15 +594,19 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
             lcMeta.lifecycleMetadata().deletionDate().before(new Date());
   }
 
-  // We check if the tenants in clustersInDeletion have any topics or ACLs left.
+  // We check if the deactivated tenants have any topics or ACLs left.
   // If they do, we try to delete the topics and ACLs.
   // If the topics and ACLs are completely gone, we add them to the deletedClusters list and stop
   // deleting them.
-  private void deleteTenants() {
-
+  // Visible for testing
+ void deleteTenants() {
     if (adminClient == null)
       return;
 
+    // we need to remove the "already deleted" clusters every single time when we enter this method
+    // because we re-populate deleteInProgressClusters with stuff that was already deleted just
+    // before entering this method.
+    deleteInProgressClusters.removeAll(deletedClusters);
     if (deleteInProgressClusters.isEmpty())
       return;
 
@@ -612,7 +617,6 @@ public class PhysicalClusterMetadata implements MultiTenantMetadata {
 
     // all the tenants with no topics *and* no ACLs are considered completely deleted
     deletedClusters.addAll(Sets.intersection(tenantsWithNoACLs, tenantsWithNoTopics));
-    deleteInProgressClusters.removeAll(deletedClusters);
   }
 
   // Delete topics of deactivated tenants.
