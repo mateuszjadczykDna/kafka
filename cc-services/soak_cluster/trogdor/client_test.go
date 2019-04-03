@@ -160,10 +160,10 @@ func TestProduceOptions_MessagesPerSec(t *testing.T) {
 	}
 
 	assert.Equal(t, uint64(10), options.MessagesPerSec(0.01))
-	assert.Equal(t, uint64(100), options.MessagesPerSec(0.1))
-	assert.Equal(t, uint64(550), options.MessagesPerSec(0.55))
-	assert.Equal(t, uint64(1000), options.MessagesPerSec(1))
-	assert.Equal(t, uint64(12000), options.MessagesPerSec(12))
+	assert.Equal(t, uint64(105), options.MessagesPerSec(0.1))
+	assert.Equal(t, uint64(577), options.MessagesPerSec(0.55))
+	assert.Equal(t, uint64(1049), options.MessagesPerSec(1))
+	assert.Equal(t, uint64(12583), options.MessagesPerSec(12))
 
 }
 
