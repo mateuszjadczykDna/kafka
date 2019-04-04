@@ -3,6 +3,7 @@
 package io.confluent.kafka.security.authorizer;
 
 import io.confluent.kafka.common.license.LicenseValidator;
+import io.confluent.kafka.multitenant.authorizer.MultiTenantAuthorizer;
 import io.confluent.kafka.security.authorizer.acl.AclMapper;
 import io.confluent.kafka.security.authorizer.acl.AclProvider;
 import io.confluent.security.authorizer.Action;
@@ -40,6 +41,8 @@ public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer
 
   private static final Set<String> UNSCOPED_PROVIDERS =
       Utils.mkSet(AccessRuleProviders.ACL.name(), AccessRuleProviders.MULTI_TENANT.name());
+  private static final Set<Class<? extends ConfluentKafkaAuthorizer>> LICENSE_FREE_AUTHORIZERS =
+      Collections.singleton(MultiTenantAuthorizer.class);
 
   private Authorizer aclAuthorizer;
   private volatile CompletableFuture<Void> readyFuture;
@@ -142,9 +145,13 @@ public class ConfluentKafkaAuthorizer extends EmbeddedAuthorizer
     return readyFuture;
   }
 
+  // Make this final so that license validation cannot be trivially overridden
   @Override
-  protected LicenseValidator licenseValidator() {
-    return new ConfluentLicenseValidator();
+  protected final LicenseValidator licenseValidator() {
+    if (LICENSE_FREE_AUTHORIZERS.contains(this.getClass()))
+      return null;
+    else
+      return new ConfluentLicenseValidator();
   }
 
   private static class AclErrorProvider implements Authorizer {

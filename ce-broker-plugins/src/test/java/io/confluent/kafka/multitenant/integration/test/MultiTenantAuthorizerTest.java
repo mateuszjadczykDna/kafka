@@ -85,6 +85,7 @@ public class MultiTenantAuthorizerTest {
 
     verifyTopicAuthorizationFailure(user1, "sometopic");
     verifyConsumerGroupAuthorizationFailure(user1, topic, "somegroup");
+    SecurityTestUtils.verifyAuthorizerLicense(physicalCluster.kafkaCluster(), null);
   }
 
   /**

@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
+import io.confluent.license.validator.ConfluentLicenseValidator.LicenseStatus;
 import io.confluent.security.authorizer.AccessRule;
 import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
 import io.confluent.security.test.utils.LdapTestUtils;
@@ -110,6 +111,8 @@ public class ConfluentKafkaAuthorizerTest {
       addTopicAcls(developer1, "app2", PatternType.PREFIXED, AclPermissionType.DENY);
       waitForAccess(adminClient, auditTopic, false);
     }
+
+    SecurityTestUtils.verifyAuthorizerLicense(rbacClusters.kafkaCluster, LicenseStatus.TRIAL);
   }
 
   @Test

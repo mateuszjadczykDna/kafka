@@ -3,6 +3,8 @@
 package io.confluent.security.test.integration.ldap;
 
 import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizer;
+import io.confluent.kafka.test.utils.SecurityTestUtils;
+import io.confluent.license.validator.ConfluentLicenseValidator.LicenseStatus;
 import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
 import io.confluent.security.auth.provider.ldap.LdapGroupManager;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
@@ -114,6 +116,7 @@ public class ApacheDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
     }, "Groups not refreshed");
     produceConsume(users.get(TESTER), DEV_TOPIC, DEV_CONSUMER_GROUP, true);
 
+    SecurityTestUtils.verifyAuthorizerLicense(kafkaCluster, LicenseStatus.LICENSE_ACTIVE);
   }
 
   private void createLdapServer() throws Exception {

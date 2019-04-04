@@ -81,6 +81,7 @@ public class EmbeddedAuthorizer implements Authorizer {
     this.providersCreated = new HashSet<>();
     this.superUsers = Collections.emptySet();
     this.scope = ""; // Scope is only required for broker authorizers using RBAC
+    licenseValidator = licenseValidator();
   }
 
   public void configureScope(String scope) {
@@ -93,10 +94,10 @@ public class EmbeddedAuthorizer implements Authorizer {
     allowEveryoneIfNoAcl = authorizerConfig.allowEveryoneIfNoAcl;
     superUsers = authorizerConfig.superUsers;
 
-    licenseValidator = licenseValidator();
-    if (licenseValidator != null) {
-      initializeAndValidateLicense(configs, licensePropName());
-    }
+    if (licenseValidator == null)
+      licenseValidator = DUMMY_LICENSE_VALIDATOR;
+    initializeAndValidateLicense(configs, licensePropName());
+
     ConfluentAuthorizerConfig.Providers providers = authorizerConfig.createProviders(scope);
     providersCreated.addAll(providers.accessRuleProviders);
     if (providers.groupProvider != null)
@@ -184,8 +185,7 @@ public class EmbeddedAuthorizer implements Authorizer {
   private AuthorizeResult authorize(KafkaPrincipal sessionPrincipal, String host, Action action) {
     try {
       // On license expiry, update metric and log error, but continue to authorize
-      if (licenseValidator != null)
-        licenseValidator.verifyLicense(false);
+      licenseValidator.verifyLicense(false);
 
       boolean authorized;
       KafkaPrincipal userPrincipal = userPrincipal(sessionPrincipal);

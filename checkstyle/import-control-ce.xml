@@ -109,6 +109,7 @@
 
     <subpackage name="test">
       <allow pkg="org.apache.kafka.test" />
+      <allow pkg="io.confluent.security" />
     </subpackage>
   </subpackage>
 

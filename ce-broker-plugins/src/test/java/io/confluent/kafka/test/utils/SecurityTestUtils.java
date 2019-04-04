@@ -2,6 +2,13 @@
 
 package io.confluent.kafka.test.utils;
 
+import static org.junit.Assert.assertEquals;
+
+import io.confluent.kafka.common.license.LicenseValidator;
+import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
+import io.confluent.license.validator.ConfluentLicenseValidator;
+import io.confluent.license.validator.ConfluentLicenseValidator.LicenseStatus;
+import io.confluent.security.authorizer.EmbeddedAuthorizer;
 import java.io.File;
 import java.util.Set;
 import javax.security.auth.login.Configuration;
@@ -10,9 +17,12 @@ import kafka.security.auth.Acl;
 import kafka.security.auth.Authorizer;
 import kafka.security.auth.Operation;
 import kafka.security.auth.Resource;
+import kafka.zk.KafkaZkClient;
+import kafka.zookeeper.ZooKeeperClient;
 import org.apache.kafka.common.resource.PatternType;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.security.authenticator.LoginManager;
+import org.apache.kafka.common.utils.Time;
 import scala.collection.JavaConversions;
 
 public class SecurityTestUtils {
@@ -152,6 +162,23 @@ public class SecurityTestUtils {
       }, "ACLs not updated");
     } catch (InterruptedException e) {
       throw new RuntimeException("Wait was interrupted", e);
+    }
+  }
+
+  public static void verifyAuthorizerLicense(EmbeddedKafkaCluster kafkaCluster, LicenseStatus expectedStatus) {
+    boolean needsLicense = expectedStatus != null;
+    EmbeddedAuthorizer authorizer = (EmbeddedAuthorizer) kafkaCluster.brokers().get(0).authorizer().get();
+    LicenseValidator licenseValidator = KafkaTestUtils.fieldValue(authorizer, EmbeddedAuthorizer.class, "licenseValidator");
+    assertEquals(needsLicense, licenseValidator instanceof ConfluentLicenseValidator);
+
+    Time time = Time.SYSTEM;
+    ZooKeeperClient zooClient = new ZooKeeperClient(kafkaCluster.zkConnect(), 10000, 1000,
+        Integer.MAX_VALUE, time, "testMetricGroup", "testMetricType");
+    try {
+      KafkaZkClient zkClient = new KafkaZkClient(zooClient, false, time);
+      assertEquals(expectedStatus == LicenseStatus.TRIAL, zkClient.pathExists("/confluent-license/trial"));
+    } finally {
+      zooClient.close();
     }
   }
 }
