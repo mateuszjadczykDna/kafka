@@ -180,9 +180,9 @@ class TierArchiver(config: TierArchiverConfig,
     if (config.enableArchiver && tierTopicManager.isReady) {
       lock.synchronized {
         processTransitions()
-        pause(config.updateIntervalMs, TimeUnit.MILLISECONDS)
       }
     }
+    pause(config.updateIntervalMs, TimeUnit.MILLISECONDS)
   }
 
   override def shutdown(): Unit = {
