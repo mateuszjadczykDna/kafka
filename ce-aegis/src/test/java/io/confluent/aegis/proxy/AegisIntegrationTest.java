@@ -7,6 +7,7 @@ import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
@@ -77,7 +78,13 @@ public class AegisIntegrationTest {
                 client.describeCluster().clusterId().get());
             client.createTopics(Collections.singleton(
                 new NewTopic("foo", 1, (short) 1))).all();
-            assertTrue(client.listTopics().names().get().contains("foo"));
+            TestUtils.waitForCondition(() -> {
+                try {
+                    return client.listTopics().names().get().contains("foo");
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }, "Failed to list the foo topic.");
         }
     }
 
@@ -99,6 +106,33 @@ public class AegisIntegrationTest {
                 log.trace("without brokers, createTopics failed", e);
                 assertTrue(e.getCause().getMessage().contains("Timed out"));
             }
+        }
+    }
+
+    @Test
+    public void testAdminRpcsWithMultipleBrokers() throws Exception {
+        kafkaCluster = new EmbeddedKafkaCluster();
+        kafkaCluster.startZooKeeper();
+        kafkaCluster.startBrokers(3, new Properties());
+        aegisCluster = new MiniAegisClusterBuilder().
+            setKafkaCluster(kafkaCluster).
+            add(new MiniAegisBuilder(new AegisConfig())).
+            add(new MiniAegisBuilder(new AegisConfig())).
+            add(new MiniAegisBuilder(new AegisConfig())).
+            build();
+        try (AdminClient client = AdminClient.
+            create(aegisCluster.createClientProps(0))) {
+            assertEquals(kafkaCluster.brokers().get(0).clusterId(),
+                client.describeCluster().clusterId().get());
+            client.createTopics(Collections.singleton(
+                new NewTopic("foo", 1, (short) 1))).all();
+            TestUtils.waitForCondition(() -> {
+                try {
+                    return client.listTopics().names().get().contains("foo");
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }, "Failed to list the foo topic.");
         }
     }
 }

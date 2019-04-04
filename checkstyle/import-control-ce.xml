@@ -164,6 +164,7 @@
     <allow pkg="org.apache.kafka.common.network" />
     <allow pkg="org.apache.kafka.common.security.auth" />
     <allow pkg="org.apache.kafka.common.utils" />
+    <allow pkg="org.apache.kafka.test" />
 
     <subpackage name="config">
       <allow pkg="io.confluent.aegis.common" />
