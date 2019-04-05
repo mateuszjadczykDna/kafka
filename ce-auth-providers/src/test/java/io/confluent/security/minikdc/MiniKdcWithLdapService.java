@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.naming.Context;
 import javax.naming.InvalidNameException;
@@ -491,7 +492,7 @@ public class MiniKdcWithLdapService {
    * @param principal principal name, do not include the domain.
    * @param password password.
    */
-  public void createPrincipals(String principal, String password) throws IOException, LdapException {
+  public void createPrincipal(String principal, String password) throws IOException, LdapException {
     StringBuilder ldifContent = new StringBuilder();
     ldifContent.append(String.format("dn: uid=%s,ou=users,dc=%s,dc=%s\n", principal,
         orgName.toLowerCase(Locale.ENGLISH), orgDomain.toLowerCase(Locale.ENGLISH)));
@@ -525,16 +526,23 @@ public class MiniKdcWithLdapService {
    * @param keytabFile keytab file to add the created principals
    * @param principals principals to add to the KDC, do not include the domain.
    */
-  public void createPrincipals(File keytabFile, String... principals)
+  public void createPrincipal(File keytabFile, String... principals)
       throws IOException, LdapException {
-    String generatedPassword = UUID.randomUUID().toString();
+    createPrincipal(keytabFile, Arrays.stream(principals)
+        .collect(Collectors.toMap(Function.identity(), unused -> UUID.randomUUID().toString())));
+  }
+
+  public void createPrincipal(File keytabFile, Map<String, String> principalsWithPassword)
+      throws IOException, LdapException {
     Keytab keytab = new Keytab();
-    List<KeytabEntry> entries = Arrays.stream(principals).flatMap(principal -> {
+    List<KeytabEntry> entries = principalsWithPassword.entrySet().stream().flatMap(entry -> {
       try {
-        createPrincipals(principal, generatedPassword);
+        String principal = entry.getKey();
+        String password = entry.getValue();
+        createPrincipal(principal, password);
         String principalWithRealm = principal + "@" + realm;
         KerberosTime timestamp = new KerberosTime();
-        return KerberosKeyFactory.getKerberosKeys(principalWithRealm, generatedPassword)
+        return KerberosKeyFactory.getKerberosKeys(principalWithRealm, password)
             .values().stream().map(encryptionKey -> {
               byte keyVersion = (byte) encryptionKey.getKeyVersion();
               return new KeytabEntry(principalWithRealm, 1, timestamp, keyVersion, encryptionKey);
@@ -678,9 +686,9 @@ public class MiniKdcWithLdapService {
   public static void main(String[] args) throws IOException, LdapException {
     if (args.length < 4) {
       System.err.println(
-          "Arguments: <WORKDIR> <MINILDAPSERVERPROPERTIES> <KEYTABFILE> [<PRINCIPAL:GROUP*>]+");
+          "Arguments: <WORKDIR> <MINILDAPSERVERPROPERTIES> <KEYTABFILE> [<PRINCIPAL:PASSWORD:GROUP*>]+");
       System.err.println("For example:");
-      System.err.println("java MiniKdcWithLdapService /tmp /tmp/minikdc.conf /tmp/test.keytab alice:Finance:Admin bob:Admin");
+      System.err.println("java MiniKdcWithLdapService /tmp /tmp/minikdc.conf /tmp/test.keytab alice:alice-secret:Finance:Admin bob:bob-secret:Admin");
       System.exit(1);
     }
 
@@ -703,34 +711,35 @@ public class MiniKdcWithLdapService {
 
     String keytabPath = args[2];
     File keytabFile = new File(keytabPath).getAbsoluteFile();
-    Map<String, List<String>> principals = new HashMap<>();
+    Map<String, UserMetadata> principals = new HashMap<>();
     for (int i = 3; i < args.length; i++) {
       String[] principalAndGroups = args[i].split(":");
       List<String> groups = new ArrayList<>();
-      for (int j = 1; j < principalAndGroups.length; j++) {
+      for (int j = 2; j < principalAndGroups.length; j++) {
         groups.add(principalAndGroups[j]);
       }
-      principals.put(principalAndGroups[0], groups);
+      String password = principalAndGroups.length < 2 ? UUID.randomUUID().toString() : principalAndGroups[1];
+      principals.put(principalAndGroups[0], new UserMetadata(password, groups));
     }
     start(workDir, config, keytabFile, principals);
   }
 
   private static void start(File workDir, Properties config, File keytabFile,
-      Map<String, List<String>> principalsWithGroups) throws LdapException, IOException {
+      Map<String, UserMetadata> principalsWithMetadata) throws LdapException, IOException {
     MiniKdcWithLdapService miniKdc = new MiniKdcWithLdapService(config, workDir);
     miniKdc.start();
 
     Map<String, List<String>> groups = new HashMap<>();
-    String[] users = new String[principalsWithGroups.size()];
+    String[] users = new String[principalsWithMetadata.size()];
     int index = 0;
-    for (Map.Entry<String, List<String>> entry : principalsWithGroups.entrySet()) {
+    for (Map.Entry<String, UserMetadata> entry : principalsWithMetadata.entrySet()) {
       String user = entry.getKey();
       users[index++] = user;
-      for (String group : entry.getValue()) {
+      for (String group : entry.getValue().groups) {
         groups.computeIfAbsent(group, g -> new ArrayList<>()).add(user);
       }
     }
-    miniKdc.createPrincipals(keytabFile, users);
+    miniKdc.createPrincipal(keytabFile, users);
     for (Map.Entry<String, List<String>> entry : groups.entrySet()) {
       String group = entry.getKey();
       String[] members = entry.getValue().toArray(new String[entry.getValue().size()]);
@@ -742,7 +751,8 @@ public class MiniKdcWithLdapService {
     System.out.println("---------------------------------------------------");
     System.out.println("  Running at      : " + miniKdc.kdcHost() + ":" + miniKdc.kdcPort());
     System.out.println("  created keytab  : " + keytabFile);
-    System.out.println("  with principals->groups : " + principalsWithGroups);
+    System.out.println("  Running LDAP at : " + miniKdc.ldapHost() + ":" + miniKdc.ldapPort());
+    System.out.println("  with principals->groups : " + principalsWithMetadata);
     System.out.println("  with groups->principals : " + groups);
     System.out.println();
     System.out.println("Hit <CTRL-C> or kill <PID> to stop it");
@@ -776,5 +786,20 @@ public class MiniKdcWithLdapService {
   private static BufferedReader resourceReader(String resourceName) throws IOException {
     InputStream in =  MiniKdcWithLdapService.class.getResourceAsStream(resourceName);
     return new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+  }
+
+  private static class UserMetadata {
+    final String password;
+    final List<String> groups;
+
+    UserMetadata(String password, List<String> groups) {
+      this.password = password;
+      this.groups = groups;
+    }
+
+    @Override
+    public String toString() {
+      return groups.toString();
+    }
   }
 }

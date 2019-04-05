@@ -84,7 +84,7 @@ class RbacTest(EndToEndTest, KafkaPathResolverMixin):
                               ["confluent.authorizer.access.rule.providers", "ACL,FILE_RBAC"],
                               ["confluent.authorizer.metadata.provider", "FILE_RBAC"],
                               ["confluent.authorizer.group.provider", "FILE_RBAC"],
-                              ["ldap.authorizer.java.naming.provider.url", self.minildap.ldap_url],
+                              ["ldap.java.naming.provider.url", self.minildap.ldap_url],
                               ["test.metadata.rbac.file", SecurityConfig.ROLES_PATH]
                           ])
         self.kafka.start()
@@ -101,8 +101,8 @@ class RbacTest(EndToEndTest, KafkaPathResolverMixin):
         self.verify_access_denied()
 
     def enable_ldap(self):
-        principals_with_groups = "%s:%s" % (SecurityConfig.SCRAM_CLIENT_USER, RbacTest.CLIENT_GROUP)
-        self.minildap = MiniLdap(self.test_context, principals_with_groups)
+        ldap_users = {SecurityConfig.SCRAM_CLIENT_USER : { "groups" : RbacTest.CLIENT_GROUP, "password" : SecurityConfig.SCRAM_CLIENT_PASSWORD } }
+        self.minildap = MiniLdap(self.test_context, ldap_users)
         self.minildap.start()
 
     def create_roles(self, kafka, principal):

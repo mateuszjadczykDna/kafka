@@ -10,7 +10,7 @@ import io.confluent.kafka.test.utils.KafkaTestUtils.ClientBuilder;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import io.confluent.license.validator.ConfluentLicenseValidator.LicenseStatus;
 import io.confluent.security.authorizer.AccessRule;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import io.confluent.security.test.utils.LdapTestUtils;
 import io.confluent.security.test.utils.RbacClusters;
 import java.util.Arrays;
@@ -118,8 +118,8 @@ public class ConfluentKafkaAuthorizerTest {
   @Test
   public void testLdapServerFailure() throws Throwable {
     rbacConfig = rbacConfig.withLdapGroups()
-        .overrideMetadataBrokerConfig(LdapAuthorizerConfig.REFRESH_INTERVAL_MS_PROP, "10")
-        .overrideMetadataBrokerConfig(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, "1000");
+        .overrideMetadataBrokerConfig(LdapConfig.REFRESH_INTERVAL_MS_PROP, "10")
+        .overrideMetadataBrokerConfig(LdapConfig.RETRY_TIMEOUT_MS_PROP, "1000");
     rbacClusters = new RbacClusters(rbacConfig);
     initializeRbacClusters();
     assertNotNull(rbacClusters.miniKdcWithLdapService);

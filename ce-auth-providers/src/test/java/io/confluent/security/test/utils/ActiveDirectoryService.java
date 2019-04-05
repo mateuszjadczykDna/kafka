@@ -2,7 +2,7 @@
 
 package io.confluent.security.test.utils;
 
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import java.io.File;
 import java.util.Properties;
 import javax.naming.Context;
@@ -44,31 +44,31 @@ public class ActiveDirectoryService {
 
   public Properties ldapAuthorizerConfig(User user) throws Exception {
     Properties props = new Properties();
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + Context.PROVIDER_URL,
+    props.setProperty(LdapConfig.CONFIG_PREFIX + Context.PROVIDER_URL,
         "ldap://" + AD_HOST + ":" + AD_PORT + "/" + AD_BASE_DN);
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + Context.SECURITY_AUTHENTICATION, "GSSAPI");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + Context.SECURITY_PRINCIPAL, user.fullPrincipal);
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + Context.REFERRAL, "throw");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + SaslConfigs.SASL_JAAS_CONFIG, user.jaasConfig);
+    props.setProperty(LdapConfig.CONFIG_PREFIX + Context.SECURITY_AUTHENTICATION, "GSSAPI");
+    props.setProperty(LdapConfig.CONFIG_PREFIX + Context.SECURITY_PRINCIPAL, user.fullPrincipal);
+    props.setProperty(LdapConfig.CONFIG_PREFIX + Context.REFERRAL, "throw");
+    props.setProperty(LdapConfig.CONFIG_PREFIX + SaslConfigs.SASL_JAAS_CONFIG, user.jaasConfig);
 
-    props.setProperty(LdapAuthorizerConfig.GROUP_SEARCH_BASE_PROP, "CN=Users");
-    props.setProperty(LdapAuthorizerConfig.GROUP_NAME_ATTRIBUTE_PROP, "sAMAccountName");
-    props.setProperty(LdapAuthorizerConfig.GROUP_MEMBER_ATTRIBUTE_PROP, "member");
-    props.setProperty(LdapAuthorizerConfig.GROUP_MEMBER_ATTRIBUTE_PATTERN_PROP,
+    props.setProperty(LdapConfig.GROUP_SEARCH_BASE_PROP, "CN=Users");
+    props.setProperty(LdapConfig.GROUP_NAME_ATTRIBUTE_PROP, "sAMAccountName");
+    props.setProperty(LdapConfig.GROUP_MEMBER_ATTRIBUTE_PROP, "member");
+    props.setProperty(LdapConfig.GROUP_MEMBER_ATTRIBUTE_PATTERN_PROP,
         "CN=(.*),CN=Users," + AD_BASE_DN);
-    props.setProperty(LdapAuthorizerConfig.GROUP_OBJECT_CLASS_PROP, "group");
+    props.setProperty(LdapConfig.GROUP_OBJECT_CLASS_PROP, "group");
 
-    props.setProperty(LdapAuthorizerConfig.USER_SEARCH_BASE_PROP, "CN=Users");
-    props.setProperty(LdapAuthorizerConfig.USER_NAME_ATTRIBUTE_PROP, "sAMAccountName");
-    props.setProperty(LdapAuthorizerConfig.USER_MEMBEROF_ATTRIBUTE_PROP, "memberof");
-    props.setProperty(LdapAuthorizerConfig.USER_MEMBEROF_ATTRIBUTE_PATTERN_PROP,
+    props.setProperty(LdapConfig.USER_SEARCH_BASE_PROP, "CN=Users");
+    props.setProperty(LdapConfig.USER_NAME_ATTRIBUTE_PROP, "sAMAccountName");
+    props.setProperty(LdapConfig.USER_MEMBEROF_ATTRIBUTE_PROP, "memberof");
+    props.setProperty(LdapConfig.USER_MEMBEROF_ATTRIBUTE_PATTERN_PROP,
         "CN=(.*),CN=Users," + AD_BASE_DN);
-    props.setProperty(LdapAuthorizerConfig.USER_OBJECT_CLASS_PROP, "user");
+    props.setProperty(LdapConfig.USER_OBJECT_CLASS_PROP, "user");
 
-    props.setProperty(LdapAuthorizerConfig.REFRESH_INTERVAL_MS_PROP, "10000");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + SaslConfigs.SASL_KERBEROS_SERVICE_NAME, "ldap");
+    props.setProperty(LdapConfig.REFRESH_INTERVAL_MS_PROP, "10000");
+    props.setProperty(LdapConfig.CONFIG_PREFIX + SaslConfigs.SASL_KERBEROS_SERVICE_NAME, "ldap");
 
-    props.setProperty(LdapAuthorizerConfig.USER_SEARCH_FILTER_PROP,
+    props.setProperty(LdapConfig.USER_SEARCH_FILTER_PROP,
         "(|(memberOf=CN=Kafka Admin,CN=Users,DC=COPS,DC=IO)(memberOf=CN=Kafka Developers,CN=Users,DC=COPS,DC=IO)(memberOf=CN=Kafka Testers,CN=Users,DC=COPS,DC=IO))");
 
     return props;

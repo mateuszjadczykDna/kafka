@@ -2,6 +2,8 @@
 
 package io.confluent.security.auth.provider.rbac;
 
+import io.confluent.security.auth.provider.ldap.LdapAuthenticateCallbackHandler;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import io.confluent.security.authorizer.Authorizer;
 import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.security.authorizer.EmbeddedAuthorizer;
@@ -30,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +40,7 @@ import org.slf4j.LoggerFactory;
 public class RbacProvider implements AccessRuleProvider, GroupProvider, MetadataProvider {
   private static final Logger log = LoggerFactory.getLogger(RbacProvider.class);
 
+  private LdapAuthenticateCallbackHandler authenticateCallbackHandler;
   private Scope authScope;
   private AuthStore authStore;
   private AuthCache authCache;
@@ -80,6 +84,10 @@ public class RbacProvider implements AccessRuleProvider, GroupProvider, Metadata
     }
     authStore = createAuthStore(authStoreScope, configs);
     this.authCache = authStore.authCache();
+    if (LdapConfig.ldapEnabled(configs)) {
+      authenticateCallbackHandler = new LdapAuthenticateCallbackHandler();
+      authenticateCallbackHandler.configure(configs, "PLAIN", Collections.emptyList());
+    }
   }
 
   @Override
@@ -113,7 +121,7 @@ public class RbacProvider implements AccessRuleProvider, GroupProvider, Metadata
     return authStore.startReader()
         .thenApply(unused -> {
           if (metadataServer != null)
-            metadataServer.start(new RbacAuthorizer(), authStore);
+            metadataServer.start(new RbacAuthorizer(), authStore, authenticateCallbackHandler);
           return null;
         });
   }
@@ -157,6 +165,8 @@ public class RbacProvider implements AccessRuleProvider, GroupProvider, Metadata
     AtomicReference<Throwable> firstException = new AtomicReference<>();
     ClientUtils.closeQuietly(metadataServer, "metadataServer", firstException);
     ClientUtils.closeQuietly(authStore, "authStore", firstException);
+    if (authenticateCallbackHandler != null)
+      ClientUtils.closeQuietly(authenticateCallbackHandler, "authenticateCallbackHandler", firstException);
     Throwable exception = firstException.getAndSet(null);
     if (exception != null)
       throw new KafkaException("RbacProvider could not be closed cleanly", exception);
@@ -213,7 +223,7 @@ public class RbacProvider implements AccessRuleProvider, GroupProvider, Metadata
   private static class DummyMetadataServer implements MetadataServer {
 
     @Override
-    public void start(Authorizer embeddedAuthorizer, AuthStore authStore) {
+    public void start(Authorizer embeddedAuthorizer, AuthStore authStore, AuthenticateCallbackHandler callbackHandler) {
     }
 
     @Override

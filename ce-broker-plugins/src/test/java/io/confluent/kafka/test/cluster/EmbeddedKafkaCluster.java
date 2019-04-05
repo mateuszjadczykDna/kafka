@@ -65,6 +65,7 @@ public class EmbeddedKafkaCluster {
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.FailedAuthenticationDelayMsProp(), 0);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.GroupInitialRebalanceDelayMsProp(), 0);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.OffsetsTopicReplicationFactorProp(), (short) 1);
+    putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.OffsetsTopicPartitionsProp(), 5);
     putIfAbsent(brokerConfig, KafkaConfig$.MODULE$.AutoCreateTopicsEnableProp(), true);
     int brokerIdStart = Integer.parseInt(overrideProps.getOrDefault(KafkaConfig$.MODULE$.BrokerIdProp(), "0").toString());
 

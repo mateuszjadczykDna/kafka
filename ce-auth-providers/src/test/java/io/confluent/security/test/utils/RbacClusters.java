@@ -55,7 +55,7 @@ public class RbacClusters {
     metadataCluster.startZooKeeper();
     users = createUsers(metadataCluster, config.brokerUser, config.userNames);
 
-    if (config.enableLdapGroups)
+    if (config.enableLdap)
       miniKdcWithLdapService = LdapTestUtils.createMiniKdcWithLdapService(null, null);
     else
       miniKdcWithLdapService = null;
@@ -208,7 +208,7 @@ public class RbacClusters {
     serverConfig.setProperty(KafkaConfig$.MODULE$.BrokerIdProp(), String.valueOf(100 + existingBrokerCount));
 
     if (existingBrokerCount != 0) {
-      if (config.enableLdapGroups) {
+      if (config.enableLdap) {
         serverConfig.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, 10));
       }
       serverConfig.setProperty(KafkaConfig$.MODULE$.AuthorizerClassNameProp(),
@@ -249,6 +249,7 @@ public class RbacClusters {
     private final Properties metadataClusterPropOverrides = new Properties();
     private String brokerUser;
     private List<String> userNames;
+    private boolean enableLdap;
     private boolean enableLdapGroups;
 
     public Config users(String brokerUser, List<String> userNames) {
@@ -259,6 +260,12 @@ public class RbacClusters {
 
     public Config withLdapGroups() {
       this.enableLdapGroups = true;
+      this.enableLdap = true;
+      return this;
+    }
+
+    public Config withLdap() {
+      this.enableLdap = true;
       return this;
     }
 

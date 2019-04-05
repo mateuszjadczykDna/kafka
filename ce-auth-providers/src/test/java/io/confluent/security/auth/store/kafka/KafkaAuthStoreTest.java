@@ -7,7 +7,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.kafka.test.utils.KafkaTestUtils;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.AuthKey;
 import io.confluent.security.auth.store.data.AuthValue;
@@ -176,9 +176,9 @@ public class KafkaAuthStoreTest {
     authStore = new MockAuthStore(rbacRoles, time, new Scope("testOrg"), 1, storeNodeId);
     Map<String, Object> configs = new HashMap<>();
     configs.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, 10));
-    configs.put(LdapAuthorizerConfig.RETRY_BACKOFF_MS_PROP, "1");
-    configs.put(LdapAuthorizerConfig.RETRY_BACKOFF_MAX_MS_PROP, "1");
-    configs.put(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, "1000");
+    configs.put(LdapConfig.RETRY_BACKOFF_MS_PROP, "1");
+    configs.put(LdapConfig.RETRY_BACKOFF_MAX_MS_PROP, "1");
+    configs.put(LdapConfig.RETRY_TIMEOUT_MS_PROP, "1000");
     configs.put("confluent.metadata.bootstrap.servers", "localhost:9092,localhost:9093");
     authStore.configure(configs);
   }

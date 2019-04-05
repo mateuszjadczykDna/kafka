@@ -4,7 +4,7 @@ package io.confluent.security.auth.provider.ldap;
 
 import io.confluent.security.authorizer.AccessRule;
 import io.confluent.security.authorizer.provider.ProviderFailedException;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig.SearchMode;
+import io.confluent.security.auth.provider.ldap.LdapConfig.SearchMode;
 import io.confluent.security.auth.utils.RetryBackoff;
 
 import io.confluent.security.auth.store.data.UserKey;
@@ -14,13 +14,9 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.security.PrivilegedAction;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,7 +30,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.naming.Context;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.directory.Attribute;
@@ -43,21 +38,13 @@ import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
 import javax.naming.ldap.Control;
 import javax.naming.ldap.HasControls;
-import javax.naming.ldap.InitialLdapContext;
 import javax.naming.ldap.LdapContext;
 import javax.naming.ldap.LdapName;
 import javax.naming.ldap.PagedResultsControl;
 import javax.naming.ldap.PagedResultsResponseControl;
 import javax.naming.ldap.Rdn;
-import javax.security.auth.Subject;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.SaslConfigs;
-import org.apache.kafka.common.config.types.Password;
-import org.apache.kafka.common.network.ListenerName;
-import org.apache.kafka.common.security.JaasContext;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
-import org.apache.kafka.common.security.authenticator.LoginManager;
-import org.apache.kafka.common.security.kerberos.KerberosLogin;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
@@ -83,9 +70,9 @@ public class LdapGroupManager {
     }
   }
 
-  private final LdapAuthorizerConfig config;
+  private final LdapConfig config;
   private final Time time;
-  private final Subject subject;
+  private final LdapContextCreator contextCreator;
   private final Map<String, Set<String>> userGroupCache;
   private final ScheduledExecutorService executorService;
   private final ResultEntryConfig resultEntryConfig;
@@ -100,17 +87,17 @@ public class LdapGroupManager {
   private volatile LdapContext context;
   private volatile Future<?> searchFuture;
 
-  public LdapGroupManager(LdapAuthorizerConfig config, Time time) {
+  public LdapGroupManager(LdapConfig config, Time time) {
     this(config, time, null);
   }
 
-  public LdapGroupManager(LdapAuthorizerConfig config,
+  public LdapGroupManager(LdapConfig config,
                           Time time,
                           ExternalStoreListener<UserKey, UserValue> listener) {
     this.config = config;
     this.time = time;
     this.listener = listener;
-    this.subject = login();
+    this.contextCreator = new LdapContextCreator(config);
     this.userGroupCache = new ConcurrentHashMap<>();
     persistentSearch = config.persistentSearch ? new PersistentSearch() : null;
 
@@ -196,7 +183,7 @@ public class LdapGroupManager {
           int backoffMs = processFailureAndGetBackoff(e);
           Thread.sleep(backoffMs);
         } catch (Throwable t) {
-          throw new LdapAuthorizerException("Ldap group manager initialization failed", t);
+          throw new LdapException("Ldap group manager initialization failed", t);
         }
       }
     } while (!done);
@@ -283,13 +270,13 @@ public class LdapGroupManager {
 
   private void persistentSearch() throws NamingException, IOException {
     if (context == null) {
-      createLdapContext();
+      context = contextCreator.createLdapContext();
     }
     try {
       context.setRequestControls(new Control[]{persistentSearch.control});
       searchControls.setTimeLimit(0);
     } catch (Exception e) {
-      throw new LdapAuthorizerException("Request controls could not be created");
+      throw new LdapException("Request controls could not be created");
     }
     log.trace("Starting persistent search");
     NamingEnumeration<SearchResult> enumeration = search(searchControls);
@@ -343,7 +330,7 @@ public class LdapGroupManager {
 
   void searchAndProcessResults() throws NamingException, IOException {
     if (context == null) {
-      createLdapContext();
+      context = contextCreator.createLdapContext();
       maybeSetPagingControl(null);
     }
     Set<String> currentSearchEntries = new HashSet<>();
@@ -504,7 +491,7 @@ public class LdapGroupManager {
               }
             }
           } else {
-            previousName = attributeValue(previousDn, pattern, "", "rename entry");
+            previousName = attributeValue(previousDn, pattern, "", "rename entry", config.searchMode);
           }
 
           if (previousName != null) {
@@ -569,7 +556,7 @@ public class LdapGroupManager {
     Attribute nameAttr = attributes.get(resultEntryConfig.nameAttribute);
     if (nameAttr != null) {
       String name = attributeValue(nameAttr.get(), resultEntryConfig.nameAttributePattern,
-          "", "search result");
+          "", "search result", config.searchMode);
       if (name == null) {
         return null;
       }
@@ -580,7 +567,7 @@ public class LdapGroupManager {
         while (attrs.hasMore()) {
           Object member = attrs.next();
           String memberName = attributeValue(member, resultEntryConfig.memberAttributePattern,
-              name, "member");
+              name, "member", config.searchMode);
           if (memberName != null) {
             members.add(memberName);
           }
@@ -602,9 +589,9 @@ public class LdapGroupManager {
     }
   }
 
-  private String attributeValue(Object value, Pattern pattern, String parent, String attrDesc) {
+  static String attributeValue(Object value, Pattern pattern, String parent, String attrDesc, SearchMode searchMode) {
     if (value == null) {
-      log.error("Ignoring null {} in LDAP {} {}", attrDesc, config.searchMode, parent);
+      log.error("Ignoring null {} in LDAP {} {}", attrDesc, searchMode, parent);
       return null;
     }
     if (pattern == null) {
@@ -613,69 +600,10 @@ public class LdapGroupManager {
     Matcher matcher = pattern.matcher(value.toString());
     if (!matcher.matches()) {
       log.error("Ignoring {} in LDAP {} {} that doesn't match pattern: {}",
-          attrDesc, config.searchMode, parent, value);
+          attrDesc, searchMode, parent, value);
       return null;
     }
     return matcher.group(1);
-  }
-
-  private Subject login() {
-    String jaasConfigProp = LdapAuthorizerConfig.CONFIG_PREFIX + SaslConfigs.SASL_JAAS_CONFIG;
-    Password jaasConfig = (Password) config.values().get(jaasConfigProp);
-    String authProp = LdapAuthorizerConfig.CONFIG_PREFIX + Context.SECURITY_AUTHENTICATION;
-
-    // If JAAS config is provided, login regardless of authentication type
-    // For GSSAPI, login using either JAAS config prop or default Configuration
-    // from the login context `KafkaServer`.
-    if (jaasConfig == null && !"GSSAPI".equals(config.originals().get(authProp))) {
-      return new Subject();
-    } else {
-      try {
-        JaasContext jaasContext = jaasContext(jaasConfig, "GSSAPI");
-
-        Map<String, Object> loginConfigs = new HashMap<>();
-        for (Map.Entry<String, ?> entry : config.values().entrySet()) {
-          String name = entry.getKey();
-          Object value = entry.getValue();
-          if (name.startsWith(LdapAuthorizerConfig.CONFIG_PREFIX) && value != null) {
-            loginConfigs
-                .put(name.substring(LdapAuthorizerConfig.CONFIG_PREFIX.length()), value);
-          }
-        }
-        LoginManager loginManager = LoginManager.acquireLoginManager(jaasContext, "GSSAPI",
-            KerberosLogin.class, loginConfigs);
-        return loginManager.subject();
-      } catch (Exception e) {
-        String configSource = jaasConfig != null
-            ? LdapAuthorizerConfig.CONFIG_PREFIX + SaslConfigs.SASL_JAAS_CONFIG
-            : "static JAAS configuration";
-        throw new LdapAuthorizerException("Login using " + configSource + " failed", e);
-      }
-    }
-  }
-
-  private void createLdapContext() throws IOException, NamingException {
-    Hashtable<String, String> env = config.ldapContextEnvironment;
-    this.context = Subject.doAs(subject, (PrivilegedAction<InitialLdapContext>) () -> {
-      try {
-        return new InitialLdapContext(env, null);
-      } catch (NamingException e) {
-        throw new LdapAuthorizerException(
-            "LDAP context could not be created with provided configs", e);
-      }
-    });
-  }
-
-  public static JaasContext jaasContext(Password jaasConfig, String mechanism) throws Exception {
-    // Configuration sources in order of precedence
-    //   1) JAAS configuration option: ldap.authorizer.gssapi.sasl.jaas.config
-    //   2) static Configuration ldap.KafkaServer
-    //   3) static Configuration KafkaServer
-    ListenerName listenerName = new ListenerName("ldap"); // only for static context name
-    Map<String, Object> configs = jaasConfig == null ? Collections.emptyMap() :
-        Collections.singletonMap(mechanism.toLowerCase(Locale.ROOT) + "."
-            + SaslConfigs.SASL_JAAS_CONFIG, jaasConfig);
-    return JaasContext.loadServerContext(listenerName, mechanism, configs);
   }
 
   private static class ResultEntryConfig {
@@ -747,7 +675,7 @@ public class LdapGroupManager {
         }
         return ChangeType.UNKNOWN;
       } catch (IllegalAccessException | InvocationTargetException e) {
-        throw new LdapAuthorizerException("Could not get change type", e);
+        throw new LdapException("Could not get change type", e);
       }
     }
 
@@ -755,7 +683,7 @@ public class LdapGroupManager {
       try {
         return (String) previousDnMethod.invoke(changeResponseControl);
       } catch (IllegalAccessException | InvocationTargetException e) {
-        throw new LdapAuthorizerException("Could not get change type", e);
+        throw new LdapException("Could not get change type", e);
       }
     }
 

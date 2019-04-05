@@ -3,7 +3,7 @@
 package io.confluent.security.auth.provider.ldap;
 
 
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig.SearchMode;
+import io.confluent.security.auth.provider.ldap.LdapConfig.SearchMode;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.security.test.utils.LdapTestUtils;
 import java.io.IOException;
@@ -48,7 +48,7 @@ public class LdapGroupManagerTest {
 
   @Test
   public void testGroupInitializationWithPersistentSearch() throws Exception {
-    verifyGroupInitialization(LdapAuthorizerConfig.PERSISTENT_REFRESH);
+    verifyGroupInitialization(LdapConfig.PERSISTENT_REFRESH);
   }
 
   public void verifyGroupInitialization(int refreshMs) throws Exception {
@@ -65,8 +65,8 @@ public class LdapGroupManagerTest {
   @Test
   public void testSearchWithSmallPageSizeLimit() throws Exception {
     Map<String, Object> props = LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, 1000);
-    props.put(LdapAuthorizerConfig.SEARCH_PAGE_SIZE_PROP, 2);
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    props.put(LdapConfig.SEARCH_PAGE_SIZE_PROP, 2);
+    LdapConfig ldapConfig = new LdapConfig(props);
     ldapGroupManager = new LdapGroupManager(ldapConfig, time);
     verifyGroupChanges();
   }
@@ -74,8 +74,8 @@ public class LdapGroupManagerTest {
   @Test
   public void testSearchWithLargePageSizeLimit() throws Exception {
     Map<String, Object> props = LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, 1000);
-    props.put(LdapAuthorizerConfig.SEARCH_PAGE_SIZE_PROP, 100);
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    props.put(LdapConfig.SEARCH_PAGE_SIZE_PROP, 100);
+    LdapConfig ldapConfig = new LdapConfig(props);
     ldapGroupManager = new LdapGroupManager(ldapConfig, time);
     verifyGroupChanges();
   }
@@ -89,7 +89,7 @@ public class LdapGroupManagerTest {
   @Test
   public void testGroupChangeWithPersistentSearch() throws Exception {
     ldapGroupManager = LdapTestUtils.createLdapGroupManager(miniKdcWithLdapService,
-        LdapAuthorizerConfig.PERSISTENT_REFRESH, time);
+        LdapConfig.PERSISTENT_REFRESH, time);
     verifyGroupChanges();
   }
 
@@ -142,7 +142,7 @@ public class LdapGroupManagerTest {
 
   @Test
   public void testLdapServerFailureWithPersistentSearch() throws Exception {
-    verifyLdapServerFailure(LdapAuthorizerConfig.PERSISTENT_REFRESH);
+    verifyLdapServerFailure(LdapConfig.PERSISTENT_REFRESH);
   }
 
   private void verifyLdapServerFailure(int refreshIntervalMs) throws Exception {
@@ -163,12 +163,12 @@ public class LdapGroupManagerTest {
   private void createLdapGroupManagerWithRetries(int refreshIntervalMs, int retryTimeoutMs) {
     Properties props = new Properties();
     props.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, refreshIntervalMs));
-    props.setProperty(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, String.valueOf(retryTimeoutMs));
-    props.setProperty(LdapAuthorizerConfig.RETRY_BACKOFF_MS_PROP, "1");
-    props.setProperty(LdapAuthorizerConfig.RETRY_BACKOFF_MAX_MS_PROP, "100");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.connect.timeout", "1000");
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "1000");
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    props.setProperty(LdapConfig.RETRY_TIMEOUT_MS_PROP, String.valueOf(retryTimeoutMs));
+    props.setProperty(LdapConfig.RETRY_BACKOFF_MS_PROP, "1");
+    props.setProperty(LdapConfig.RETRY_BACKOFF_MAX_MS_PROP, "100");
+    props.setProperty(LdapConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.connect.timeout", "1000");
+    props.setProperty(LdapConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "1000");
+    LdapConfig ldapConfig = new LdapConfig(props);
     ldapGroupManager = new LdapGroupManager(ldapConfig, time);
   }
 
@@ -233,9 +233,9 @@ public class LdapGroupManagerTest {
   private void startLdapGroupManagerWithPersistentSearch(long readTimeoutMs) {
     Properties props = new Properties();
     props.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService,
-        LdapAuthorizerConfig.PERSISTENT_REFRESH));
-    props.setProperty(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", String.valueOf(readTimeoutMs));
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+        LdapConfig.PERSISTENT_REFRESH));
+    props.setProperty(LdapConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", String.valueOf(readTimeoutMs));
+    LdapConfig ldapConfig = new LdapConfig(props);
     ldapGroupManager = new LdapGroupManager(ldapConfig, time);
     ldapGroupManager.start();
   }
@@ -315,15 +315,15 @@ public class LdapGroupManagerTest {
       int pageSize) {
     Properties props = new Properties();
     props.putAll(LdapTestUtils.ldapAuthorizerConfigs(miniKdcWithLdapService, refreshIntervalMs));
-    props.setProperty(LdapAuthorizerConfig.SEARCH_PAGE_SIZE_PROP, String.valueOf(pageSize));
-    props.setProperty(LdapAuthorizerConfig.SEARCH_MODE_PROP, SearchMode.USERS.name());
-    props.setProperty(LdapAuthorizerConfig.USER_SEARCH_BASE_PROP, "ou=groups");
-    props.setProperty(LdapAuthorizerConfig.USER_OBJECT_CLASS_PROP, "groupOfNames");
-    props.setProperty(LdapAuthorizerConfig.USER_NAME_ATTRIBUTE_PROP, "cn");
-    props.setProperty(LdapAuthorizerConfig.USER_MEMBEROF_ATTRIBUTE_PROP, "member");
-    props.setProperty(LdapAuthorizerConfig.USER_MEMBEROF_ATTRIBUTE_PATTERN_PROP,
+    props.setProperty(LdapConfig.SEARCH_PAGE_SIZE_PROP, String.valueOf(pageSize));
+    props.setProperty(LdapConfig.SEARCH_MODE_PROP, SearchMode.USERS.name());
+    props.setProperty(LdapConfig.USER_SEARCH_BASE_PROP, "ou=groups");
+    props.setProperty(LdapConfig.USER_OBJECT_CLASS_PROP, "groupOfNames");
+    props.setProperty(LdapConfig.USER_NAME_ATTRIBUTE_PROP, "cn");
+    props.setProperty(LdapConfig.USER_MEMBEROF_ATTRIBUTE_PROP, "member");
+    props.setProperty(LdapConfig.USER_MEMBEROF_ATTRIBUTE_PATTERN_PROP,
         "uid=(.*),ou=users,dc=example,dc=com");
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    LdapConfig ldapConfig = new LdapConfig(props);
     return new LdapGroupManager(ldapConfig, time);
   }
 }

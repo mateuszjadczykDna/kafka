@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +53,9 @@ public class FileBasedRbac extends RbacProvider {
     }
 
     @Override
-    public void start(Authorizer embeddedAuthorizer, AuthStore authStore) {
+    public void start(Authorizer embeddedAuthorizer,
+                      AuthStore authStore,
+                      AuthenticateCallbackHandler callbackHandler) {
       this.authStore = authStore;
       this.start();
     }

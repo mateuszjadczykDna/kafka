@@ -27,7 +27,7 @@ public class LdapGroupProvider implements GroupProvider {
 
   @Override
   public void configure(Map<String, ?> configs) {
-    LdapAuthorizerConfig authorizerConfig = new LdapAuthorizerConfig(configs);
+    LdapConfig authorizerConfig = new LdapConfig(configs);
     groupManager = new LdapGroupManager(authorizerConfig, time);
     groupManager.start();
   }

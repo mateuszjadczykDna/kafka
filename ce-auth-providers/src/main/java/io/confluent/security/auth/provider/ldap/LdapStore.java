@@ -18,7 +18,7 @@ public class LdapStore implements ExternalStore {
 
   private final Time time;
   private final UserStoreListener listener;
-  private LdapAuthorizerConfig config;
+  private LdapConfig config;
   private LdapGroupManager ldapGroupManager;
 
   public LdapStore(AuthCache authCache, KafkaAuthWriter writer, Time time) {
@@ -28,7 +28,7 @@ public class LdapStore implements ExternalStore {
 
   @Override
   public void configure(Map<String, ?> configs) {
-    config = new LdapAuthorizerConfig(configs);
+    config = new LdapConfig(configs);
   }
 
   @Override

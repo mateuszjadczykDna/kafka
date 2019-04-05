@@ -252,7 +252,10 @@
     <!-- ce-broker-plugins test suppressions -->
     <suppress checks="ClassDataAbstractionCoupling" files="MultiTenantRequestContextTest.java"/>
     <suppress checks="ClassFanOutComplexity" files="MultiTenantRequestContextTest.java"/>
+
+    <!-- ce-auth-providers test suppressions -->
     <suppress checks="ClassDataAbstractionCoupling" files="MiniKdcWithLdapService.java"/>
+    <suppress checks="ClassFanOutComplexity" files="MiniKdcWithLdapService.java"/>
 
     <suppress checks="ImportControl" files="TierFetcherTest.java|TierSegmentWindowTest.java"/>
 

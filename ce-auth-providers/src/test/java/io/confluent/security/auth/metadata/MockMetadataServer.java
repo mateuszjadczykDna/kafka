@@ -5,6 +5,7 @@ package io.confluent.security.auth.metadata;
 import io.confluent.security.authorizer.Authorizer;
 import java.io.IOException;
 import java.util.Map;
+import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 
 public class MockMetadataServer implements MetadataServer {
   public enum ServerState {
@@ -33,7 +34,7 @@ public class MockMetadataServer implements MetadataServer {
   }
 
   @Override
-  public void start(Authorizer embeddedAuthorizer, AuthStore authStore) {
+  public void start(Authorizer embeddedAuthorizer, AuthStore authStore, AuthenticateCallbackHandler callbackHandler) {
     if (serverState != ServerState.CONFIGURED)
       throw new IllegalStateException("start() invoked in invalid state: " + serverState);
 

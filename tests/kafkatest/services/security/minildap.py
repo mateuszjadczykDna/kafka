@@ -21,10 +21,10 @@ from kafkatest.version import DEV_BRANCH
 
 class MiniLdap(MiniKdc):
 
-    def __init__(self, context, principals_and_groups=""):
+    def __init__(self, context, ldap_users=""):
         kafka_nodes = []
         super(MiniLdap, self).__init__(context, kafka_nodes)
-        self.principals_and_groups = principals_and_groups
+        self.ldap_users = ldap_users
         self.ldap_port = 3268
 
     def start_node(self, node):
@@ -34,7 +34,12 @@ class MiniLdap(MiniKdc):
         self.logger.info("minildap.properties")
         self.logger.info(props_file)
 
-        self.logger.info("Starting MiniLdap with principals:groups %s" % self.principals_and_groups)
+        user_metadata = ""
+        for principal in self.ldap_users:
+          metadata = self.ldap_users[principal]
+          user_metadata = "%s %s:%s:%s" % (user_metadata, principal, metadata["password"], metadata["groups"])
+
+        self.logger.info("Starting MiniLdap with principals:groups %s" % user_metadata)
 
         core_libs_jar = self.path.jar(CORE_LIBS_JAR_NAME, DEV_BRANCH)
         core_dependant_test_libs_jar = self.path.jar(CORE_DEPENDANT_TEST_LIBS_JAR_NAME, DEV_BRANCH)
@@ -46,7 +51,7 @@ class MiniLdap(MiniKdc):
         cmd += " for file in %s; do CLASSPATH=$CLASSPATH:$file; done;" % auth_providers_libs_jar
         cmd += " for file in %s; do CLASSPATH=$CLASSPATH:$file; done;" % auth_providers_dependant_test_libs_jar
         cmd += " export CLASSPATH; "
-        cmd += " %s io.confluent.security.minikdc.MiniKdcWithLdapService %s %s %s %s 1>> %s 2>> %s &" % (self.path.script("kafka-run-class.sh", node), MiniKdc.WORK_DIR, MiniKdc.PROPS_FILE, MiniKdc.KEYTAB_FILE, self.principals_and_groups, MiniKdc.LOG_FILE, MiniKdc.LOG_FILE)
+        cmd += " %s io.confluent.security.minikdc.MiniKdcWithLdapService %s %s %s %s 1>> %s 2>> %s &" % (self.path.script("kafka-run-class.sh", node), MiniKdc.WORK_DIR, MiniKdc.PROPS_FILE, MiniKdc.KEYTAB_FILE, user_metadata, MiniKdc.LOG_FILE, MiniKdc.LOG_FILE)
         self.logger.debug("Attempting to start MiniLdap on %s with command: %s" % (str(node.account), cmd))
         with node.account.monitor_log(MiniKdc.LOG_FILE) as monitor:
             node.account.ssh(cmd)

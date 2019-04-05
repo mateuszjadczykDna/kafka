@@ -5,7 +5,7 @@ package io.confluent.security.test.integration.ldap;
 import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizer;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
 import io.confluent.license.validator.ConfluentLicenseValidator.LicenseStatus;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import io.confluent.security.auth.provider.ldap.LdapGroupManager;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
 import io.confluent.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
@@ -65,15 +65,15 @@ public class ApacheDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
   @Override
   protected Properties kafkaServerConfig() throws Exception {
     Properties serverConfig = super.kafkaServerConfig();
-    if (ldapRefreshIntervalMs == LdapAuthorizerConfig.PERSISTENT_REFRESH)
-      serverConfig.put(LdapAuthorizerConfig.JNDI_READ_TIMEOUT_MS_PROP, "5000");
+    if (ldapRefreshIntervalMs == LdapConfig.PERSISTENT_REFRESH)
+      serverConfig.put(LdapConfig.JNDI_READ_TIMEOUT_MS_PROP, "5000");
     return serverConfig;
   }
 
   // When using persistent search, wait until the search is initialized and existing
   // groups are loaded into cache. This can be removed once DIRSERVER-2257 is fixed.
   private void maybeWaitForUserGroups() {
-    if (ldapRefreshIntervalMs != LdapAuthorizerConfig.PERSISTENT_REFRESH)
+    if (ldapRefreshIntervalMs != LdapConfig.PERSISTENT_REFRESH)
       return;
 
     kafkaCluster.brokers().forEach(broker -> {
@@ -159,7 +159,7 @@ public class ApacheDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
         LdapSecurityProtocol.SSL,
         LdapSecurityAuthentication.GSSAPI,
         LDAP_USER,
-        LdapAuthorizerConfig.PERSISTENT_REFRESH
+        LdapConfig.PERSISTENT_REFRESH
     });
     values.add(new Object[]{
         "GSSAPI",
@@ -173,7 +173,7 @@ public class ApacheDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
         LdapSecurityProtocol.PLAINTEXT,
         LdapSecurityAuthentication.GSSAPI,
         LDAP_USER,
-        LdapAuthorizerConfig.PERSISTENT_REFRESH
+        LdapConfig.PERSISTENT_REFRESH
     });
     values.add(new Object[]{
         "GSSAPI",

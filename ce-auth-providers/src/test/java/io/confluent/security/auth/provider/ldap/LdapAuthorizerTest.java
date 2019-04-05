@@ -149,7 +149,7 @@ public class LdapAuthorizerTest {
   public void testLdapFailure() throws Exception {
     miniKdcWithLdapService.createGroup("adminGroup", "adminUser", "kafkaUser");
     miniKdcWithLdapService.createGroup("guestGroup", "guest");
-    authorizerConfig.put(LdapAuthorizerConfig.RETRY_TIMEOUT_MS_PROP, "1000");
+    authorizerConfig.put(LdapConfig.RETRY_TIMEOUT_MS_PROP, "1000");
     ldapAuthorizer.configure(authorizerConfig);
 
     KafkaPrincipal adminGroupPrincipal = new KafkaPrincipal("Group", "adminGroup");

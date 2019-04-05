@@ -2,8 +2,8 @@
 
 package io.confluent.security.test.integration.ldap;
 
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig.SearchMode;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig.SearchMode;
 import io.confluent.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
 import io.confluent.security.minikdc.MiniKdcWithLdapService.LdapSecurityProtocol;
 import io.confluent.security.test.utils.ActiveDirectoryService;
@@ -73,7 +73,7 @@ public class ActiveDirectoryEndToEndAuthorizationTest extends AbstractEndToEndAu
   protected Properties authorizerConfig() {
     try {
       Properties config = activeDirectoryService.ldapAuthorizerConfig(users.get(ldapUser));
-      config.put(LdapAuthorizerConfig.SEARCH_MODE_PROP, searchMode.name());
+      config.put(LdapConfig.SEARCH_MODE_PROP, searchMode.name());
       return config;
     } catch (Exception e) {
       throw new RuntimeException("Could not get active directory ldap config", e);

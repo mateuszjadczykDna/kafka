@@ -8,7 +8,7 @@ import io.confluent.security.authorizer.provider.InvalidScopeException;
 import io.confluent.security.authorizer.utils.ThreadUtils;
 import io.confluent.security.auth.metadata.AuthWriter;
 import io.confluent.security.auth.provider.ldap.LdapStore;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import io.confluent.security.auth.store.cache.DefaultAuthCache;
 import io.confluent.security.auth.store.data.StatusKey;
 import io.confluent.security.auth.store.data.StatusValue;
@@ -45,7 +45,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
-import javax.naming.Context;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.Producer;
@@ -429,7 +428,7 @@ public class KafkaAuthWriter implements Writer, AuthWriter, ConsumerListener<Aut
 
   private void loadExternalAuthStores() {
     Map<String, ?> configs = config.originals();
-    if (configs.containsKey(LdapAuthorizerConfig.CONFIG_PREFIX + Context.PROVIDER_URL)) {
+    if (LdapConfig.ldapEnabled(configs)) {
       LdapStore ldapStore = new LdapStore(authCache, this, time);
       ldapStore.configure(configs);
       externalAuthStores.put(AuthEntryType.USER, ldapStore);

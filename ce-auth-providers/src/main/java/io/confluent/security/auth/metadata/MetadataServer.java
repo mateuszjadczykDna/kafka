@@ -5,6 +5,7 @@ package io.confluent.security.auth.metadata;
 import io.confluent.security.authorizer.Authorizer;
 import java.io.Closeable;
 import org.apache.kafka.common.Configurable;
+import org.apache.kafka.common.security.auth.AuthenticateCallbackHandler;
 
 public interface MetadataServer extends Configurable, Closeable {
 
@@ -20,8 +21,11 @@ public interface MetadataServer extends Configurable, Closeable {
    * @param authStore An instance of AuthStore that can be used to read current role bindings,
    *                 user metadata etc. from an in-memory cache that is kept up-to-date by the embedded
    *                 authorizer.
+   * @param authenticateCallbackHandler Authentication callback handlers, e.g. for LDAP authentication
    */
-  void start(Authorizer embeddedAuthorizer, AuthStore authStore);
+  void start(Authorizer embeddedAuthorizer,
+             AuthStore authStore,
+             AuthenticateCallbackHandler authenticateCallbackHandler);
 
   default String providerName() {
     return "RBAC";

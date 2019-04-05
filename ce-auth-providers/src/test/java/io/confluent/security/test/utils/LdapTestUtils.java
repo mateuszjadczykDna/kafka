@@ -4,7 +4,7 @@ package io.confluent.security.test.utils;
 
 import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizer;
 import io.confluent.license.test.utils.LicenseTestUtils;
-import io.confluent.security.auth.provider.ldap.LdapAuthorizerConfig;
+import io.confluent.security.auth.provider.ldap.LdapConfig;
 import io.confluent.security.auth.provider.ldap.LdapGroupManager;
 import io.confluent.security.auth.provider.ldap.LdapGroupProvider;
 import io.confluent.security.minikdc.MiniKdcWithLdapService;
@@ -51,7 +51,7 @@ public class LdapTestUtils {
     ldapServer.start();
 
     if (keytabFile != null) {
-      ldapServer.createPrincipals(keytabFile, "ldap/localhost");
+      ldapServer.createPrincipal(keytabFile, "ldap/localhost");
     }
     return ldapServer;
   }
@@ -74,28 +74,28 @@ public class LdapTestUtils {
   public static LdapGroupManager createLdapGroupManager(MiniKdcWithLdapService ldapServer,
       int refreshIntervalMs, Time time) {
     Map<String, Object> props = ldapAuthorizerConfigs(ldapServer, refreshIntervalMs);
-    LdapAuthorizerConfig ldapConfig = new LdapAuthorizerConfig(props);
+    LdapConfig ldapConfig = new LdapConfig(props);
     return new LdapGroupManager(ldapConfig, time);
   }
 
   public static Map<String, Object> ldapAuthorizerConfigs(MiniKdcWithLdapService ldapServer, int refreshIntervalMs) {
     Map<String, Object> props = new HashMap<>();
     props.put(KafkaConfig$.MODULE$.AuthorizerClassNameProp(), LdapAuthorizer.class.getName());
-    props.put(LdapAuthorizerConfig.REFRESH_INTERVAL_MS_PROP, String.valueOf(refreshIntervalMs));
-    props.put(LdapAuthorizerConfig.GROUP_NAME_ATTRIBUTE_PROP, "cn");
-    props.put(LdapAuthorizerConfig.GROUP_MEMBER_ATTRIBUTE_PATTERN_PROP, "uid=(.*),ou=users,dc=example,dc=com");
+    props.put(LdapConfig.REFRESH_INTERVAL_MS_PROP, String.valueOf(refreshIntervalMs));
+    props.put(LdapConfig.GROUP_NAME_ATTRIBUTE_PROP, "cn");
+    props.put(LdapConfig.GROUP_MEMBER_ATTRIBUTE_PATTERN_PROP, "uid=(.*),ou=users,dc=example,dc=com");
     for (Map.Entry<String, String> entry : ldapServer.ldapClientConfigs().entrySet()) {
-      props.put(LdapAuthorizerConfig.CONFIG_PREFIX + entry.getKey(), entry.getValue());
+      props.put(LdapConfig.CONFIG_PREFIX + entry.getKey(), entry.getValue());
     }
-    props.put(LdapAuthorizerConfig.CONFIG_PREFIX + SaslConfigs.SASL_KERBEROS_SERVICE_NAME, "ldap");
+    props.put(LdapConfig.CONFIG_PREFIX + SaslConfigs.SASL_KERBEROS_SERVICE_NAME, "ldap");
     props.put(LdapAuthorizer.LICENSE_PROP, LicenseTestUtils.generateLicense());
 
     // Due a to timing issue in Apache DS persistent search (https://issues.apache.org/jira/browse/DIRSERVER-2257),
     // some updates made while the persistent search is initialized may not be returned by the search. Use a read
     // timeout that is high enough to avoid unnecessary timeouts in tests, but low enough to trigger a second search
     // in cases where the timing window resulted in missing entries.
-    if (refreshIntervalMs == LdapAuthorizerConfig.PERSISTENT_REFRESH) {
-      props.put(LdapAuthorizerConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "5000");
+    if (refreshIntervalMs == LdapConfig.PERSISTENT_REFRESH) {
+      props.put(LdapConfig.CONFIG_PREFIX + "com.sun.jndi.ldap.read.timeout", "5000");
     }
 
     return props;
@@ -121,7 +121,7 @@ public class LdapTestUtils {
   public static File createPrincipal(MiniKdcWithLdapService miniKdcWithLdapService, String principal) {
     try {
       File keytabFile = TestUtils.tempFile();
-      miniKdcWithLdapService.createPrincipals(keytabFile, principal);
+      miniKdcWithLdapService.createPrincipal(keytabFile, principal);
       return keytabFile;
     } catch (Exception e) {
       throw new RuntimeException("Could not create keytab", e);

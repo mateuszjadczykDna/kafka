@@ -9,9 +9,9 @@ import io.confluent.kafka.security.ldap.authorizer.LdapAuthorizer;
 import io.confluent.kafka.test.cluster.EmbeddedKafkaCluster;
 import io.confluent.kafka.test.utils.KafkaTestUtils;
 import io.confluent.kafka.test.utils.SecurityTestUtils;
+import io.confluent.security.auth.provider.ldap.LdapContextCreator;
 import io.confluent.security.authorizer.ConfluentAuthorizerConfig;
 import io.confluent.security.authorizer.AccessRule;
-import io.confluent.security.auth.provider.ldap.LdapGroupManager;
 import io.confluent.security.minikdc.MiniKdcWithLdapService.LdapSecurityAuthentication;
 import io.confluent.security.minikdc.MiniKdcWithLdapService.LdapSecurityProtocol;
 import io.confluent.security.test.utils.User;
@@ -257,7 +257,7 @@ public abstract class AbstractEndToEndAuthorizationTest {
       Password jaasConfig = new Password((String) serverConfig.remove(brokerJaasConfigProp));
       serverConfig.remove("ldap.authorizer.sasl.jaas.config");
       Configuration
-          .setConfiguration(LdapGroupManager.jaasContext(jaasConfig, "GSSAPI").configuration());
+          .setConfiguration(LdapContextCreator.jaasContext(jaasConfig, "GSSAPI").configuration());
     }
     return serverConfig;
   }
