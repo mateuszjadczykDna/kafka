@@ -65,11 +65,13 @@ public class RbacRolesTest {
     assertEquals("Cluster", rbacRoles.role("Operator").accessPolicy().scopeType());
     assertEquals("Cluster", rbacRoles.role("SecurityAdmin").accessPolicy().scopeType());
     assertEquals("Resource", rbacRoles.role("ResourceOwner").accessPolicy().scopeType());
-    assertEquals("Resource", rbacRoles.role("Developer").accessPolicy().scopeType());
+    assertEquals("Resource", rbacRoles.role("DeveloperRead").accessPolicy().scopeType());
+    assertEquals("Resource", rbacRoles.role("DeveloperWrite").accessPolicy().scopeType());
+    assertEquals("Resource", rbacRoles.role("DeveloperManage").accessPolicy().scopeType());
 
     assertTrue(rbacRoles.role("UserAdmin").accessPolicy()
         .allowedOperations(new ResourceType("Cluster")).contains(new Operation("Alter")));
-    assertTrue(rbacRoles.role("Developer").accessPolicy()
+    assertTrue(rbacRoles.role("ResourceOwner").accessPolicy()
         .allowedOperations(new ResourceType("Group")).contains(new Operation("Read")));
   }
 

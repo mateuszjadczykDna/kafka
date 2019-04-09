@@ -142,9 +142,11 @@ public class ConfluentKafkaAuthorizerTest {
         Utils.mkSet(new io.confluent.security.authorizer.ResourcePattern("Topic", "*", PatternType.LITERAL),
             new io.confluent.security.authorizer.ResourcePattern("Group", "*", PatternType.LITERAL)));
 
-    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", clusterId,
+    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "DeveloperRead", clusterId,
         Utils.mkSet(new io.confluent.security.authorizer.ResourcePattern("Topic", "app2", PatternType.PREFIXED),
             new io.confluent.security.authorizer.ResourcePattern("Group", "app2", PatternType.PREFIXED)));
+    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "DeveloperWrite", clusterId,
+        Utils.mkSet(new io.confluent.security.authorizer.ResourcePattern("Topic", "app2", PatternType.PREFIXED)));
 
     rbacClusters.updateUserGroup(DEVELOPER1, DEVELOPER_GROUP);
     rbacClusters.waitUntilAccessAllowed(RESOURCE_OWNER1, APP1_TOPIC);

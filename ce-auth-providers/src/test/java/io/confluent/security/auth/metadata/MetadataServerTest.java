@@ -74,7 +74,7 @@ public class MetadataServerTest {
     Set<KafkaPrincipal> groups = Collections.emptySet();
 
     RbacTestUtils.updateRoleBinding(metadataAuthCache, alice, "ClusterAdmin", clusterA, Collections.emptySet());
-    verifyRules(accessRules(alice, groups, Resource.CLUSTER), "Alter", "Describe", "AlterConfigs", "DescribeConfigs");
+    verifyRules(accessRules(alice, groups, Resource.CLUSTER), "Create", "Alter", "Describe", "AlterConfigs", "DescribeConfigs");
     verifyRules(accessRules(alice, groups, topic));
 
     Action alterConfigs = new Action(clusterA, ResourceType.CLUSTER, "kafka-cluster", new Operation("AlterConfigs"));

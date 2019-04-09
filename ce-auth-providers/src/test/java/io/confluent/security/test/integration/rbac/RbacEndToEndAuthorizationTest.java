@@ -81,9 +81,11 @@ public class RbacEndToEndAuthorizationTest {
   @Test
   public void testProduceConsumeWithGroupRoles() throws Throwable {
     rbacClusters.updateUserGroup(DEVELOPER2, DEVELOPER_GROUP);
-    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "Developer", clusterId,
+    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "DeveloperRead", clusterId,
         Utils.mkSet(new ResourcePattern("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL),
             new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL)));
+    rbacClusters.assignRole(AccessRule.GROUP_PRINCIPAL_TYPE, DEVELOPER_GROUP, "DeveloperWrite", clusterId,
+        Utils.mkSet(new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL)));
     rbacClusters.waitUntilAccessAllowed(DEVELOPER2, APP1_TOPIC);
     rbacClusters.produceConsume(DEVELOPER2, APP1_TOPIC, APP1_CONSUMER_GROUP, true);
   }
@@ -96,12 +98,16 @@ public class RbacEndToEndAuthorizationTest {
   }
 
   private void initializeRoles() throws Exception {
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "Developer", clusterId,
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "DeveloperRead", clusterId,
         Utils.mkSet(new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL),
             new ResourcePattern("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL)));
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "Developer", clusterId,
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "DeveloperWrite", clusterId,
+        Utils.mkSet(new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "DeveloperRead", clusterId,
         Utils.mkSet(new ResourcePattern("Topic", "app2", PatternType.PREFIXED),
             new ResourcePattern("Group", "app2", PatternType.PREFIXED)));
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "DeveloperWrite", clusterId,
+        Utils.mkSet(new ResourcePattern("Topic", "app2", PatternType.PREFIXED)));
     rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER, "ResourceOwner", clusterId,
         Utils.mkSet(new ResourcePattern("Topic", "*", PatternType.LITERAL),
             new ResourcePattern("Group", "*", PatternType.LITERAL)));
@@ -115,10 +121,10 @@ public class RbacEndToEndAuthorizationTest {
   }
 
   private void createAdditionalRoles(String cluster) throws Exception {
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "Developer", cluster,
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER1, "DeveloperRead", cluster,
         Utils.mkSet(new ResourcePattern("Topic", APP1_TOPIC, PatternType.LITERAL),
             new ResourcePattern("Group", APP1_CONSUMER_GROUP, PatternType.LITERAL)));
-    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "Developer", cluster,
+    rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, DEVELOPER2, "DeveloperRead", cluster,
         Utils.mkSet(new ResourcePattern("Topic", "app2", PatternType.PREFIXED),
             new ResourcePattern("Group", "app2", PatternType.PREFIXED)));
     rbacClusters.assignRole(KafkaPrincipal.USER_TYPE, RESOURCE_OWNER, "ResourceOwner", cluster,

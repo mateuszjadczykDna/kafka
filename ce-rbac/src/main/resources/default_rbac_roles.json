@@ -18,7 +18,7 @@
         "allowedOperations" : [
           {
             "resourceType" : "Cluster",
-            "operations" : ["Alter"]
+            "operations" : ["Alter", "Describe"]
           },
           {
             "resourceType" : "DelegationToken",
@@ -35,7 +35,7 @@
         "allowedOperations" : [
           {
             "resourceType" : "Cluster",
-            "operations" : ["Alter", "AlterConfigs", "Describe", "DescribeConfigs"]
+            "operations" : ["Create", "Alter", "AlterConfigs", "Describe", "DescribeConfigs"]
           },
           {
             "resourceType" : "Topic",
@@ -82,20 +82,24 @@
           },
           {
             "resourceType" : "Cluster",
-            "operations" : ["Describe", "DescribeConfigs", "IdempotentWrite"]
+            "operations" : ["Create", "IdempotentWrite", "Describe", "DescribeConfigs", "Alter", "AlterConfigs"]
+          },
+          {
+            "resourceType" : "DelegationToken",
+            "operations" : ["Describe"]
           }
         ]
       }
     },
     {
-      "name" : "Developer",
+      "name" : "DeveloperRead",
       "policy" : {
         "scopeType" : "Resource",
         "isSuperUser" : "false",
         "allowedOperations" : [
           {
             "resourceType" : "Topic",
-            "operations" : ["Read", "Write", "Describe", "DescribeConfigs"]
+            "operations" : ["Read", "Describe"]
           },
           {
             "resourceType" : "Group",
@@ -103,11 +107,61 @@
           },
           {
             "resourceType" : "TransactionalId",
+            "operations" : ["Describe"]
+          },
+          {
+            "resourceType" : "Cluster",
+            "operations" : []
+          }
+        ]
+      }
+    },
+    {
+      "name" : "DeveloperWrite",
+      "policy" : {
+        "scopeType" : "Resource",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Write", "Describe"]
+          },
+          {
+            "resourceType" : "Group",
+            "operations" : []
+          },
+          {
+            "resourceType" : "TransactionalId",
             "operations" : ["Write", "Describe"]
           },
           {
             "resourceType" : "Cluster",
-            "operations" : ["Describe", "DescribeConfigs", "IdempotentWrite"]
+            "operations" : ["IdempotentWrite"]
+          }
+        ]
+      }
+    },
+    {
+      "name" : "DeveloperManage",
+      "policy" : {
+        "scopeType" : "Resource",
+        "isSuperUser" : "false",
+        "allowedOperations" : [
+          {
+            "resourceType" : "Topic",
+            "operations" : ["Create", "Delete", "Describe", "DescribeConfigs"]
+          },
+          {
+            "resourceType" : "Group",
+            "operations" : ["Describe", "Delete"]
+          },
+          {
+            "resourceType" : "TransactionalId",
+            "operations" : ["Describe"]
+          },
+          {
+            "resourceType" : "Cluster",
+            "operations" : ["Create", "DescribeConfigs"]
           }
         ]
       }
