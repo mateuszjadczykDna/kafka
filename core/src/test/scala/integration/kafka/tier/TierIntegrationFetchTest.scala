@@ -180,8 +180,8 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
 
     val mBeanServer = ManagementFactory.getPlatformMBeanServer
 
-    val bean = "kafka.server:type=tier.fetcher"
-    val attrs = Array("bytes-fetched-total")
+    val bean = "kafka.server:type=TierFetcher"
+    val attrs = Array("BytesFetchedTotal")
     val List(bytesFetchedTotal) = mBeanServer
       .getAttributes(new ObjectName(bean), attrs)
       .asList.asScala
