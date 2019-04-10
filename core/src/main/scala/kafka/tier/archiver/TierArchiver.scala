@@ -8,6 +8,7 @@ import java.util.concurrent._
 import java.util.function.Predicate
 
 import com.yammer.metrics.core.Gauge
+import com.yammer.metrics.core.Meter
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.ReplicaManager
 import kafka.tier.archiver.TierArchiverState.{BeforeLeader, TierArchiverStateComparator}
@@ -72,6 +73,9 @@ class TierArchiver(config: TierArchiverConfig,
     }
   )
 
+  removeMetric("BytesPerSec")
+  private val byteRate = newMeter("BytesPerSec", "bytes", TimeUnit.SECONDS)
+
   tierMetadataManager.addListener(new TierMetadataManager.ChangeListener {
     override def onBecomeLeader(topicPartition: TopicPartition, leaderEpoch: Int): Unit = handleImmigration(topicPartition, leaderEpoch)
     override def onBecomeFollower(topicPartition: TopicPartition): Unit = handleEmigration(topicPartition)
@@ -104,7 +108,7 @@ class TierArchiver(config: TierArchiverConfig,
         immigrationEmigrationQueue.poll() match {
         case immigrationEvent: ImmigratingTopicPartition =>
           val state = BeforeLeader(replicaManager, tierTopicManager, tierObjectStore,
-            immigrationEvent.topicPartition, immigrationEvent.leaderEpoch,
+            ArchiverStateMetrics(byteRate), immigrationEvent.topicPartition, immigrationEvent.leaderEpoch,
             blockingTaskExecutor, config)
           pausedStates.put(state)
           didWork = true
@@ -201,3 +205,5 @@ private[tier] case class ImmigratingTopicPartition(topicPartition: TopicPartitio
 
 private[tier] case class EmigratingTopicPartition(topicPartition: TopicPartition)
   extends ImmigratingOrEmigratingTopicPartitions
+
+private[tier] case class ArchiverStateMetrics (byteRate: Meter)

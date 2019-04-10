@@ -10,6 +10,7 @@ import java.io.IOException
 import java.util.Comparator
 import java.util.function.Supplier
 
+import com.yammer.metrics.core.Meter
 import kafka.log.AbstractLog
 import kafka.server.checkpoints.LeaderEpochCheckpointFile
 import kafka.log.LogSegment
@@ -25,8 +26,8 @@ import kafka.tier.state.TierPartitionState.AppendResult
 import kafka.tier.store.TierObjectStore
 import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
-import scala.compat.java8.OptionConverters._
 
+import scala.compat.java8.OptionConverters._
 import scala.util.Random
 
 sealed trait TierArchiverState extends Logging {
@@ -134,6 +135,7 @@ object TierArchiverState {
   final case class BeforeLeader(replicaManager: ReplicaManager,
                                 tierTopicManager: TierTopicManager,
                                 tierObjectStore: TierObjectStore,
+                                metrics: ArchiverStateMetrics,
                                 topicPartition: TopicPartition,
                                 tierEpoch: Int,
                                 blockingTaskExecutor: ScheduledExecutorService,
@@ -158,7 +160,7 @@ object TierArchiverState {
           case AppendResult.ACCEPTED =>
             val tierPartitionState = tierTopicManager.partitionState(topicPartition)
             BeforeUpload(
-              replicaManager, tierTopicManager, tierObjectStore,
+              replicaManager, tierTopicManager, tierObjectStore, metrics,
               topicPartition, tierPartitionState, tierEpoch, blockingTaskExecutor, config
             )
           case AppendResult.ILLEGAL =>
@@ -181,6 +183,7 @@ object TierArchiverState {
   final case class BeforeUpload(replicaManager: ReplicaManager,
                                 tierTopicManager: TierTopicManager,
                                 tierObjectStore: TierObjectStore,
+                                metrics: ArchiverStateMetrics,
                                 topicPartition: TopicPartition,
                                 tierPartitionState: TierPartitionState,
                                 tierEpoch: Int,
@@ -226,7 +229,8 @@ object TierArchiverState {
             // Upload next segment and transition.
             val leaderEpochStateFile = uploadableLeaderEpochState(log, logSegment.readNextOffset)
             putSegment(logSegment, leaderEpochStateFile, blockingTaskExecutor).thenApply[TierArchiverState] { objectMetadata: TierObjectMetadata =>
-              AfterUpload(objectMetadata, logSegment, replicaManager, tierTopicManager, tierObjectStore,
+              metrics.byteRate.mark(objectMetadata.size())
+              AfterUpload(objectMetadata, logSegment, replicaManager, tierTopicManager, tierObjectStore, metrics,
                 topicPartition, tierPartitionState, tierEpoch, blockingTaskExecutor, config)
             }.thenComposeExceptionally {
               case ex if ex.getCause.isInstanceOf[IOException] || ex.getCause.isInstanceOf[TierObjectStoreRetriableException] =>
@@ -305,6 +309,7 @@ object TierArchiverState {
                                replicaManager: ReplicaManager,
                                tierTopicManager: TierTopicManager,
                                tierObjectStore: TierObjectStore,
+                               metrics: ArchiverStateMetrics,
                                topicPartition: TopicPartition,
                                tierPartitionState: TierPartitionState,
                                tierEpoch: Int,
@@ -328,7 +333,7 @@ object TierArchiverState {
         .thenApply { t: AppendResult =>
           t match {
             case AppendResult.ACCEPTED =>
-              BeforeUpload(replicaManager, tierTopicManager, tierObjectStore, topicPartition, tierPartitionState, tierEpoch, blockingTaskExecutor, config)
+              BeforeUpload(replicaManager, tierTopicManager, tierObjectStore, metrics, topicPartition, tierPartitionState, tierEpoch, blockingTaskExecutor, config)
             case AppendResult.ILLEGAL =>
               throw new TierArchiverFatalException(s"Tier archiver found tier partition $topicPartition in illegal status.")
             case AppendResult.FENCED =>

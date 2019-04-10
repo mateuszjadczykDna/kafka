@@ -4,6 +4,7 @@
 
 package integration.kafka.tier
 
+import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util
@@ -11,6 +12,7 @@ import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
 import java.util.{Properties, UUID}
 
+import javax.management.ObjectName
 import kafka.api.IntegrationTestHarness
 import kafka.server.KafkaConfig
 import kafka.utils.TestUtils
@@ -175,5 +177,27 @@ class TierIntegrationFetchTest extends IntegrationTestHarness {
     } finally {
       consumer.close()
     }
+
+    val mBeanServer = ManagementFactory.getPlatformMBeanServer
+
+    val bean = "kafka.server:type=tier.fetcher"
+    val attrs = Array("bytes-fetched-total")
+    val List(bytesFetchedTotal) = mBeanServer
+      .getAttributes(new ObjectName(bean), attrs)
+      .asList.asScala
+      .map { attr => attr.getValue.asInstanceOf[Double] }
+      .toList
+
+    assertTrue("tier fetch metric shows no data fetched from tiered storage",
+      bytesFetchedTotal > 100)
+
+    val List(meanArchiveRate) = mBeanServer
+      .getAttributes(new ObjectName("kafka.tier.archiver:type=TierArchiver,name=BytesPerSec"), Array("MeanRate"))
+      .asList.asScala
+      .map { attr => attr.getValue.asInstanceOf[Double] }
+      .toList
+
+    assertTrue("tier archiver mean rate shows no data uploaded to tiered storage",
+      meanArchiveRate > 100)
   }
 }
