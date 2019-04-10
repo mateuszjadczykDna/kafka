@@ -12,15 +12,15 @@ import java.util.List;
 
 class TierFetcherMetrics {
     private final Metrics metrics;
-    private final String metricGroupName = "tier.fetcher";
+    private final String metricGroupName = "TierFetcher";
 
 
-    private final String bytesFetchedPrefix = "bytes-fetched";
+    private final String bytesFetchedPrefix = "BytesFetched";
     final MetricName bytesFetchedRateMetricName;
     final MetricName bytesFetchedTotalMetricName;
     private final Sensor bytesFetched;
 
-    private final String inFlightPrefix = "in-flight";
+    private final String inFlightPrefix = "InFlight";
     final MetricName inFlightValueMetricName;
     private final Sensor inFlight;
 
@@ -31,10 +31,10 @@ class TierFetcherMetrics {
 
         this.bytesFetched = sensor(bytesFetchedPrefix);
         this.bytesFetchedRateMetricName = metrics.metricName(bytesFetchedPrefix +
-                "-rate", metricGroupName, "The number of bytes fetched per second from tiered "
+                "Rate", metricGroupName, "The number of bytes fetched per second from tiered "
                 + "storage", Collections.emptyMap());
         this.bytesFetchedTotalMetricName = metrics.metricName(bytesFetchedPrefix +
-                "-total", metricGroupName, "The total number of bytes fetched from tiered "
+                "Total", metricGroupName, "The total number of bytes fetched from tiered "
                 + "storage", Collections.emptyMap());
         final Meter bytesFetchedMeter = new Meter(bytesFetchedRateMetricName,
                 bytesFetchedTotalMetricName);
@@ -42,7 +42,7 @@ class TierFetcherMetrics {
 
         this.inFlight = sensor(inFlightPrefix);
         this.inFlightValueMetricName = metrics.metricName(inFlightPrefix +
-                "-value", metricGroupName, "The current estimated number of in-flight fetches "
+                "Value", metricGroupName, "The current estimated number of in-flight fetches "
                 + "going to tiered storage", Collections.emptyMap());
         this.inFlight.add(inFlightValueMetricName, new Value());
     }

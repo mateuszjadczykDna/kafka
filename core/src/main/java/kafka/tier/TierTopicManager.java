@@ -566,8 +566,8 @@ public class TierTopicManager implements Runnable {
      * Setup metrics for the tier topic manager.
      */
     private void setupMetrics(Metrics metrics) {
-        metrics.addMetric(new MetricName("heartbeat",
-                        "kafka.tier",
+        metrics.addMetric(new MetricName("HeartbeatMs",
+                        "TierTopicManager",
                         "Time since last heartbeat in milliseconds.",
                         new java.util.HashMap<>()),
                 (MetricConfig config, long now) -> now - heartbeat.get());
