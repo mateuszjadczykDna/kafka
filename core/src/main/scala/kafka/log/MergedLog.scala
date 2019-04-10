@@ -287,8 +287,13 @@ class MergedLog(private[log] val localLog: Log,
       // 3. is the current active segment: we only tier immutable segments (that have been rolled already)
       // 4. the segment end offset is less than the recovery point. This ensures we only upload segments that have been fsync'd.
       val upperBoundOffset = Utils.min(firstUnstableOffset.map(_.messageOffset).getOrElse(logEndOffset), highWatermark, recoveryPoint)
-      val candidateSegments = localLogSegments(firstUntieredOffset, upperBoundOffset).toArray
 
+      // After a leader failover, it is possible that the upperBoundOffset has not moved to the point where the previous
+      // leader tiered segments. No segments are tierable until the upperBoundOffset catches up with the tiered segments.
+      if (firstUntieredOffset > upperBoundOffset)
+        return Iterable.empty
+
+      val candidateSegments = localLogSegments(firstUntieredOffset, upperBoundOffset).toArray
       candidateSegments.lastOption match {
         case Some(lastSegment) =>
           nextLocalLogSegment(lastSegment) match {
