@@ -1,17 +1,18 @@
 package org.apache.kafka.common.raft;
 
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 public class FollowerState implements EpochState {
     private final int epoch;
-    private int leaderIdOrNil;
-    private int votedIdOrNil;
+    private OptionalInt leaderIdOpt;
+    private OptionalInt votedIdOpt;
     private OptionalLong highWatermark;
 
     public FollowerState(int epoch) {
         this.epoch = epoch;
-        this.leaderIdOrNil = -1;
-        this.votedIdOrNil = -1;
+        this.leaderIdOpt = OptionalInt.empty();
+        this.votedIdOpt = OptionalInt.empty();
         this.highWatermark = OptionalLong.empty();
     }
 
@@ -22,10 +23,10 @@ public class FollowerState implements EpochState {
 
     @Override
     public ElectionState election() {
-        if (hasVoted())
-            return ElectionState.withVotedCandidate(epoch, votedIdOrNil);
-        if (hasLeader())
-            return ElectionState.withElectedLeader(epoch, leaderIdOrNil);
+        if (votedIdOpt.isPresent())
+            return ElectionState.withVotedCandidate(epoch, votedIdOpt.getAsInt());
+        if (leaderIdOpt.isPresent())
+            return ElectionState.withElectedLeader(epoch, leaderIdOpt.getAsInt());
         return ElectionState.withUnknownLeader(epoch);
     }
 
@@ -48,43 +49,43 @@ public class FollowerState implements EpochState {
             throw new IllegalArgumentException("Cannot vote in epoch " + epoch +
                     " since we already have a known leader for epoch");
         } else if (hasVoted()) {
-            if (votedIdOrNil != candidateId) {
+            if (votedIdOpt.orElse(-1) != candidateId) {
                 throw new IllegalArgumentException("Cannot change vote in epoch " + epoch +
-                        " from " + votedIdOrNil + " to " + candidateId);
+                        " from " + votedIdOpt + " to " + candidateId);
             }
             return false;
         }
 
-        this.votedIdOrNil = candidateId;
+        this.votedIdOpt = OptionalInt.of(candidateId);
         return true;
     }
 
     public boolean hasLeader() {
-        return leaderIdOrNil >= 0;
+        return leaderIdOpt.isPresent();
     }
 
     public boolean acknowledgeLeader(int leaderId) {
         if (leaderId < 0) {
             throw new IllegalArgumentException("Invalid negative leaderId: " + leaderId);
         } if (hasLeader()) {
-            if (leaderIdOrNil != leaderId) {
+            if (leaderIdOpt.orElse(-1) != leaderId) {
                 throw new IllegalArgumentException("Cannot acknowledge leader " + leaderId +
-                        " in epoch " + epoch + " since we have already acknowledged " + leaderIdOrNil);
+                        " in epoch " + epoch + " since we have already acknowledged " + leaderIdOpt);
             }
             return false;
         }
 
-        votedIdOrNil = -1;
-        leaderIdOrNil = leaderId;
+        votedIdOpt = OptionalInt.empty();
+        leaderIdOpt = OptionalInt.of(leaderId);
         return true;
     }
 
     public int leaderId() {
-        if (!hasLeader()) {
+        if (!leaderIdOpt.isPresent()) {
             throw new IllegalArgumentException("Cannot access leaderId of epoch " + epoch +
                     " since we do not know it");
         }
-        return leaderIdOrNil;
+        return leaderIdOpt.getAsInt();
     }
 
     public int votedId() {
@@ -92,20 +93,22 @@ public class FollowerState implements EpochState {
             throw new IllegalArgumentException("Cannot access votedId of epoch " + epoch +
                     " since we already have a leader");
         }
-        if (!hasVoted()) {
+        if (!votedIdOpt.isPresent()) {
             throw new IllegalArgumentException("Cannot access votedId of epoch " + epoch +
                     " because we have not voted");
 
         }
-        return votedIdOrNil;
+        return votedIdOpt.getAsInt();
     }
 
     public boolean hasVoted() {
-        return votedIdOrNil >= 0;
+        return votedIdOpt.isPresent();
     }
 
     public boolean isVotedCandidate(int candidateId) {
-        return hasVoted() && votedIdOrNil == candidateId;
+        if (candidateId < 0)
+            throw new IllegalArgumentException("Illegal negative candidateId " + candidateId);
+        return votedIdOpt.orElse(-1) == candidateId;
     }
 
     public void updateHighWatermark(OptionalLong highWatermark) {
@@ -127,7 +130,7 @@ public class FollowerState implements EpochState {
 
     public boolean detachLeader() {
         if (hasLeader()) {
-            leaderIdOrNil = -1;
+            leaderIdOpt = OptionalInt.empty();
             return true;
         }
         return false;

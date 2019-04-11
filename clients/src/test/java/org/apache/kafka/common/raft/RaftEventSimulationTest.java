@@ -60,7 +60,6 @@ public class RaftEventSimulationTest {
         testInitialLeaderElection(new QuorumConfig(5, 0));
     }
 
-
     private void testInitialLeaderElection(QuorumConfig config) {
         for (int seed = 0; seed < 100; seed++) {
             Cluster cluster = new Cluster(config, seed);
