@@ -103,6 +103,8 @@ public class QuorumState {
     }
 
     public boolean becomeUnattachedFollower(int epoch) throws IOException {
+        if (isObserver())
+            return becomeFollower(epoch, FollowerState::detachLeader);
         return becomeFollower(epoch, FollowerState::assertNotAttached);
     }
 

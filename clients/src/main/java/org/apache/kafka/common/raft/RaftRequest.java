@@ -3,9 +3,9 @@ package org.apache.kafka.common.raft;
 import org.apache.kafka.common.protocol.ApiMessage;
 
 public abstract class RaftRequest implements RaftMessage {
-    private final int requestId;
-    private final ApiMessage data;
-    private final long createdTimeMs;
+    protected final int requestId;
+    protected final ApiMessage data;
+    protected final long createdTimeMs;
 
     public RaftRequest(int requestId, ApiMessage data, long createdTimeMs) {
         this.requestId = requestId;
@@ -31,6 +31,15 @@ public abstract class RaftRequest implements RaftMessage {
         public Inbound(int requestId, ApiMessage data, long createdTimeMs) {
             super(requestId, data, createdTimeMs);
         }
+
+        @Override
+        public String toString() {
+            return "InboundRequest(" +
+                    "requestId=" + requestId +
+                    ", data=" + data +
+                    ", createdTimeMs=" + createdTimeMs +
+                    ')';
+        }
     }
 
     public static class Outbound extends RaftRequest {
@@ -43,6 +52,16 @@ public abstract class RaftRequest implements RaftMessage {
 
         public int destinationId() {
             return destinationId;
+        }
+
+        @Override
+        public String toString() {
+            return "OutboundRequest(" +
+                    "requestId=" + requestId +
+                    ", data=" + data +
+                    ", createdTimeMs=" + createdTimeMs +
+                    ", destinationId=" + destinationId +
+                    ')';
         }
     }
 }

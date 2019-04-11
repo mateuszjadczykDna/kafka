@@ -243,6 +243,56 @@ public class RaftManagerTest {
     }
 
     @Test
+    public void testObserverLeaderRediscoveryAfterBrokerNotAvailableError() throws IOException {
+        int leaderId = 1;
+        int epoch = 5;
+        RaftManager manager = buildManager(Utils.mkSet(leaderId));
+
+        manager.poll();
+        int requestId = assertSentFindLeaderRequest();
+        channel.mockReceive(new RaftResponse.Inbound(requestId, findLeaderResponse(leaderId, epoch), leaderId));
+
+        manager.poll();
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), electionStore.read());
+
+        manager.poll();
+        int fetchRequestId = assertSentFetchRecordsRequest(epoch, 0L);
+
+        FetchRecordsResponseData response = fetchRecordsResponse(epoch, leaderId, MemoryRecords.EMPTY, 0L,
+                Errors.BROKER_NOT_AVAILABLE);
+        channel.mockReceive(new RaftResponse.Inbound(fetchRequestId, response, leaderId));
+        manager.poll();
+
+        assertEquals(ElectionState.withUnknownLeader(epoch), electionStore.read());
+        manager.poll();
+        assertSentFindLeaderRequest();
+    }
+
+    @Test
+    public void testObserverLeaderRediscoveryAfterRequestTimeout() throws IOException {
+        int leaderId = 1;
+        int epoch = 5;
+        RaftManager manager = buildManager(Utils.mkSet(leaderId));
+
+        manager.poll();
+        int requestId = assertSentFindLeaderRequest();
+        channel.mockReceive(new RaftResponse.Inbound(requestId, findLeaderResponse(leaderId, epoch), leaderId));
+
+        manager.poll();
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), electionStore.read());
+
+        manager.poll();
+        assertSentFetchRecordsRequest(epoch, 0L);
+
+        time.sleep(requestTimeoutMs);
+        manager.poll();
+
+        assertEquals(ElectionState.withUnknownLeader(epoch), electionStore.read());
+        manager.poll();
+        assertSentFindLeaderRequest();
+    }
+
+    @Test
     public void testLeaderHandlesFindLeader() throws IOException {
         RaftManager manager = buildManager(Collections.singleton(localId));
         assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
@@ -368,7 +418,7 @@ public class RaftManagerTest {
 
         Records records = MemoryRecords.withRecords(0L, CompressionType.NONE,
         3, new SimpleRecord("a".getBytes()), new SimpleRecord("b".getBytes()));
-        FetchRecordsResponseData response = fetchRecordsResponse(epoch, otherNodeId, records, 0L);
+        FetchRecordsResponseData response = fetchRecordsResponse(epoch, otherNodeId, records, 0L, Errors.NONE);
         channel.mockReceive(new RaftResponse.Inbound(requestId, response, otherNodeId));
 
         manager.poll();
@@ -496,7 +546,7 @@ public class RaftManagerTest {
         return raftMessage.requestId();
     }
 
-    private int assertSentFindLeaderRequest() throws IOException {
+    private int assertSentFindLeaderRequest() {
         List<RaftMessage> sentMessages = channel.drainSendQueue();
         assertEquals(1, sentMessages.size());
         RaftMessage raftMessage = sentMessages.get(0);
@@ -556,9 +606,10 @@ public class RaftManagerTest {
         return raftMessage.requestId();
     }
 
-    private FetchRecordsResponseData fetchRecordsResponse(int epoch, int leaderId, Records records, long highWatermark) {
+    private FetchRecordsResponseData fetchRecordsResponse(int epoch, int leaderId, Records records,
+                                                          long highWatermark, Errors error) {
         return new FetchRecordsResponseData()
-                .setErrorCode(Errors.NONE.code())
+                .setErrorCode(error.code())
                 .setHighWatermark(highWatermark)
                 .setLeaderEpoch(epoch)
                 .setLeaderId(leaderId)

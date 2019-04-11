@@ -125,6 +125,14 @@ public class FollowerState implements EpochState {
         this.highWatermark = highWatermark;
     }
 
+    public boolean detachLeader() {
+        if (hasLeader()) {
+            leaderIdOrNil = -1;
+            return true;
+        }
+        return false;
+    }
+
     public boolean assertNotAttached() {
         if (hasLeader())
             throw new IllegalArgumentException("Unattached assertion failed since we have a current leader");

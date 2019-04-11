@@ -443,4 +443,20 @@ public class QuorumStateTest {
         assertThrows(IllegalStateException.class, () -> state.becomeLeader(0L));
     }
 
+    @Test
+    public void testObserverDetachLeader() throws IOException {
+        int otherNodeId = 1;
+        Set<Integer> voters = Utils.mkSet(otherNodeId);
+        QuorumState state = new QuorumState(localId, voters, store, new LogContext());
+        state.initialize(0L);
+        assertTrue(state.isObserver());
+        assertTrue(state.isFollower());
+        state.becomeFollower(1, otherNodeId);
+        assertEquals(1, state.epoch());
+        // If we disconnect from the leader, we may become an unattached follower with the
+        // current epoch so that we can discover the new leader.
+        state.becomeUnattachedFollower(1);
+        assertEquals(1, state.epoch());
+    }
+
 }
