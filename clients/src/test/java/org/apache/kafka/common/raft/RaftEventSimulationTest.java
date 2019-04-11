@@ -6,6 +6,7 @@ import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -105,7 +106,7 @@ public class RaftEventSimulationTest {
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
             // Start with node 0 as the leader
-            cluster.initializeElection(Election.withElectedLeader(2, 0));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 0));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -141,7 +142,7 @@ public class RaftEventSimulationTest {
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
             // Start with node 1 as the leader
-            cluster.initializeElection(Election.withElectedLeader(2, 0));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 0));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -183,7 +184,7 @@ public class RaftEventSimulationTest {
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
 
             // Start with node 1 as the leader
-            cluster.initializeElection(Election.withElectedLeader(2, 1));
+            cluster.initializeElection(ElectionState.withElectedLeader(2, 1));
             cluster.startAll();
             assertTrue(cluster.hasConsistentLeader());
 
@@ -399,7 +400,7 @@ public class RaftEventSimulationTest {
                 return false;
 
             RaftNode first = iter.next();
-            Election election = first.store.read();
+            ElectionState election = first.store.read();
             if (!election.hasLeader())
                 return false;
 
@@ -428,7 +429,7 @@ public class RaftEventSimulationTest {
             return running.values();
         }
 
-        void initializeElection(Election election) {
+        void initializeElection(ElectionState election) {
             if (election.hasLeader() && !voters.contains(election.leaderId()))
                 throw new IllegalArgumentException("Illegal election of observer " + election.leaderId());
 
@@ -507,10 +508,19 @@ public class RaftEventSimulationTest {
 
         void initialize() {
             this.counter = new DistributedCounter(manager, logContext);
+            try {
+                counter.initialize();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         void poll() {
-            manager.poll();
+            try {
+                manager.poll();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 

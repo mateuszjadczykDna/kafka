@@ -9,6 +9,7 @@ import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Utils;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -37,7 +38,9 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
         this.raftManager = raftManager;
         this.keySerde = keySerde;
         this.valueSerde = valueSerde;
+    }
 
+    public synchronized void initialize() throws IOException {
         raftManager.initialize(this);
     }
 
@@ -137,7 +140,8 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
             if (future.isCompletedExceptionally() || future.isCancelled()) {
                 iter.remove();
             } else if (batch.partitionLeaderEpoch() > offsetAndEpoch.epoch) {
-                future.completeExceptionally(new LogTruncationException());
+                future.completeExceptionally(new LogTruncationException("The log was truncated " +
+                        "before the record was committed"));
                 iter.remove();
             } else if (batch.lastOffset() >= offsetAndEpoch.offset) {
                 future.complete(offsetAndEpoch);

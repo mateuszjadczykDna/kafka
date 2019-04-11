@@ -1,15 +1,15 @@
 package org.apache.kafka.common.raft;
 
 public class MockElectionStore implements ElectionStore {
-    private Election current = Election.withUnknownLeader(0);
+    private ElectionState current = ElectionState.withUnknownLeader(0);
 
     @Override
-    public Election read() {
+    public ElectionState read() {
         return current;
     }
 
     @Override
-    public void write(Election update) {
+    public void write(ElectionState update) {
         this.current = update;
     }
 }

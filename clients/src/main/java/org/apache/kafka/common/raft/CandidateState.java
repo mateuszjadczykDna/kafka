@@ -3,13 +3,16 @@ package org.apache.kafka.common.raft;
 import java.util.HashSet;
 import java.util.Set;
 
-public class CandidateState extends EpochState {
+public class CandidateState implements EpochState {
+    private final int localId;
+    private final int epoch;
     private final Set<Integer> voters;
     private final Set<Integer> rejectedVotes = new HashSet<>();
     private final Set<Integer> grantedVotes = new HashSet<>();
 
     protected CandidateState(int localId, int epoch, Set<Integer> voters) {
-        super(localId, epoch);
+        this.localId = localId;
+        this.epoch = epoch;
         this.voters = voters;
         this.grantedVotes.add(localId);
     }
@@ -65,7 +68,13 @@ public class CandidateState extends EpochState {
     }
 
     @Override
-    public Election election() {
-        return Election.withVotedCandidate(epoch, localId);
+    public ElectionState election() {
+        return ElectionState.withVotedCandidate(epoch, localId);
     }
+
+    @Override
+    public int epoch() {
+        return epoch;
+    }
+
 }

@@ -25,6 +25,7 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -43,15 +44,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 // TODO:
-// - Observer should find leader after request failures/timeouts.
-// - Handle out of range fetches
+// - Observer should find leader after request failures/timeouts:
+// | Mainly need a way to propagate disconnects
 // - Figure out locking (probably read-write lock like normal partitions)
-// - Uses of Timer.currentTimeMs are probably wrong
 // - Deletion of old log data
-// - How shall we track pending appends?
-// - Let's have FetchRecords take fetch offset and epoch: a possible optimization
-//   on leader failover is to skip the truncation check and just begin fetching
 // - Should append requests use a separate connection?
+// - Can we get rid of FetchEndOffsetRequest and piggyback log reconciliation information
+//   onto the FetchRecordsResponse?
 
 /**
  * This class implements a Kafkaesque version of the Raft protocol. Leader election
@@ -121,6 +120,7 @@ public class RaftManager {
     private Map<Integer, PendingAppendRequest> sentAppends;
     private DistributedStateMachine stateMachine;
 
+
     public RaftManager(NetworkChannel channel,
                        ReplicatedLog log,
                        QuorumState quorum,
@@ -185,7 +185,7 @@ public class RaftManager {
         }
     }
 
-    public void initialize(DistributedStateMachine stateMachine) {
+    public void initialize(DistributedStateMachine stateMachine) throws IOException {
         this.stateMachine = stateMachine;
         quorum.initialize(log.endOffset());
 
@@ -232,7 +232,7 @@ public class RaftManager {
         resetConnections();
     }
 
-    private void maybeBecomeLeader(CandidateState state) {
+    private void maybeBecomeLeader(CandidateState state) throws IOException {
         if (state.isVoteGranted()) {
             long endOffset = log.endOffset();
             LeaderState leaderState = quorum.becomeLeader(endOffset);
@@ -240,20 +240,20 @@ public class RaftManager {
         }
     }
 
-    private void becomeCandidate() {
+    private void becomeCandidate() throws IOException {
         electionTimer.reset(electionTimeoutMs);
         CandidateState state = quorum.becomeCandidate();
         maybeBecomeLeader(state);
         resetConnections();
     }
 
-    private void becomeUnattachedFollower(int epoch) {
+    private void becomeUnattachedFollower(int epoch) throws IOException {
         if (quorum.becomeUnattachedFollower(epoch)) {
             resetConnections();
         }
     }
 
-    private void becomeVotedFollower(int candidateId, int epoch) {
+    private void becomeVotedFollower(int candidateId, int epoch) throws IOException {
         if (quorum.becomeVotedFollower(epoch, candidateId)) {
             electionTimer.reset(electionTimeoutMs);
             resetConnections();
@@ -262,12 +262,12 @@ public class RaftManager {
 
     private void onBecomeFollowerOfElectedLeader(FollowerState state) {
         awaitingTruncation = isLogNonEmpty();
-        stateMachine.becomeFollower(state.epoch);
+        stateMachine.becomeFollower(state.epoch());
         electionTimer.reset(electionTimeoutMs);
         resetConnections();
     }
 
-    private void becomeFollower(int leaderId, int epoch) {
+    private void becomeFollower(int leaderId, int epoch) throws IOException {
         if (quorum.becomeFollower(epoch, leaderId)) {
             onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
         }
@@ -287,82 +287,66 @@ public class RaftManager {
                 .setVoteGranted(voteGranted);
     }
 
-    private VoteResponseData handleVoteRequest(VoteRequestData request) {
+    private VoteResponseData handleVoteRequest(VoteRequestData request) throws IOException {
         Optional<Exception> errorOpt = handleInvalidVoterOnlyRequest(request.candidateId(), request.leaderEpoch());
         if (errorOpt.isPresent()) {
             return buildVoteResponse(Errors.forException(errorOpt.get()), false);
         }
 
-        return quorum.visit(new QuorumState.Visitor<VoteResponseData>() {
-            @Override
-            public VoteResponseData ifFollower(FollowerState state) {
-                int candidateId = request.candidateId();
-                final boolean voteGranted;
-                if (state.hasLeader()) {
-                    voteGranted = false;
-                } else if (state.hasVoted()) {
-                    voteGranted = state.isVotedCandidate(candidateId);
-                } else {
-                    EndOffset lastEpochEndOffset = new EndOffset(request.lastEpochEndOffset(), request.lastEpoch());
-                    voteGranted = lastEpochEndOffset.compareTo(endOffset()) >= 0;
-                }
-
-                if (voteGranted)
-                    becomeVotedFollower(candidateId, request.leaderEpoch());
-                return buildVoteResponse(Errors.NONE, voteGranted);
+        if (quorum.isLeader()) {
+            logger.debug("Ignoring vote request {} since we are the leader of epoch {}",
+                    request, quorum.epoch());
+            return buildVoteResponse(Errors.NONE, false);
+        } else if (quorum.isCandidate()) {
+            logger.debug("Ignoring vote request {} since we are a candidate of epoch {}",
+                    request, quorum.epoch());
+            return buildVoteResponse(Errors.NONE, false);
+        } else {
+            FollowerState state = quorum.followerStateOrThrow();
+            int candidateId = request.candidateId();
+            final boolean voteGranted;
+            if (state.hasLeader()) {
+                voteGranted = false;
+            } else if (state.hasVoted()) {
+                voteGranted = state.isVotedCandidate(candidateId);
+            } else {
+                EndOffset lastEpochEndOffset = new EndOffset(request.lastEpochEndOffset(), request.lastEpoch());
+                voteGranted = lastEpochEndOffset.compareTo(endOffset()) >= 0;
             }
 
-            @Override
-            public VoteResponseData ifLeader(LeaderState state) {
-                logger.debug("Ignoring vote request {} since we are the leader of epoch {}",
-                        request, quorum.epoch());
-                return buildVoteResponse(Errors.NONE, false);
-            }
-
-            @Override
-            public VoteResponseData ifCandidate(CandidateState state) {
-                logger.debug("Ignoring vote request {} since we are a candidate of epoch {}",
-                        request, quorum.epoch());
-                return buildVoteResponse(Errors.NONE, false);
-            }
-        });
+            if (voteGranted)
+                becomeVotedFollower(candidateId, request.leaderEpoch());
+            return buildVoteResponse(Errors.NONE, voteGranted);
+        }
     }
 
-    private void handleVoteResponse(int remoteNodeId, VoteResponseData response) {
+    private void handleVoteResponse(int remoteNodeId, VoteResponseData response) throws IOException {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
             return;
 
-        quorum.visit(new QuorumState.VoidVisitor() {
-            @Override
-            public void ifFollower(FollowerState state) {
-                logger.debug("Ignoring vote response {} since we are now a follower for epoch {}",
-                        response, quorum.epoch());
-            }
+        if (quorum.isLeader()) {
+            logger.debug("Ignoring vote response {} since we already became leader for epoch {}",
+                    response, quorum.epoch());
+        } else if (quorum.isFollower()) {
+            logger.debug("Ignoring vote response {} since we are now a follower for epoch {}",
+                    response, quorum.epoch());
+        } else {
+            CandidateState state = quorum.candidateStateOrThrow();
+            if (response.voteGranted()) {
+                state.voteGrantedBy(remoteNodeId);
+                maybeBecomeLeader(state);
+            } else {
+                state.voteRejectedBy(remoteNodeId);
+                if (state.isVoteRejected()) {
+                    logger.info("A majority of voters rejected our candidacy, so we will become a follower");
+                    becomeUnattachedFollower(quorum.epoch());
 
-            @Override
-            public void ifLeader(LeaderState state) {
-                logger.debug("Ignoring vote response {} since we already became leader for epoch {}",
-                        response, quorum.epoch());
-            }
-
-            @Override
-            public void ifCandidate(CandidateState state) {
-                if (response.voteGranted()) {
-                    state.voteGrantedBy(remoteNodeId);
-                    maybeBecomeLeader(state);
-                } else {
-                    state.voteRejectedBy(remoteNodeId);
-                    if (state.isVoteRejected()) {
-                        logger.info("A majority of voters rejected our candidacy, so we will become a follower");
-                        becomeUnattachedFollower(quorum.epoch());
-
-                        // We will retry our candidacy after a short backoff if no leader is elected
-                        electionTimer.reset(retryBackoffMs + randomElectionJitterMs());
-                    }
+                    // We will retry our candidacy after a short backoff if no leader is elected
+                    electionTimer.reset(retryBackoffMs + randomElectionJitterMs());
                 }
             }
-        });
+        }
     }
 
     private int randomElectionJitterMs() {
@@ -378,7 +362,7 @@ public class RaftManager {
                 .setLeaderId(quorum.leaderIdOrNil());
     }
 
-    private BeginEpochResponseData handleBeginEpochRequest(BeginEpochRequestData request) {
+    private BeginEpochResponseData handleBeginEpochRequest(BeginEpochRequestData request) throws IOException {
         Optional<Exception> errorOpt = handleInvalidVoterOnlyRequest(request.leaderId(), request.leaderEpoch());
         if (errorOpt.isPresent()) {
             return buildBeginEpochResponse(Errors.forException(errorOpt.get()));
@@ -392,7 +376,7 @@ public class RaftManager {
         return buildBeginEpochResponse(Errors.NONE);
     }
 
-    private void handleBeginEpochResponse(int remoteNodeId, BeginEpochResponseData response) {
+    private void handleBeginEpochResponse(int remoteNodeId, BeginEpochResponseData response) throws IOException {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
             return;
@@ -408,7 +392,7 @@ public class RaftManager {
                 .setLeaderId(quorum.leaderIdOrNil());
     }
 
-    private EndEpochResponseData handleEndEpochRequest(EndEpochRequestData request) {
+    private EndEpochResponseData handleEndEpochRequest(EndEpochRequestData request) throws IOException {
         Optional<Exception> errorOpt = handleInvalidVoterOnlyRequest(request.leaderId(), request.leaderEpoch());
         if (errorOpt.isPresent()) {
             return buildEndEpochResponse(Errors.forException(errorOpt.get()));
@@ -420,7 +404,7 @@ public class RaftManager {
         return buildEndEpochResponse(Errors.NONE);
     }
 
-    private void handleEndEpochResponse(EndEpochResponseData response) {
+    private void handleEndEpochResponse(EndEpochResponseData response) throws IOException {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId);
     }
@@ -467,7 +451,7 @@ public class RaftManager {
         return OptionalInt.of(leaderIdOrNil);
     }
 
-    private void handleFetchRecordsResponse(FetchRecordsResponseData response) {
+    private void handleFetchRecordsResponse(FetchRecordsResponseData response) throws IOException {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
             return;
@@ -486,7 +470,7 @@ public class RaftManager {
             electionTimer.reset(electionTimeoutMs);
         }
     }
-    private void handleAppendRecordsResponse(int requestId, AppendRecordsResponseData response) {
+    private void handleAppendRecordsResponse(int requestId, AppendRecordsResponseData response) throws IOException {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
             return;
@@ -563,7 +547,7 @@ public class RaftManager {
         return buildFetchEndOffsetResponse(Errors.NONE, endOffset);
     }
 
-    private void handleFetchEndOffsetResponse(FetchEndOffsetResponseData response) {
+    private void handleFetchEndOffsetResponse(FetchEndOffsetResponseData response) throws IOException {
         OptionalInt leaderId = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderId))
             return;
@@ -598,13 +582,14 @@ public class RaftManager {
                 .setLeaderId(quorum.leaderIdOrNil());
     }
 
-    private void handleFindLeaderResponse(FindLeaderResponseData response) {
+    private void handleFindLeaderResponse(FindLeaderResponseData response) throws IOException {
         OptionalInt leaderIdOpt = optionalLeaderId(response.leaderId());
         if (handleNonMatchingResponseLeaderAndEpoch(response.leaderEpoch(), leaderIdOpt))
             return;
 
         // We only need to become a follower if the current leader is not elected
-        leaderIdOpt.ifPresent(leaderId -> becomeFollower(leaderId, response.leaderEpoch()));
+        if (leaderIdOpt.isPresent())
+            becomeFollower(leaderIdOpt.getAsInt(), response.leaderEpoch());
     }
 
     private boolean hasInconsistentLeader(int epoch, OptionalInt leaderId) {
@@ -621,7 +606,7 @@ public class RaftManager {
         }
     }
 
-    private void becomeFollower(int epoch, OptionalInt leaderId) {
+    private void becomeFollower(int epoch, OptionalInt leaderId) throws IOException {
         if (leaderId.isPresent()) {
             becomeFollower(leaderId.getAsInt(), epoch);
         } else {
@@ -629,8 +614,7 @@ public class RaftManager {
         }
     }
 
-    private void updateConnectionState(RaftResponse.Inbound response, Errors error) {
-        long currentTimeMs = electionTimer.currentTimeMs();
+    private void updateConnectionState(RaftResponse.Inbound response, Errors error, long currentTimeMs) {
         ConnectionState connection = voterConnections.get(response.sourceId());
 
         if (quorum.isObserver() && response.data() instanceof FindLeaderResponseData) {
@@ -663,7 +647,7 @@ public class RaftManager {
         return Errors.forCode(errorCode);
     }
 
-    private boolean handleNonMatchingResponseLeaderAndEpoch(int epoch, OptionalInt leaderId) {
+    private boolean handleNonMatchingResponseLeaderAndEpoch(int epoch, OptionalInt leaderId) throws IOException {
         if (epoch < quorum.epoch()) {
             return true;
         } else if (epoch > quorum.epoch()) {
@@ -684,7 +668,7 @@ public class RaftManager {
         return false;
     }
 
-    private void handleResponse(RaftResponse.Inbound response) {
+    private void handleResponse(RaftResponse.Inbound response) throws IOException {
         // The response epoch matches the local epoch, so we can handle the response
         ApiMessage responseData = response.data();
         if (responseData instanceof FetchRecordsResponseData) {
@@ -706,7 +690,7 @@ public class RaftManager {
         }
     }
 
-    private Optional<Exception> handleInvalidVoterOnlyRequest(int remoteNodeId, int requestEpoch) {
+    private Optional<Exception> handleInvalidVoterOnlyRequest(int remoteNodeId, int requestEpoch) throws IOException {
         if (quorum.isObserver()) {
             return Optional.of(Errors.INVALID_REQUEST.exception());
         } else if (!quorum.isVoter(remoteNodeId)) {
@@ -741,7 +725,7 @@ public class RaftManager {
         return Optional.empty();
     }
 
-    private void handleRequest(RaftRequest.Inbound request) {
+    private void handleRequest(RaftRequest.Inbound request) throws IOException {
         ApiMessage requestData = request.data();
         final ApiMessage responseData;
         if (requestData instanceof FetchRecordsRequestData) {
@@ -765,7 +749,7 @@ public class RaftManager {
         channel.send(new RaftResponse.Outbound(request.requestId(), responseData));
     }
 
-    private void handleInboundMessage(RaftMessage message) {
+    private void handleInboundMessage(RaftMessage message, long currentTimeMs) throws IOException {
         if (message instanceof RaftRequest.Inbound) {
             handleRequest((RaftRequest.Inbound) message);
         } else if (message instanceof RaftResponse.Inbound) {
@@ -777,7 +761,7 @@ public class RaftManager {
                 throw new IllegalStateException("Unexpected response " + response + " from non-voter" + sourceId);
 
             Errors error = responseError(response);
-            updateConnectionState(response, error);
+            updateConnectionState(response, error, currentTimeMs);
             if (error == Errors.NONE)
                 handleResponse(response);
         } else {
@@ -790,7 +774,7 @@ public class RaftManager {
         if (connection.isReady(currentTimeMs)) {
             int requestId = channel.newRequestId();
             channel.send(new RaftRequest.Outbound(requestId, requestData.get(), destinationId, currentTimeMs));
-            connection.onRequestSent(requestId, electionTimer.currentTimeMs());
+            connection.onRequestSent(requestId, time.milliseconds());
             return OptionalInt.of(requestId);
         }
         return OptionalInt.empty();
@@ -870,7 +854,7 @@ public class RaftManager {
     private void maybeSendFindLeader(long currentTimeMs) {
         // Find a ready member of the quorum to send FindLeader to. Any voter can receive the
         // FindLeader, but we only send one request at a time.
-        if (quorum.isObserver() && findLeaderConnection.isReady(currentTimeMs)) {
+        if (findLeaderConnection.isReady(currentTimeMs)) {
             for (Map.Entry<Integer, ConnectionState> voterConnectionEntry : voterConnections.entrySet()) {
                 int voterId = voterConnectionEntry.getKey();
                 ConnectionState voterConnection = voterConnectionEntry.getValue();
@@ -883,31 +867,25 @@ public class RaftManager {
     }
 
     private void maybeSendRequests(long currentTimeMs) {
-        quorum.visit(new QuorumState.VoidVisitor() {
-            @Override
-            public void ifFollower(FollowerState state) {
-                if (quorum.isObserver() && (!state.hasLeader() || electionTimer.isExpired())) {
-                    maybeSendFindLeader(currentTimeMs);
-                } else if (state.hasLeader()) {
-                    int leaderId = state.leaderId();
-                    if (awaitingTruncation) {
-                        maybeSendFetchEndOffset(currentTimeMs, leaderId);
-                    } else {
-                        maybeSendFetchRecords(currentTimeMs, leaderId);
-                    }
+        if (quorum.isLeader()) {
+            LeaderState state = quorum.leaderStateOrThrow();
+            maybeSendBeginEpochToFollowers(currentTimeMs, state);
+        } else if (quorum.isCandidate()) {
+            CandidateState state = quorum.candidateStateOrThrow();
+            maybeSendVoteRequestToVoters(currentTimeMs, state);
+        } else {
+            FollowerState state = quorum.followerStateOrThrow();
+            if (quorum.isObserver() && (!state.hasLeader() || electionTimer.isExpired())) {
+                maybeSendFindLeader(currentTimeMs);
+            } else if (state.hasLeader()) {
+                int leaderId = state.leaderId();
+                if (awaitingTruncation) {
+                    maybeSendFetchEndOffset(currentTimeMs, leaderId);
+                } else {
+                    maybeSendFetchRecords(currentTimeMs, leaderId);
                 }
             }
-
-            @Override
-            public void ifLeader(LeaderState state) {
-                maybeSendBeginEpochToFollowers(currentTimeMs, state);
-            }
-
-            @Override
-            public void ifCandidate(CandidateState state) {
-                maybeSendVoteRequestToVoters(currentTimeMs, state);
-            }
-        });
+        }
     }
 
     public boolean isRunning() {
@@ -915,7 +893,7 @@ public class RaftManager {
         return gracefulShutdown == null || !gracefulShutdown.isFinished();
     }
 
-    private void pollShutdown(GracefulShutdown shutdown) {
+    private void pollShutdown(GracefulShutdown shutdown) throws IOException {
         // Graceful shutdown allows a leader or candidate to resign its leadership without
         // awaiting expiration of the election timeout. During shutdown, we no longer update
         // quorum state. All we do is check for epoch updates and try to send EndEpoch request
@@ -933,11 +911,11 @@ public class RaftManager {
 
             List<RaftMessage> inboundMessages = channel.receive(shutdown.timer.remainingMs());
             for (RaftMessage message : inboundMessages)
-                handleInboundMessage(message);
+                handleInboundMessage(message, currentTimeMs);
         }
     }
 
-    public void poll() {
+    public void poll() throws IOException {
         GracefulShutdown gracefulShutdown = shutdown.get();
         if (gracefulShutdown != null) {
             pollShutdown(gracefulShutdown);
@@ -957,7 +935,7 @@ public class RaftManager {
             electionTimer.update();
 
             for (RaftMessage message : inboundMessages)
-                handleInboundMessage(message);
+                handleInboundMessage(message, electionTimer.currentTimeMs());
         }
     }
 
@@ -1036,8 +1014,10 @@ public class RaftManager {
             throw new IllegalStateException("Cannot append records while we are shutting down");
 
         Optional<EndOffset> endOffset = log.endOffsetForEpoch(offsetAndEpoch.epoch);
-        if (!endOffset.isPresent() || offsetAndEpoch.offset > endOffset.get().offset)
-            throw new LogTruncationException();
+        if (!endOffset.isPresent() || offsetAndEpoch.offset > endOffset.get().offset) {
+            throw new LogTruncationException("The requested offset and epoch " + offsetAndEpoch +
+                    " are not in range. The closest offset we found is " + endOffset + ".");
+        }
 
         OptionalLong highWatermark = quorum.highWatermark();
         if (highWatermark.isPresent()) {

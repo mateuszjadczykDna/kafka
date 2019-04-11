@@ -10,6 +10,7 @@ import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.utils.LogContext;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,9 +27,12 @@ public class DistributedCounter implements DistributedStateMachine {
     private AtomicInteger uncommitted;
 
     public DistributedCounter(RaftManager manager, LogContext logContext) {
-        manager.initialize(this);
         this.manager = manager;
         this.log = logContext.logger(DistributedCounter.class);
+    }
+
+    public synchronized void initialize() throws IOException {
+        manager.initialize(this);
     }
 
     @Override

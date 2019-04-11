@@ -2,19 +2,14 @@ package org.apache.kafka.common.raft;
 
 import java.util.OptionalLong;
 
-public abstract class EpochState {
-    public final int localId;
-    public final int epoch;
+public interface EpochState {
 
-    protected EpochState(int localId, int epoch) {
-        this.localId = localId;
-        this.epoch = epoch;
-    }
-
-    public OptionalLong highWatermark() {
+    default OptionalLong highWatermark() {
         return OptionalLong.empty();
     }
 
-    public abstract Election election();
+    ElectionState election();
+
+    int epoch();
 
 }

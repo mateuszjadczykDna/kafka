@@ -15,7 +15,7 @@ public class FollowerStateTest {
 
     @Test
     public void testVoteForCandidate() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         assertTrue(state.assertNotAttached());
         assertFalse(state.hasVoted());
 
@@ -27,7 +27,7 @@ public class FollowerStateTest {
 
     @Test
     public void testCannotChangeVote() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int votedId = 1;
         int otherCandidateId = 2;
         assertTrue(state.grantVoteTo(votedId));
@@ -36,7 +36,7 @@ public class FollowerStateTest {
 
     @Test
     public void testIdempotentVote() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int votedId = 1;
         assertTrue(state.grantVoteTo(votedId));
         assertFalse(state.grantVoteTo(votedId));
@@ -46,7 +46,7 @@ public class FollowerStateTest {
 
     @Test
     public void testCannotVoteIfLeaderIsKnown() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int leaderId = 1;
         int candidateId = 2;
         state.acknowledgeLeader(leaderId);
@@ -58,7 +58,7 @@ public class FollowerStateTest {
 
     @Test
     public void testAckLeaderWithoutVoting() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int leaderId = 1;
         state.acknowledgeLeader(leaderId);
         assertTrue(state.hasLeader());
@@ -67,7 +67,7 @@ public class FollowerStateTest {
 
     @Test
     public void testAckLeaderAfterVoting() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int candidateId = 1;
         int leaderId = 2;
         assertTrue(state.grantVoteTo(candidateId));
@@ -80,7 +80,7 @@ public class FollowerStateTest {
 
     @Test
     public void testCannotChangeLeader() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int leaderId = 1;
         int otherLeaderId = 2;
         assertTrue(state.acknowledgeLeader(leaderId));
@@ -91,7 +91,7 @@ public class FollowerStateTest {
 
     @Test
     public void testIdempotentLeaderAcknowledgement() {
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int leaderId = 1;
         assertTrue(state.acknowledgeLeader(leaderId));
         assertFalse(state.acknowledgeLeader(leaderId));
@@ -102,7 +102,7 @@ public class FollowerStateTest {
     @Test
     public void testUpdateHighWatermarkOnlyPermittedWithLeader() {
         OptionalLong highWatermark = OptionalLong.of(15L);
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         assertThrows(IllegalArgumentException.class, () -> state.updateHighWatermark(highWatermark));
         int candidateId = 1;
         assertTrue(state.grantVoteTo(candidateId));
@@ -116,7 +116,7 @@ public class FollowerStateTest {
     @Test
     public void testMonotonicHighWatermark() {
         OptionalLong highWatermark = OptionalLong.of(15L);
-        FollowerState state = new FollowerState(localId, epoch);
+        FollowerState state = new FollowerState(epoch);
         int leaderId = 1;
         assertTrue(state.acknowledgeLeader(leaderId));
         state.updateHighWatermark(highWatermark);

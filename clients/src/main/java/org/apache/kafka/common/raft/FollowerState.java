@@ -2,16 +2,17 @@ package org.apache.kafka.common.raft;
 
 import java.util.OptionalLong;
 
-public class FollowerState extends EpochState {
+public class FollowerState implements EpochState {
+    private final int epoch;
     private int leaderIdOrNil;
     private int votedIdOrNil;
     private OptionalLong highWatermark;
 
-    public FollowerState(int localId, int epoch) {
-        super(localId, epoch);
-        leaderIdOrNil = -1;
-        votedIdOrNil = -1;
-        highWatermark = OptionalLong.empty();
+    public FollowerState(int epoch) {
+        this.epoch = epoch;
+        this.leaderIdOrNil = -1;
+        this.votedIdOrNil = -1;
+        this.highWatermark = OptionalLong.empty();
     }
 
     @Override
@@ -20,14 +21,18 @@ public class FollowerState extends EpochState {
     }
 
     @Override
-    public Election election() {
+    public ElectionState election() {
         if (hasVoted())
-            return Election.withVotedCandidate(epoch, votedIdOrNil);
+            return ElectionState.withVotedCandidate(epoch, votedIdOrNil);
         if (hasLeader())
-            return Election.withElectedLeader(epoch, leaderIdOrNil);
-        return Election.withUnknownLeader(epoch);
+            return ElectionState.withElectedLeader(epoch, leaderIdOrNil);
+        return ElectionState.withUnknownLeader(epoch);
     }
 
+    @Override
+    public int epoch() {
+        return epoch;
+    }
 
     /**
      * Grant a vote to the candidate. The vote is permitted only if we had already voted for

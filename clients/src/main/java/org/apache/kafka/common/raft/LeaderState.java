@@ -9,14 +9,16 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class LeaderState extends EpochState {
+public class LeaderState implements EpochState {
+    private final int localId;
+    private final int epoch;
     private final long epochStartOffset;
     private OptionalLong highWatermark = OptionalLong.empty();
     private Map<Integer, FollowerState> followers = new HashMap<>();
 
     protected LeaderState(int localId, int epoch, long epochStartOffset, Set<Integer> voters) {
-        super(localId, epoch);
-
+        this.localId = localId;
+        this.epoch = epoch;
         this.epochStartOffset = epochStartOffset;
 
         for (int voterId : voters) {
@@ -31,8 +33,13 @@ public class LeaderState extends EpochState {
     }
 
     @Override
-    public Election election() {
-        return Election.withElectedLeader(epoch, localId);
+    public ElectionState election() {
+        return ElectionState.withElectedLeader(epoch, localId);
+    }
+
+    @Override
+    public int epoch() {
+        return epoch;
     }
 
     public Set<Integer> followers() {

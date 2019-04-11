@@ -3,33 +3,33 @@ package org.apache.kafka.common.raft;
 /**
  * Encapsulate election state stored on disk after every state change.
  */
-public class Election {
+public class ElectionState {
     public final int epoch;
     private final int leaderIdOrNil;
     private final int votedIdOrNil;
 
-    private Election(int epoch,
-                     int leaderIdOrNil,
-                     int votedIdOrNil) {
+    private ElectionState(int epoch,
+                          int leaderIdOrNil,
+                          int votedIdOrNil) {
         this.epoch = epoch;
         this.leaderIdOrNil = leaderIdOrNil;
         this.votedIdOrNil = votedIdOrNil;
     }
 
-    public static Election withVotedCandidate(int epoch, int votedId) {
+    public static ElectionState withVotedCandidate(int epoch, int votedId) {
         if (votedId < 0)
             throw new IllegalArgumentException("Illegal voted Id " + votedId + ": must be non-negative");
-        return new Election(epoch, -1, votedId);
+        return new ElectionState(epoch, -1, votedId);
     }
 
-    public static Election withElectedLeader(int epoch, int leaderId) {
+    public static ElectionState withElectedLeader(int epoch, int leaderId) {
         if (leaderId < 0)
             throw new IllegalArgumentException("Illegal leader Id " + leaderId + ": must be non-negative");
-        return new Election(epoch, leaderId, -1);
+        return new ElectionState(epoch, leaderId, -1);
     }
 
-    public static Election withUnknownLeader(int epoch) {
-        return new Election(epoch, -1, -1);
+    public static ElectionState withUnknownLeader(int epoch) {
+        return new ElectionState(epoch, -1, -1);
     }
 
     public boolean isLeader(int nodeId) {
@@ -80,7 +80,7 @@ public class Election {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
-        Election election = (Election) o;
+        ElectionState election = (ElectionState) o;
 
         if (epoch != election.epoch) return false;
         if (leaderIdOrNil != election.leaderIdOrNil) return false;

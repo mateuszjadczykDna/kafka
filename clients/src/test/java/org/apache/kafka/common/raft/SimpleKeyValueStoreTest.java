@@ -38,6 +38,7 @@ public class SimpleKeyValueStoreTest {
         manager.initialize(new NoOpStateMachine());
         SimpleKeyValueStore<Integer, Integer> store = new SimpleKeyValueStore<>(manager,
                 new Serdes.IntegerSerde(), new Serdes.IntegerSerde());
+        store.initialize();
 
         CompletableFuture<OffsetAndEpoch> future = store.put(0, 1);
         manager.poll();

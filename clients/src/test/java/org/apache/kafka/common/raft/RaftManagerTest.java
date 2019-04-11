@@ -24,6 +24,7 @@ import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,7 +47,7 @@ public class RaftManagerTest {
     private final MockLog log = new MockLog();
     private final MockNetworkChannel channel = new MockNetworkChannel();
 
-    private RaftManager buildManager(Set<Integer> voters) {
+    private RaftManager buildManager(Set<Integer> voters) throws IOException {
         LogContext logContext = new LogContext();
         QuorumState quorum = new QuorumState(localId, voters, electionStore, logContext);
         RaftManager manager = new RaftManager(channel, log, quorum, time, electionTimeoutMs, electionJitterMs,
@@ -56,18 +57,18 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testInitializeSingleMemberQuorum() {
+    public void testInitializeSingleMemberQuorum() throws IOException {
         RaftManager manager = buildManager(Collections.singleton(localId));
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
         manager.poll();
         assertEquals(0, channel.drainSendQueue().size());
     }
 
     @Test
-    public void testInitializeAsCandidate() {
+    public void testInitializeAsCandidate() throws IOException {
         int otherNodeId = 1;
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withVotedCandidate(1, localId), electionStore.read());
+        assertEquals(ElectionState.withVotedCandidate(1, localId), electionStore.read());
 
         manager.poll();
 
@@ -77,7 +78,7 @@ public class RaftManagerTest {
 
         // Become leader after receiving the vote
         manager.poll();
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
         // Send BeginEpoch to voters
         manager.poll();
@@ -85,10 +86,10 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testVoteRequestTimeout() {
+    public void testVoteRequestTimeout() throws IOException {
         int otherNodeId = 1;
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withVotedCandidate(1, localId), electionStore.read());
+        assertEquals(ElectionState.withVotedCandidate(1, localId), electionStore.read());
 
         manager.poll();
         int requestId = assertSentVoteRequest(1, 0, 0L);
@@ -102,20 +103,20 @@ public class RaftManagerTest {
         VoteResponseData voteResponse = voteResponse(true, Optional.empty(), 1);
         channel.mockReceive(new RaftResponse.Inbound(requestId, voteResponse, otherNodeId));
         manager.poll();
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
         // If the second request arrives later, it should have no effect
         VoteResponseData retryResponse = voteResponse(true, Optional.empty(), 1);
         channel.mockReceive(new RaftResponse.Inbound(retryId, retryResponse, otherNodeId));
         manager.poll();
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
     }
 
     @Test
-    public void testRetryElection() {
+    public void testRetryElection() throws IOException {
         int otherNodeId = 1;
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withVotedCandidate(1, localId), electionStore.read());
+        assertEquals(ElectionState.withVotedCandidate(1, localId), electionStore.read());
 
         manager.poll();
 
@@ -125,7 +126,7 @@ public class RaftManagerTest {
         channel.mockReceive(new RaftResponse.Inbound(requestId, voteResponse, otherNodeId));
 
         manager.poll();
-        assertEquals(Election.withUnknownLeader(1), electionStore.read());
+        assertEquals(ElectionState.withUnknownLeader(1), electionStore.read());
 
         // If no new election is held, we will become a candidate again after awaiting the backoff time
         time.sleep(retryBackoffMs);
@@ -135,46 +136,46 @@ public class RaftManagerTest {
         channel.mockReceive(new RaftResponse.Inbound(retryId, retryVoteResponse, otherNodeId));
 
         manager.poll();
-        assertEquals(Election.withElectedLeader(2, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(2, localId), electionStore.read());
     }
 
     @Test
-    public void testInitializeAsFollowerEmptyLog() {
+    public void testInitializeAsFollowerEmptyLog() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
-        electionStore.write(Election.withElectedLeader(epoch, otherNodeId));
+        electionStore.write(ElectionState.withElectedLeader(epoch, otherNodeId));
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withElectedLeader(epoch, otherNodeId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), electionStore.read());
 
         manager.poll();
         assertSentFetchRecordsRequest(epoch, 0L);
     }
 
     @Test
-    public void testInitializeAsFollowerNonEmptyLog() {
+    public void testInitializeAsFollowerNonEmptyLog() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
         int lastEpoch = 3;
-        electionStore.write(Election.withElectedLeader(epoch, otherNodeId));
+        electionStore.write(ElectionState.withElectedLeader(epoch, otherNodeId));
         log.appendAsLeader(Collections.singleton(new SimpleRecord("foo".getBytes())), lastEpoch);
 
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withElectedLeader(epoch, otherNodeId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), electionStore.read());
 
         manager.poll();
         assertSentFetchEndOffsetRequest(epoch, lastEpoch);
     }
 
     @Test
-    public void testBecomeCandidateAfterElectionTimeout() {
+    public void testBecomeCandidateAfterElectionTimeout() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
         int lastEpoch = 3;
-        electionStore.write(Election.withElectedLeader(epoch, otherNodeId));
+        electionStore.write(ElectionState.withElectedLeader(epoch, otherNodeId));
         log.appendAsLeader(Collections.singleton(new SimpleRecord("foo".getBytes())), lastEpoch);
 
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withElectedLeader(epoch, otherNodeId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), electionStore.read());
 
         manager.poll();
         assertSentFetchEndOffsetRequest(epoch, lastEpoch);
@@ -186,7 +187,7 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testInitializeObserverNoPreviousState() {
+    public void testInitializeObserverNoPreviousState() throws IOException {
         int leaderId = 1;
         int epoch = 5;
         RaftManager manager = buildManager(Utils.mkSet(leaderId));
@@ -196,11 +197,11 @@ public class RaftManagerTest {
         channel.mockReceive(new RaftResponse.Inbound(requestId, findLeaderResponse(leaderId, epoch), leaderId));
 
         manager.poll();
-        assertEquals(Election.withElectedLeader(epoch, leaderId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), electionStore.read());
     }
 
     @Test
-    public void testObserverFindLeaderFailure() {
+    public void testObserverFindLeaderFailure() throws IOException {
         int leaderId = 1;
         int epoch = 5;
         RaftManager manager = buildManager(Utils.mkSet(leaderId));
@@ -219,11 +220,11 @@ public class RaftManagerTest {
         channel.mockReceive(new RaftResponse.Inbound(retryId, findLeaderResponse(leaderId, epoch), leaderId));
 
         manager.poll();
-        assertEquals(Election.withElectedLeader(epoch, leaderId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), electionStore.read());
     }
 
     @Test
-    public void testObserverFindLeaderAfterElectionTimeout() {
+    public void testObserverFindLeaderAfterElectionTimeout() throws IOException {
         int leaderId = 1;
         int epoch = 5;
         RaftManager manager = buildManager(Utils.mkSet(leaderId));
@@ -233,7 +234,7 @@ public class RaftManagerTest {
         channel.mockReceive(new RaftResponse.Inbound(requestId, findLeaderResponse(leaderId, epoch), leaderId));
 
         manager.poll();
-        assertEquals(Election.withElectedLeader(epoch, leaderId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), electionStore.read());
 
         time.sleep(electionTimeoutMs);
 
@@ -242,9 +243,9 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testLeaderHandlesFindLeader() {
+    public void testLeaderHandlesFindLeader() throws IOException {
         RaftManager manager = buildManager(Collections.singleton(localId));
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
         int observerId = 1;
         FindLeaderRequestData request = new FindLeaderRequestData().setReplicaId(observerId);
@@ -255,19 +256,19 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testLeaderGracefulShutdown() {
+    public void testLeaderGracefulShutdown() throws IOException {
         int otherNodeId = 1;
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
 
         // Elect ourselves as the leader
-        assertEquals(Election.withVotedCandidate(1, localId), electionStore.read());
+        assertEquals(ElectionState.withVotedCandidate(1, localId), electionStore.read());
         manager.poll();
 
         int voteRequestId = assertSentVoteRequest(1, 0, 0L);
         VoteResponseData voteResponse = voteResponse(true, Optional.empty(), 1);
         channel.mockReceive(new RaftResponse.Inbound(voteRequestId, voteResponse, otherNodeId));
         manager.poll();
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
         // Now shutdown
         int shutdownTimeoutMs = 5000;
@@ -290,19 +291,19 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testLeaderGracefulShutdownTimeout() {
+    public void testLeaderGracefulShutdownTimeout() throws IOException {
         int otherNodeId = 1;
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
 
         // Elect ourselves as the leader
-        assertEquals(Election.withVotedCandidate(1, localId), electionStore.read());
+        assertEquals(ElectionState.withVotedCandidate(1, localId), electionStore.read());
         manager.poll();
 
         int voteRequestId = assertSentVoteRequest(1, 0, 0L);
         VoteResponseData voteResponse = voteResponse(true, Optional.empty(), 1);
         channel.mockReceive(new RaftResponse.Inbound(voteRequestId, voteResponse, otherNodeId));
         manager.poll();
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
         // Now shutdown
         int shutdownTimeoutMs = 5000;
@@ -324,12 +325,12 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testFollowerGracefulShutdown() {
+    public void testFollowerGracefulShutdown() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
-        electionStore.write(Election.withElectedLeader(epoch, otherNodeId));
+        electionStore.write(ElectionState.withElectedLeader(epoch, otherNodeId));
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withElectedLeader(epoch, otherNodeId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), electionStore.read());
 
         manager.poll();
 
@@ -341,9 +342,9 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testGracefulShutdownSingleMemberQuorum() {
+    public void testGracefulShutdownSingleMemberQuorum() throws IOException {
         RaftManager manager = buildManager(Collections.singleton(localId));
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
         manager.poll();
         assertEquals(0, channel.drainSendQueue().size());
         int shutdownTimeoutMs = 5000;
@@ -354,12 +355,12 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testFollowerReplication() {
+    public void testFollowerReplication() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
-        electionStore.write(Election.withElectedLeader(epoch, otherNodeId));
+        electionStore.write(ElectionState.withElectedLeader(epoch, otherNodeId));
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withElectedLeader(epoch, otherNodeId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), electionStore.read());
 
         manager.poll();
 
@@ -375,9 +376,9 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testLeaderAppendSingleMemberQuorum() {
+    public void testLeaderAppendSingleMemberQuorum() throws IOException {
         RaftManager manager = buildManager(Collections.singleton(localId));
-        assertEquals(Election.withElectedLeader(1, localId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
         SimpleRecord[] appendRecords = new SimpleRecord[] {
             new SimpleRecord("a".getBytes()),
@@ -417,17 +418,17 @@ public class RaftManagerTest {
     }
 
     @Test
-    public void testFollowerLogReconciliation() {
+    public void testFollowerLogReconciliation() throws IOException {
         int otherNodeId = 1;
         int epoch = 5;
         int lastEpoch = 3;
-        electionStore.write(Election.withElectedLeader(epoch, otherNodeId));
+        electionStore.write(ElectionState.withElectedLeader(epoch, otherNodeId));
         log.appendAsLeader(Arrays.asList(
                 new SimpleRecord("foo".getBytes()),
                 new SimpleRecord("bar".getBytes())), lastEpoch);
 
         RaftManager manager = buildManager(Utils.mkSet(localId, otherNodeId));
-        assertEquals(Election.withElectedLeader(epoch, otherNodeId), electionStore.read());
+        assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), electionStore.read());
         assertEquals(2L, log.endOffset());
 
         manager.poll();
@@ -495,7 +496,7 @@ public class RaftManagerTest {
         return raftMessage.requestId();
     }
 
-    private int assertSentFindLeaderRequest() {
+    private int assertSentFindLeaderRequest() throws IOException {
         List<RaftMessage> sentMessages = channel.drainSendQueue();
         assertEquals(1, sentMessages.size());
         RaftMessage raftMessage = sentMessages.get(0);

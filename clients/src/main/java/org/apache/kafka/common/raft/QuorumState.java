@@ -3,6 +3,7 @@ package org.apache.kafka.common.raft;
 import org.apache.kafka.common.utils.LogContext;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -31,18 +32,18 @@ public class QuorumState {
         this.log = logContext.logger(QuorumState.class);
     }
 
-    public void initialize(long endOffset) {
+    public void initialize(long endOffset) throws IOException {
         // We initialize in whatever state we were in on shutdown. If we were a leader
         // or candidate, probably an election was held, but we will find out about it
         // when we send Vote or BeginEpoch requests.
 
-        Election election = store.read();
+        ElectionState election = store.read();
         if (election.isLeader(localId)) {
             state = new LeaderState(localId, election.epoch, endOffset, voters);
         } else if (election.isCandidate(localId)) {
             state = new CandidateState(localId, election.epoch, voters);
         } else {
-            state = new FollowerState(localId, election.epoch);
+            state = new FollowerState(election.epoch);
             if (election.hasLeader()) {
                 becomeFollower(election.epoch, election.leaderId());
             } else if (election.hasVoted() && election.votedId() != localId) {
@@ -58,7 +59,7 @@ public class QuorumState {
     }
 
     public int epoch() {
-        return state.epoch;
+        return state.epoch();
     }
 
     public int leaderIdOrNil() {
@@ -70,7 +71,7 @@ public class QuorumState {
     }
 
     public OptionalInt leaderId() {
-        Election election = state.election();
+        ElectionState election = state.election();
         if (election.hasLeader())
             return OptionalInt.of(state.election().leaderId());
         else
@@ -101,23 +102,23 @@ public class QuorumState {
         return !isVoter();
     }
 
-    public boolean becomeUnattachedFollower(int epoch) {
+    public boolean becomeUnattachedFollower(int epoch) throws IOException {
         return becomeFollower(epoch, FollowerState::assertNotAttached);
     }
 
-    public boolean becomeVotedFollower(int epoch, int candidateId) {
+    public boolean becomeVotedFollower(int epoch, int candidateId) throws IOException {
         if (!isVoter(candidateId))
             throw new IllegalArgumentException("Cannot become follower of non-voter " + candidateId);
         return becomeFollower(epoch, state -> state.grantVoteTo(candidateId));
     }
 
-    public boolean becomeFollower(int epoch, int leaderId) {
+    public boolean becomeFollower(int epoch, int leaderId) throws IOException {
         if (!isVoter(leaderId))
             throw new IllegalArgumentException("Cannot become follower of non-voter " + leaderId);
         return becomeFollower(epoch, state -> state.acknowledgeLeader(leaderId));
     }
 
-    private boolean becomeFollower(int newEpoch, Function<FollowerState, Boolean> func) {
+    private boolean becomeFollower(int newEpoch, Function<FollowerState, Boolean> func) throws IOException {
         int currentEpoch = epoch();
         boolean stateChanged = false;
 
@@ -125,7 +126,7 @@ public class QuorumState {
             throw new IllegalArgumentException("Cannot become follower in epoch " + newEpoch +
                     " since it is smaller epoch than our current epoch " + currentEpoch);
         } else if (newEpoch > currentEpoch || isCandidate()) {
-            state = new FollowerState(localId, newEpoch);
+            state = new FollowerState(newEpoch);
             stateChanged = true;
         } else if (isLeader()) {
             throw new IllegalArgumentException("Cannot become leader of epoch " + newEpoch +
@@ -141,7 +142,7 @@ public class QuorumState {
         return false;
     }
 
-    public CandidateState becomeCandidate() {
+    public CandidateState becomeCandidate() throws IOException {
         if (isObserver())
             throw new IllegalStateException("Cannot become candidate since we are not a voter");
         if (isLeader())
@@ -155,7 +156,7 @@ public class QuorumState {
         return state;
     }
 
-    public LeaderState becomeLeader(long epochStartOffset) {
+    public LeaderState becomeLeader(long epochStartOffset) throws IOException {
         if (isObserver())
             throw new IllegalStateException("Cannot become candidate since we are not a voter");
 
@@ -186,36 +187,6 @@ public class QuorumState {
         if (isCandidate())
             return (CandidateState) state;
         throw new IllegalStateException("Expected to be a candidate, but current state is " + state);
-    }
-
-    public interface Visitor<T> {
-        T ifFollower(FollowerState state);
-        T ifLeader(LeaderState state);
-        T ifCandidate(CandidateState state);
-    }
-
-    public interface VoidVisitor {
-        void ifFollower(FollowerState state);
-        void ifLeader(LeaderState state);
-        void ifCandidate(CandidateState state);
-    }
-
-    public <T> T visit(Visitor<T> visitor) {
-        if (isCandidate())
-            return visitor.ifCandidate((CandidateState) state);
-        else if (isLeader())
-            return visitor.ifLeader((LeaderState) state);
-        else
-            return visitor.ifFollower((FollowerState) state);
-    }
-
-    public void visit(VoidVisitor visitor) {
-        if (isCandidate())
-            visitor.ifCandidate((CandidateState) state);
-        else if (isLeader())
-            visitor.ifLeader((LeaderState) state);
-        else
-            visitor.ifFollower((FollowerState) state);
     }
 
 }
