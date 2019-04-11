@@ -45,7 +45,7 @@ public interface ReplicatedLog {
      * Find the first epoch less than or equal to the given epoch and its end offset,
      * if one exists.
      */
-    Optional<EndOffset> endOffsetForEpoch(int leaderEpoch);
+    Optional<OffsetAndEpoch> endOffsetForEpoch(int leaderEpoch);
 
     /**
      * Get the current log end offset. This is always one plus the offset of the last
@@ -75,15 +75,15 @@ public interface ReplicatedLog {
      * @param endOffset offset and epoch to truncate to
      * @return true if we truncated to a known point in the requested epoch
      */
-    default boolean truncateToEndOffset(EndOffset endOffset) {
+    default boolean truncateToEndOffset(OffsetAndEpoch endOffset) {
         int leaderEpoch = endOffset.epoch;
         if (leaderEpoch == 0) {
             truncateTo(endOffset.offset);
             return true;
         } else {
-            Optional<EndOffset> localEndOffsetOpt = endOffsetForEpoch(leaderEpoch);
+            Optional<OffsetAndEpoch> localEndOffsetOpt = endOffsetForEpoch(leaderEpoch);
             if (localEndOffsetOpt.isPresent()) {
-                EndOffset localEndOffset = localEndOffsetOpt.get();
+                OffsetAndEpoch localEndOffset = localEndOffsetOpt.get();
                 if (localEndOffset.epoch == leaderEpoch) {
                     long truncationOffset = Math.min(localEndOffset.offset, endOffset.offset);
                     truncateTo(truncationOffset);

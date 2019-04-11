@@ -214,8 +214,8 @@ public class RaftManager {
         }
     }
 
-    private EndOffset endOffset() {
-        return new EndOffset(log.endOffset(), log.latestEpoch());
+    private OffsetAndEpoch endOffset() {
+        return new OffsetAndEpoch(log.endOffset(), log.latestEpoch());
     }
 
     private void resetConnections() {
@@ -273,7 +273,7 @@ public class RaftManager {
         }
     }
 
-    private void maybeBeginFetching(EndOffset prevEpochEndOffset) {
+    private void maybeBeginFetching(OffsetAndEpoch prevEpochEndOffset) {
         if (log.truncateToEndOffset(prevEpochEndOffset)) {
             awaitingTruncation = false;
         }
@@ -310,7 +310,7 @@ public class RaftManager {
             } else if (state.hasVoted()) {
                 voteGranted = state.isVotedCandidate(candidateId);
             } else {
-                EndOffset lastEpochEndOffset = new EndOffset(request.lastEpochEndOffset(), request.lastEpoch());
+                OffsetAndEpoch lastEpochEndOffset = new OffsetAndEpoch(request.lastEpochEndOffset(), request.lastEpoch());
                 voteGranted = lastEpochEndOffset.compareTo(endOffset()) >= 0;
             }
 
@@ -371,7 +371,7 @@ public class RaftManager {
         int requestLeaderId = request.leaderId();
         int requestEpoch = request.leaderEpoch();
         becomeFollower(requestLeaderId, requestEpoch);
-        EndOffset prevEpochEndOffset = new EndOffset(request.previousEpochEndOffset(), request.previousEpoch());
+        OffsetAndEpoch prevEpochEndOffset = new OffsetAndEpoch(request.previousEpochEndOffset(), request.previousEpoch());
         maybeBeginFetching(prevEpochEndOffset);
         return buildBeginEpochResponse(Errors.NONE);
     }
@@ -525,7 +525,7 @@ public class RaftManager {
         return OptionalLong.empty();
     }
 
-    private FetchEndOffsetResponseData buildFetchEndOffsetResponse(Errors error, EndOffset endOffset) {
+    private FetchEndOffsetResponseData buildFetchEndOffsetResponse(Errors error, OffsetAndEpoch endOffset) {
         return new FetchEndOffsetResponseData()
                 .setErrorCode(error.code())
                 .setLeaderEpoch(quorum.epoch())
@@ -537,13 +537,14 @@ public class RaftManager {
     private FetchEndOffsetResponseData handleFetchEndOffsetRequest(FetchEndOffsetRequestData request) {
         Optional<Exception> errorOpt = handleInvalidLeaderOnlyRequest(request.leaderEpoch());
         if (errorOpt.isPresent()) {
-            return buildFetchEndOffsetResponse(Errors.forException(errorOpt.get()), new EndOffset(-1, -1));
+            return buildFetchEndOffsetResponse(Errors.forException(errorOpt.get()),
+                    new OffsetAndEpoch(-1, -1));
         }
 
         LeaderState state = quorum.leaderStateOrThrow();
         state.addEndorsementFrom(request.replicaId());
-        EndOffset endOffset = log.endOffsetForEpoch(request.lastEpoch())
-                .orElse(new EndOffset(-1L, -1));
+        OffsetAndEpoch endOffset = log.endOffsetForEpoch(request.lastEpoch())
+                .orElse(new OffsetAndEpoch(-1L, -1));
         return buildFetchEndOffsetResponse(Errors.NONE, endOffset);
     }
 
@@ -560,7 +561,7 @@ public class RaftManager {
             if (response.endOffset() < 0 || response.endOffsetEpoch() < 0) {
                 logger.warn("Leader returned an unknown offset to our EndOffset request");
             } else {
-                EndOffset endOffset = new EndOffset(response.endOffset(), response.endOffsetEpoch());
+                OffsetAndEpoch endOffset = new OffsetAndEpoch(response.endOffset(), response.endOffsetEpoch());
                 maybeBeginFetching(endOffset);
                 electionTimer.reset(electionTimeoutMs);
             }
@@ -794,7 +795,7 @@ public class RaftManager {
     }
 
     private BeginEpochRequestData buildBeginEpochRequest() {
-        EndOffset previousEpochEndOffset = log.previousEpoch()
+        OffsetAndEpoch previousEpochEndOffset = log.previousEpoch()
                 .flatMap(log::endOffsetForEpoch)
                 .orElseThrow(() -> new IllegalStateException("Expected leader to have defined previous epoch"));
         return new BeginEpochRequestData()
@@ -811,7 +812,7 @@ public class RaftManager {
     }
 
     private VoteRequestData buildVoteRequest() {
-        EndOffset endOffset = endOffset();
+        OffsetAndEpoch endOffset = endOffset();
         return new VoteRequestData()
                 .setLeaderEpoch(quorum.epoch())
                 .setCandidateId(quorum.localId)
@@ -1013,7 +1014,7 @@ public class RaftManager {
         if (shutdown.get() != null)
             throw new IllegalStateException("Cannot append records while we are shutting down");
 
-        Optional<EndOffset> endOffset = log.endOffsetForEpoch(offsetAndEpoch.epoch);
+        Optional<OffsetAndEpoch> endOffset = log.endOffsetForEpoch(offsetAndEpoch.epoch);
         if (!endOffset.isPresent() || offsetAndEpoch.offset > endOffset.get().offset) {
             throw new LogTruncationException("The requested offset and epoch " + offsetAndEpoch +
                     " are not in range. The closest offset we found is " + endOffset + ".");

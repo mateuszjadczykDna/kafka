@@ -4,8 +4,9 @@ import java.lang
 import java.util.Optional
 
 import kafka.log.Log
-import org.apache.kafka.common.KafkaException
-import org.apache.kafka.common.raft.{EndOffset, ReplicatedLog}
+import kafka.server.OffsetAndEpoch
+import org.apache.kafka.common.{KafkaException, raft}
+import org.apache.kafka.common.raft.ReplicatedLog
 import org.apache.kafka.common.record.{MemoryRecords, Records}
 import org.apache.kafka.common.utils.Time
 
@@ -35,10 +36,10 @@ class KafkaMetadataLog(time: Time, log: Log, maxFetchSizeInBytes: Int = 1024 * 1
     log.latestEpoch.getOrElse(0)
   }
 
-  override def endOffsetForEpoch(leaderEpoch: Int): Optional[EndOffset] = {
+  override def endOffsetForEpoch(leaderEpoch: Int): Optional[raft.OffsetAndEpoch] = {
     // TODO: Does this handle empty log case (when epoch is None) as we expect?
     val endOffsetOpt = log.endOffsetForEpoch(leaderEpoch).map { offsetAndEpoch =>
-      new EndOffset(offsetAndEpoch.offset, offsetAndEpoch.leaderEpoch)
+      new raft.OffsetAndEpoch(offsetAndEpoch.offset, offsetAndEpoch.leaderEpoch)
     }
     convert(endOffsetOpt)
   }
@@ -55,7 +56,7 @@ class KafkaMetadataLog(time: Time, log: Log, maxFetchSizeInBytes: Int = 1024 * 1
   }
 
   override def startOffset: Long = {
-    log.logStartOffset
+    log.localLogStartOffset
   }
 
   override def truncateTo(offset: Long): Boolean = {
