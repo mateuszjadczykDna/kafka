@@ -1,45 +1,49 @@
 package org.apache.kafka.common.raft;
 
+import java.util.OptionalInt;
+
 /**
  * Encapsulate election state stored on disk after every state change.
  */
 public class ElectionState {
     public final int epoch;
-    private final int leaderIdOrNil;
-    private final int votedIdOrNil;
+    private final OptionalInt leaderIdOpt;
+    private final OptionalInt votedIdOpt;
 
     private ElectionState(int epoch,
-                          int leaderIdOrNil,
-                          int votedIdOrNil) {
+                          OptionalInt leaderIdOpt,
+                          OptionalInt votedIdOpt) {
         this.epoch = epoch;
-        this.leaderIdOrNil = leaderIdOrNil;
-        this.votedIdOrNil = votedIdOrNil;
+        this.leaderIdOpt = leaderIdOpt;
+        this.votedIdOpt = votedIdOpt;
     }
 
     public static ElectionState withVotedCandidate(int epoch, int votedId) {
         if (votedId < 0)
             throw new IllegalArgumentException("Illegal voted Id " + votedId + ": must be non-negative");
-        return new ElectionState(epoch, -1, votedId);
+        return new ElectionState(epoch, OptionalInt.empty(), OptionalInt.of(votedId));
     }
 
     public static ElectionState withElectedLeader(int epoch, int leaderId) {
         if (leaderId < 0)
             throw new IllegalArgumentException("Illegal leader Id " + leaderId + ": must be non-negative");
-        return new ElectionState(epoch, leaderId, -1);
+        return new ElectionState(epoch, OptionalInt.of(leaderId), OptionalInt.empty());
     }
 
     public static ElectionState withUnknownLeader(int epoch) {
-        return new ElectionState(epoch, -1, -1);
+        return new ElectionState(epoch, OptionalInt.empty(), OptionalInt.empty());
     }
 
     public boolean isLeader(int nodeId) {
         if (nodeId < 0)
-            throw new IllegalArgumentException();
-        return leaderIdOrNil == nodeId;
+            throw new IllegalArgumentException("Invalid negative nodeId: " + nodeId);
+        return leaderIdOpt.orElse(-1) == nodeId;
     }
 
     public boolean isCandidate(int nodeId) {
-        return votedIdOrNil == nodeId;
+        if (nodeId < 0)
+            throw new IllegalArgumentException("Invalid negative nodeId: " + nodeId);
+        return votedIdOpt.orElse(-1) == nodeId;
     }
 
     public boolean isFollower(int nodeId) {
@@ -47,31 +51,31 @@ public class ElectionState {
     }
 
     public int leaderId() {
-        if (leaderIdOrNil < 0)
+        if (!leaderIdOpt.isPresent())
             throw new IllegalStateException("Attempt to access nil leaderId");
-        return leaderIdOrNil;
+        return leaderIdOpt.getAsInt();
     }
 
     public int votedId() {
-        if (votedIdOrNil < 0)
+        if (!votedIdOpt.isPresent())
             throw new IllegalStateException("Attempt to access nil votedId");
-        return votedIdOrNil;
+        return votedIdOpt.getAsInt();
     }
 
     public boolean hasLeader() {
-        return leaderIdOrNil >= 0;
+        return leaderIdOpt.isPresent();
     }
 
     public boolean hasVoted() {
-        return votedIdOrNil >= 0;
+        return votedIdOpt.isPresent();
     }
 
 
     @Override
     public String toString() {
         return "Election(epoch=" + epoch +
-                ", leaderIdOrNil=" + leaderIdOrNil +
-                ", votedIdOrNil=" + votedIdOrNil +
+                ", leaderIdOpt=" + leaderIdOpt +
+                ", votedIdOpt=" + votedIdOpt +
                 ')';
     }
 
@@ -80,18 +84,19 @@ public class ElectionState {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
-        ElectionState election = (ElectionState) o;
+        ElectionState that = (ElectionState) o;
 
-        if (epoch != election.epoch) return false;
-        if (leaderIdOrNil != election.leaderIdOrNil) return false;
-        return votedIdOrNil == election.votedIdOrNil;
+        if (epoch != that.epoch) return false;
+        if (!leaderIdOpt.equals(that.leaderIdOpt)) return false;
+        return votedIdOpt.equals(that.votedIdOpt);
     }
 
     @Override
     public int hashCode() {
         int result = epoch;
-        result = 31 * result + leaderIdOrNil;
-        result = 31 * result + votedIdOrNil;
+        result = 31 * result + leaderIdOpt.hashCode();
+        result = 31 * result + votedIdOpt.hashCode();
         return result;
     }
+
 }

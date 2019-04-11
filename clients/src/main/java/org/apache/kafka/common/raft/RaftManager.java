@@ -47,8 +47,7 @@ import java.util.function.Supplier;
 // - Observer should find leader after request failures/timeouts:
 // | Mainly need a way to propagate disconnects
 // - Figure out locking (probably read-write lock like normal partitions)
-// - Deletion of old log data
-// - Should append requests use a separate connection?
+// - Deletion of old log data: do we need any guarantees on the consistency of the log start offset?
 // - Can we get rid of FetchEndOffsetRequest and piggyback log reconciliation information
 //   onto the FetchRecordsResponse?
 
