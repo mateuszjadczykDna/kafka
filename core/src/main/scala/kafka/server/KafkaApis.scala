@@ -1315,13 +1315,14 @@ class KafkaApis(val requestChannel: RequestChannel,
         )
       )
     } else {
-      val encodedGroupInstanceId = joinGroupRequest.data().groupInstanceId
-      val groupInstanceId =
-        if (encodedGroupInstanceId == null ||
-        config.interBrokerProtocolVersion < KAFKA_2_3_IV0)
-          None
-        else
-          Some(encodedGroupInstanceId)
+//      val encodedGroupInstanceId = joinGroupRequest.data().groupInstanceId
+//      val groupInstanceId =
+//        if (encodedGroupInstanceId == null ||
+//        config.interBrokerProtocolVersion < KAFKA_2_3_IV0)
+//          None
+//        else
+//          Some(encodedGroupInstanceId)
+      val groupInstanceId = None
 
       // Only return MEMBER_ID_REQUIRED error if joinGroupRequest version is >= 4
       // and groupInstanceId is configured to unknown.
