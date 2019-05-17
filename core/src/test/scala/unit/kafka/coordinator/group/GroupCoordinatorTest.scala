@@ -480,6 +480,7 @@ class GroupCoordinatorTest {
 
   @Test
   def staticMemberRejoinWithLeaderIdAndKnownMemberId() {
+    // Decrease session timeout so that the follower is guaranteed to be evicted when rebalance timeout is reached.
     val rebalanceResult = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId, sessionTimeout = DefaultRebalanceTimeout / 2)
 
     // A static leader with known id rejoin will trigger rebalance.
@@ -522,6 +523,7 @@ class GroupCoordinatorTest {
 
   @Test
   def staticMemberRejoinWithFollowerIdAndChangeOfProtocol() {
+    // Increase session timeout so that the leader won't be evicted when rebalance timeout is reached.
     val rebalanceResult = staticMembersJoinAndRebalance(leaderInstanceId, followerInstanceId, sessionTimeout = DefaultSessionTimeout * 2)
 
     // A static follower rejoin with changed protocol will trigger rebalance.
