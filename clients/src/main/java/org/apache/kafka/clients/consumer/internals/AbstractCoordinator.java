@@ -63,15 +63,11 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
+import sun.plugin.dom.exception.InvalidStateException;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -107,10 +103,11 @@ import java.util.concurrent.atomic.AtomicReference;
 public abstract class AbstractCoordinator implements Closeable {
     public static final String HEARTBEAT_THREAD_PREFIX = "kafka-coordinator-heartbeat-thread";
 
-    private enum MemberState {
+    enum MemberState {
         UNJOINED,    // the client is not part of a group
         REBALANCING, // the client has begun rebalancing
         STABLE,      // the client has joined and is sending heartbeats
+        FENCED       // the client has been fenced
     }
 
     private final Logger log;
@@ -134,6 +131,22 @@ public abstract class AbstractCoordinator implements Closeable {
 
     private RequestFuture<Void> findCoordinatorFuture = null;
     private final boolean leaveGroupOnClose;
+
+    private final Map<MemberState, Set<MemberState>> validPreviousStates =
+            new HashMap<MemberState, Set<MemberState>>() {{
+                put(MemberState.UNJOINED, new HashSet<>(
+                        Arrays.asList(MemberState.REBALANCING, MemberState.STABLE)
+                ));
+                put(MemberState.REBALANCING, new HashSet<>(
+                        Arrays.asList(MemberState.UNJOINED, MemberState.STABLE)
+                ));
+                put(MemberState.STABLE, new HashSet<>(
+                        Arrays.asList(MemberState.UNJOINED, MemberState.REBALANCING)
+                ));
+                put(MemberState.FENCED, new HashSet<>(
+                        Arrays.asList(MemberState.UNJOINED, MemberState.REBALANCING, MemberState.STABLE)
+                ));
+    }};
 
     /**
      * Initialize the coordination manager.
@@ -458,7 +471,7 @@ public abstract class AbstractCoordinator implements Closeable {
             // sending heartbeats if that callback takes some time.
             disableHeartbeatThread();
 
-            state = MemberState.REBALANCING;
+            transitionTo(MemberState.REBALANCING);
             joinFuture = sendJoinGroupRequest();
             joinFuture.addListener(new RequestFutureListener<ByteBuffer>() {
                 @Override
@@ -467,7 +480,7 @@ public abstract class AbstractCoordinator implements Closeable {
                     // even if the consumer is woken up before finishing the rebalance
                     synchronized (AbstractCoordinator.this) {
                         log.info("Successfully joined group with generation {}", generation.generationId);
-                        state = MemberState.STABLE;
+                        transitionTo(MemberState.STABLE);
                         rejoinNeeded = false;
 
                         if (heartbeatThread != null)
@@ -480,7 +493,11 @@ public abstract class AbstractCoordinator implements Closeable {
                     // we handle failures below after the request finishes. if the join completes
                     // after having been woken up, the exception is ignored and we will rejoin
                     synchronized (AbstractCoordinator.this) {
-                        state = MemberState.UNJOINED;
+                        if ( e instanceof FencedInstanceIdException) {
+                            transitionTo(MemberState.FENCED);
+                        } else {
+                            transitionTo(MemberState.UNJOINED);
+                        }
                     }
                 }
             });
@@ -564,6 +581,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 future.raise(error);
             } else if (error == Errors.FENCED_INSTANCE_ID) {
                 log.error("Received fatal exception: group.instance.id gets fenced");
+                transitionTo(MemberState.FENCED);
                 future.raise(error);
             } else if (error == Errors.INCONSISTENT_GROUP_PROTOCOL
                     || error == Errors.INVALID_SESSION_TIMEOUT
@@ -590,7 +608,7 @@ public abstract class AbstractCoordinator implements Closeable {
                     AbstractCoordinator.this.generation = new Generation(OffsetCommitRequest.DEFAULT_GENERATION_ID,
                             joinResponse.data().memberId(), null);
                     AbstractCoordinator.this.rejoinNeeded = true;
-                    AbstractCoordinator.this.state = MemberState.UNJOINED;
+                    transitionTo(MemberState.UNJOINED);
                 }
                 future.raise(Errors.MEMBER_ID_REQUIRED);
             } else {
@@ -671,6 +689,7 @@ public abstract class AbstractCoordinator implements Closeable {
                     future.raise(error);
                 } else if (error == Errors.FENCED_INSTANCE_ID) {
                     log.error("Received fatal exception: group.instance.id gets fenced");
+                    transitionTo(MemberState.FENCED);
                     future.raise(error);
                 } else if (error == Errors.UNKNOWN_MEMBER_ID
                         || error == Errors.ILLEGAL_GENERATION) {
@@ -827,7 +846,7 @@ public abstract class AbstractCoordinator implements Closeable {
     protected synchronized void resetGeneration() {
         this.generation = Generation.NO_GENERATION;
         this.rejoinNeeded = true;
-        this.state = MemberState.UNJOINED;
+        transitionTo(MemberState.UNJOINED);
     }
 
     protected synchronized void requestRejoin() {
@@ -942,6 +961,7 @@ public abstract class AbstractCoordinator implements Closeable {
                 future.raise(Errors.ILLEGAL_GENERATION);
             } else if (error == Errors.FENCED_INSTANCE_ID) {
                 log.error("Received fatal exception: group.instance.id gets fenced");
+                transitionTo(MemberState.FENCED);
                 future.raise(error);
             } else if (error == Errors.UNKNOWN_MEMBER_ID) {
                 log.info("Attempt to heartbeat failed for since member id {} is not valid.", generation.memberId);
@@ -1151,6 +1171,7 @@ public abstract class AbstractCoordinator implements Closeable {
                                             log.error("Caught fenced group.instance.id {} error in heartbeat thread", groupInstanceId);
                                             heartbeatThread.failed.set(e);
                                             heartbeatThread.disable();
+                                            transitionTo(MemberState.FENCED);
                                         } else {
                                             heartbeat.failHeartbeat();
                                             // wake up the thread if it's sleeping to reschedule the heartbeat
@@ -1183,6 +1204,20 @@ public abstract class AbstractCoordinator implements Closeable {
             }
         }
 
+    }
+
+    /**
+     * Transit coordinator to a new state.
+     * @param newState state to be transitioned to
+     */
+    protected synchronized void transitionTo(MemberState newState) {
+        if (!validPreviousStates.get(newState).contains(this.state)) {
+            throw new InvalidStateException(
+                    "invalid state transition for coordinator from " + this.state
+                    + " to " + newState
+            );
+        }
+        this.state = newState;
     }
 
     protected static class Generation {
