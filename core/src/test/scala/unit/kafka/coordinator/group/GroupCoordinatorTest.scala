@@ -2518,7 +2518,7 @@ class GroupCoordinatorTest {
   @Test
   def testDescribeGroupStable() {
     val memberId = JoinGroupRequest.UNKNOWN_MEMBER_ID
-    val joinGroupResult = dynamicJoinGroup(groupId, memberId, protocolType, protocols)
+    val joinGroupResult = staticJoinGroup(groupId, memberId, leaderInstanceId, protocolType, protocols)
     val assignedMemberId = joinGroupResult.memberId
     val generationId = joinGroupResult.generationId
     val joinGroupError = joinGroupResult.error
@@ -2536,6 +2536,7 @@ class GroupCoordinatorTest {
     assertEquals(protocolType, summary.protocolType)
     assertEquals("range", summary.protocol)
     assertEquals(List(assignedMemberId), summary.members.map(_.memberId))
+    assertEquals(List(leaderInstanceId), summary.members.map(_.groupInstanceId))
   }
 
   @Test
