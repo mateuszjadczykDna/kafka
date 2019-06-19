@@ -428,3 +428,56 @@ class AssignmentValidationTest(VerifiableConsumerTest):
                 "expected valid assignments of %d partitions when num_started %d: %s" % \
                 (self.NUM_PARTITIONS, num_started, \
                  [(str(node.account), a) for node, a in consumer.current_assignment().items()])
+
+
+class StaticMemberAssignmentValidationTest(VerifiableConsumerTest):
+    TOPIC = "test_topic"
+    NUM_PARTITIONS = 12
+
+    def __init__(self, test_context):
+        super(StaticMemberAssignmentValidationTest, self).__init__(test_context, num_consumers=3, num_producers=0,
+                                                       num_zk=1, num_brokers=2, topics={
+                self.TOPIC : { 'partitions': self.NUM_PARTITIONS, 'replication-factor': 1 },
+            })
+
+    @cluster(num_nodes=9)
+    @matrix(assignment_strategy=["org.apache.kafka.clients.consumer.RoundRobinAssignor"])
+    def test_valid_assignment(self, assignment_strategy):
+        """
+        Get 3 static members and 3 dynamic members. Verify assignment strategy correctness:
+        1. each partition is assigned to exactly one consumer instance.
+        2. Moreover, the assignment remains the same across rebalance generation for static members.
+
+        Setup: single Kafka cluster with a set of consumers in the same group.
+
+        - Start the consumers one by one
+        - Validate assignment after every expected rebalance
+        """
+        dynamic_consumers = self.setup_consumer(self.TOPIC, assignment_strategy=assignment_strategy)
+        self.session_timeout_sec = 60
+        static_consumers = self.setup_consumer(self.TOPIC, static_membership=static_membership, assignment_strategy=assignment_strategy)
+
+        dynamic_consumers.start()
+        static_consumers.start()
+
+        self.await_members(dynamic_consumers, self.num_consumers)
+        self.await_members(static_consumers, self.num_consumers)
+
+        static_member_assignments =
+
+
+    for num_started, node in enumerate(dynamic_consumers.nodes, 1):
+            dynamic_consumers.start_node(node)
+            self.await_members(dynamic_consumers, num_started)
+            assert self.valid_assignment(self.TOPIC, self.NUM_PARTITIONS, consumer.current_assignment()), \
+                "expected valid assignments of %d partitions when num_started %d: %s" % \
+                (self.NUM_PARTITIONS, num_started, \
+                 [(str(node.account), a) for node, a in consumer.current_assignment().items()])
+
+        for num_started, node in enumerate(static_members.nodes, 1):
+            dynamic_consumers.start_node(node)
+            self.await_members(dynamic_consumers, num_started)
+            assert self.valid_assignment(self.TOPIC, self.NUM_PARTITIONS, consumer.current_assignment()), \
+                "expected valid assignments of %d partitions when num_started %d: %s" % \
+                (self.NUM_PARTITIONS, num_started, \
+                 [(str(node.account), a) for node, a in consumer.current_assignment().items()])

@@ -39,7 +39,8 @@ class ConsumerEventHandler(object):
         self.state = ConsumerState.Dead
         self.revoked_count = 0
         self.assigned_count = 0
-        self.assignment = []
+        self.all_assignment = []
+        self.consumer_assignment = []
         self.position = {}
         self.committed = {}
         self.total_consumed = 0
@@ -47,7 +48,7 @@ class ConsumerEventHandler(object):
 
     def handle_shutdown_complete(self):
         self.state = ConsumerState.Dead
-        self.assignment = []
+        self.all_assignment = []
         self.position = {}
 
     def handle_startup_complete(self):
@@ -64,9 +65,9 @@ class ConsumerEventHandler(object):
                 partition = offset_commit["partition"]
                 tp = TopicPartition(topic, partition)
                 offset = offset_commit["offset"]
-                assert tp in self.assignment, \
+                assert tp in self.all_assignment, \
                     "Committed offsets for partition %s not assigned (current assignment: %s)" % \
-                    (str(tp), str(self.assignment))
+                    (str(tp), str(self.all_assignment))
                 assert tp in self.position, "No previous position for %s: %s" % (str(tp), event)
                 assert self.position[tp] >= offset, \
                     "The committed offset %d was greater than the current position %d for partition %s" % \
@@ -83,9 +84,9 @@ class ConsumerEventHandler(object):
             min_offset = record_batch["minOffset"]
             max_offset = record_batch["maxOffset"]
 
-            assert tp in self.assignment, \
+            assert tp in self.all_assignment, \
                 "Consumed records for partition %s which is not assigned (current assignment: %s)" % \
-                (str(tp), str(self.assignment))
+                (str(tp), str(self.all_assignment))
             if tp not in self.position or self.position[tp] == min_offset:
                 self.position[tp] = max_offset + 1
             else:
@@ -112,7 +113,7 @@ class ConsumerEventHandler(object):
             topic = topic_partition["topic"]
             partition = topic_partition["partition"]
             assignment.append(TopicPartition(topic, partition))
-        self.assignment = assignment
+        self.all_assignment = assignment
 
     def handle_kill_process(self, clean_shutdown):
         # if the shutdown was clean, then we expect the explicit
@@ -121,7 +122,7 @@ class ConsumerEventHandler(object):
             self.handle_shutdown_complete()
 
     def current_assignment(self):
-        return list(self.assignment)
+        return list(self.all_assignment)
 
     def current_position(self, tp):
         if tp in self.position:
