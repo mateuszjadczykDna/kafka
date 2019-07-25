@@ -15,10 +15,6 @@
 
 class ListenerSecurityConfig:
 
-    SASL_MECHANISM_PREFIXED_CONFIGS = ["connections.max.reauth.ms", "sasl.jaas.config",
-                                       "sasl.login.callback.handler.class", "sasl.login.class",
-                                       "sasl.server.callback.handler.class"]
-
     def __init__(self, use_separate_interbroker_listener=False,
                  client_listener_overrides={}, interbroker_listener_overrides={}):
         """
@@ -38,6 +34,3 @@ class ListenerSecurityConfig:
         self.use_separate_interbroker_listener = use_separate_interbroker_listener
         self.client_listener_overrides = client_listener_overrides
         self.interbroker_listener_overrides = interbroker_listener_overrides
-
-    def requires_sasl_mechanism_prefix(self, config):
-        return config in ListenerSecurityConfig.SASL_MECHANISM_PREFIXED_CONFIGS
