@@ -33,6 +33,12 @@ import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.InitProducerIdRequestData;
 import org.apache.kafka.common.message.TxnOffsetCommitRequestData;
+import org.apache.kafka.common.metrics.Metrics;
+import org.apache.kafka.common.metrics.Sensor;
+import org.apache.kafka.common.metrics.stats.Avg;
+import org.apache.kafka.common.metrics.stats.Max;
+import org.apache.kafka.common.metrics.stats.Meter;
+import org.apache.kafka.common.metrics.stats.WindowedCount;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.DefaultRecordBatch;
 import org.apache.kafka.common.record.RecordBatch;
@@ -82,10 +88,42 @@ import static org.apache.kafka.common.record.RecordBatch.NO_PRODUCER_ID;
 public class TransactionManager {
     private static final int NO_INFLIGHT_REQUEST_CORRELATION_ID = -1;
     private static final int NO_LAST_ACKED_SEQUENCE_NUMBER = -1;
+    private final TransactionManagerMetrics sensors;
 
     private final Logger log;
     private final String transactionalId;
     private final int transactionTimeoutMs;
+
+    private class TransactionManagerMetrics {
+        private final String metricGrpName;
+
+        public final Sensor addOffsetsLatency;
+        public final Sensor txnCommitLatency;
+
+        public TransactionManagerMetrics(Metrics metrics, String metricGrpPrefix) {
+            this.metricGrpName = metricGrpPrefix + "-txn-manager-metrics";
+
+            this.addOffsetsLatency = metrics.sensor("add-offsets-latency");
+            this.addOffsetsLatency.add(metrics.metricName("add-offsets-time-max",
+                                                         this.metricGrpName,
+                                                         "The max time taken to add offsets to txn coordinator"), new Max());
+            this.addOffsetsLatency.add(createMeter(metrics, metricGrpName, "addOffset", "add offsets"));
+
+            this.txnCommitLatency = metrics.sensor("txn-commit-latency");
+            this.txnCommitLatency.add(metrics.metricName("txn-commit-time-max",
+                                                    this.metricGrpName,
+                                                    "The max time taken for txn commit to finish"), new Max());
+            this.txnCommitLatency.add(createMeter(metrics, metricGrpName, "txnCommit", "txn offset commits"));
+        }
+    }
+
+    protected Meter createMeter(Metrics metrics, String groupName, String baseName, String descriptiveName) {
+        return new Meter(new WindowedCount(),
+                         metrics.metricName(baseName + "-rate", groupName,
+                                            String.format("The number of %s per second", descriptiveName)),
+                         metrics.metricName(baseName + "-total", groupName,
+                                            String.format("The total number of %s", descriptiveName)));
+    }
 
     private static class TopicPartitionBookkeeper {
 
@@ -252,7 +290,7 @@ public class TransactionManager {
         }
     }
 
-    public TransactionManager(LogContext logContext, String transactionalId, int transactionTimeoutMs, long retryBackoffMs) {
+    public TransactionManager(LogContext logContext, String transactionalId, int transactionTimeoutMs, long retryBackoffMs, Metrics metrics) {
         this.producerIdAndEpoch = new ProducerIdAndEpoch(NO_PRODUCER_ID, NO_PRODUCER_EPOCH);
         this.transactionalId = transactionalId;
         this.log = logContext.logger(TransactionManager.class);
@@ -267,10 +305,11 @@ public class TransactionManager {
         this.partitionsWithUnresolvedSequences = new HashSet<>();
         this.retryBackoffMs = retryBackoffMs;
         this.topicPartitionBookkeeper = new TopicPartitionBookkeeper();
+        this.sensors = new TransactionManagerMetrics(metrics, "producer");
     }
 
     TransactionManager() {
-        this(new LogContext(), null, 0, 100L);
+        this(new LogContext(), null, 0, 100L, new Metrics());
     }
 
     public synchronized TransactionalRequestResult initializeTransactions() {
@@ -1056,6 +1095,12 @@ public class TransactionManager {
 
         @Override
         public void onComplete(ClientResponse response) {
+            if (response.responseBody() instanceof AddOffsetsToTxnResponse) {
+                sensors.addOffsetsLatency.record(response.requestLatencyMs());
+            } else if (response.responseBody() instanceof TxnOffsetCommitResponse) {
+                sensors.txnCommitLatency.record(response.requestLatencyMs());
+            }
+
             if (response.requestHeader().correlationId() != inFlightRequestCorrelationId) {
                 fatalError(new RuntimeException("Detected more than one in-flight transactional request."));
             } else {

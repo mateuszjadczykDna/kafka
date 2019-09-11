@@ -131,7 +131,7 @@ public class TransactionManagerTest {
         MetricConfig metricConfig = new MetricConfig().tags(metricTags);
         this.brokerNode = new Node(0, "localhost", 2211);
         this.transactionManager = new TransactionManager(logContext, transactionalId, transactionTimeoutMs,
-                DEFAULT_RETRY_BACKOFF_MS);
+                DEFAULT_RETRY_BACKOFF_MS, new Metrics());
         Metrics metrics = new Metrics(metricConfig, time);
         SenderMetricsRegistry senderMetrics = new SenderMetricsRegistry(metrics);
 
@@ -2496,7 +2496,7 @@ public class TransactionManagerTest {
     @Test
     public void testResetProducerIdAfterWithoutPendingInflightRequests() {
         TransactionManager manager = new TransactionManager(logContext, null, transactionTimeoutMs,
-            DEFAULT_RETRY_BACKOFF_MS);
+            DEFAULT_RETRY_BACKOFF_MS, new Metrics());
         long producerId = 15L;
         short epoch = 5;
         ProducerIdAndEpoch producerIdAndEpoch = new ProducerIdAndEpoch(producerId, epoch);
@@ -2538,7 +2538,7 @@ public class TransactionManagerTest {
     @Test
     public void testNoProducerIdResetAfterLastInFlightBatchSucceeds() {
         TransactionManager manager = new TransactionManager(logContext, null, transactionTimeoutMs,
-                DEFAULT_RETRY_BACKOFF_MS);
+                DEFAULT_RETRY_BACKOFF_MS, new Metrics());
         long producerId = 15L;
         short epoch = 5;
         ProducerIdAndEpoch producerIdAndEpoch = new ProducerIdAndEpoch(producerId, epoch);
@@ -2579,7 +2579,7 @@ public class TransactionManagerTest {
     @Test
     public void testProducerIdResetAfterLastInFlightBatchFails() {
         TransactionManager manager = new TransactionManager(logContext, null, transactionTimeoutMs,
-                DEFAULT_RETRY_BACKOFF_MS);
+                DEFAULT_RETRY_BACKOFF_MS, new Metrics());
         long producerId = 15L;
         short epoch = 5;
         ProducerIdAndEpoch producerIdAndEpoch = new ProducerIdAndEpoch(producerId, epoch);
