@@ -642,6 +642,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         // so that users can still access the previously owned partitions to commit offsets etc.
         Exception exception = null;
         final Set<TopicPartition> revokedPartitions;
+        generation();
         if (generation == Generation.NO_GENERATION.generationId &&
             memberId.equals(Generation.NO_GENERATION.memberId)) {
             revokedPartitions = new HashSet<>(subscriptions.assignedPartitions());
@@ -696,7 +697,12 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         Set<TopicPartition> droppedPartitions = new HashSet<>(subscriptions.assignedPartitions());
 
         if (subscriptions.partitionsAutoAssigned() && !droppedPartitions.isEmpty()) {
-            final Exception e = invokePartitionsRevoked(droppedPartitions);
+            final Exception e;
+            if (generation() != Generation.NO_GENERATION) {
+                e = invokePartitionsRevoked(droppedPartitions);
+            } else {
+                e = invokePartitionsLost(droppedPartitions);
+            }
 
             subscriptions.assignFromSubscribed(Collections.emptySet());
 

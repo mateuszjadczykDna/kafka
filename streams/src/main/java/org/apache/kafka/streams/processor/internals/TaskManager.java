@@ -266,7 +266,6 @@ public class TaskManager {
         assignedActiveTasks.keySet().removeAll(zombieTasks);
         changelogReader.remove(lostTaskChangelogs);
         removeChangelogsFromRestoreConsumer(lostTaskChangelogs, false);
-        log.debug("Reset assigned active tasks to {}", assignedActiveTasks);
 
         if (exception != null) {
             throw exception;
@@ -470,8 +469,9 @@ public class TaskManager {
             }
         }
 
-        log.debug("Assigning metadata with activeTasks {}, " +
-                      "added active tasks {}, amd assigned active tasks {}", activeTasks, addedActiveTasks, assignedActiveTasks);
+        log.debug("Assigning metadata with activeTasks: {}. The updated active task states are: \n" +
+                      "\taddedActiveTasks {},\n" +
+                      "\tassignedActiveTasks {}", activeTasks, addedActiveTasks, assignedActiveTasks);
         this.assignedActiveTasks = activeTasks;
         this.assignedStandbyTasks = standbyTasks;
     }
