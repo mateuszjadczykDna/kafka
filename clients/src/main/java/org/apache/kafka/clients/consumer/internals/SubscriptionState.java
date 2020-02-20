@@ -415,6 +415,7 @@ public class SubscriptionState {
     }
 
     public synchronized boolean hasAutoAssignedPartitions() {
+        log.info("Subscription type: {}", this.subscriptionType);
         return this.subscriptionType == SubscriptionType.AUTO_TOPICS || this.subscriptionType == SubscriptionType.AUTO_PATTERN;
     }
 

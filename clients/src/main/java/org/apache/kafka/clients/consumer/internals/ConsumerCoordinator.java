@@ -707,6 +707,9 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
         // we should reset assignment and trigger the callback before leaving group
         Set<TopicPartition> droppedPartitions = new HashSet<>(subscriptions.assignedPartitions());
 
+        log.info("On leave prepare, we detected subscription type as {}, while dropped partitions are {}",
+            subscriptions.hasAutoAssignedPartitions(), droppedPartitions);
+
         if (subscriptions.hasAutoAssignedPartitions() && !droppedPartitions.isEmpty()) {
             final Exception e;
             if (generation() != Generation.NO_GENERATION) {
