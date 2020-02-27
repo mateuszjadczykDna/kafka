@@ -363,6 +363,7 @@ public class TransactionManager {
     }
 
     private TransactionalRequestResult beginCompletingTransaction(TransactionResult transactionResult) {
+        System.out.println("Send out end-txn");
         if (!newPartitionsInTransaction.isEmpty())
             enqueueRequest(addPartitionsToTransactionHandler());
 
@@ -868,6 +869,7 @@ public class TransactionManager {
             enqueueRequest(addPartitionsToTransactionHandler());
 
         TxnRequestHandler nextRequestHandler = pendingRequests.peek();
+
         if (nextRequestHandler == null)
             return null;
 
@@ -1116,7 +1118,7 @@ public class TransactionManager {
         return false;
     }
 
-    private void enqueueRequest(TxnRequestHandler requestHandler) {
+    void enqueueRequest(TxnRequestHandler requestHandler) {
         log.debug("Enqueuing transactional request {}", requestHandler.requestBuilder());
         pendingRequests.add(requestHandler);
     }
@@ -1313,6 +1315,8 @@ public class TransactionManager {
         abstract void handleResponse(AbstractResponse responseBody);
 
         abstract Priority priority();
+
+        abstract RequestType requestType();
     }
 
     private class InitProducerIdHandler extends TxnRequestHandler {
@@ -1333,6 +1337,11 @@ public class TransactionManager {
         @Override
         Priority priority() {
             return this.isEpochBump ? Priority.EPOCH_BUMP : Priority.INIT_PRODUCER_ID;
+        }
+
+        @Override
+        RequestType requestType() {
+            return RequestType.INIT_PRODUCER_ID;
         }
 
         @Override
@@ -1391,6 +1400,11 @@ public class TransactionManager {
         @Override
         Priority priority() {
             return Priority.ADD_PARTITIONS_OR_OFFSETS;
+        }
+
+        @Override
+        RequestType requestType() {
+            return RequestType.ADD_PARTITIONS;
         }
 
         @Override
@@ -1499,6 +1513,11 @@ public class TransactionManager {
         }
 
         @Override
+        RequestType requestType() {
+            return RequestType.FIND_COORDINATOR;
+        }
+
+        @Override
         FindCoordinatorRequest.CoordinatorType coordinatorType() {
             return null;
         }
@@ -1559,6 +1578,11 @@ public class TransactionManager {
         }
 
         @Override
+        RequestType requestType() {
+            return builder.data.committed() ? RequestType.COMMIT_TXN : RequestType.ABORT_TXN;
+        }
+
+        @Override
         boolean isEndTxn() {
             return true;
         }
@@ -1569,6 +1593,7 @@ public class TransactionManager {
             Errors error = endTxnResponse.error();
 
             if (error == Errors.NONE) {
+                System.out.println("Response for txn end get!");
                 completeTransaction();
                 result.done();
             } else if (error == Errors.COORDINATOR_NOT_AVAILABLE || error == Errors.NOT_COORDINATOR) {
@@ -1607,6 +1632,11 @@ public class TransactionManager {
         @Override
         AddOffsetsToTxnRequest.Builder requestBuilder() {
             return builder;
+        }
+
+        @Override
+        RequestType requestType() {
+            return RequestType.ADD_PARTITIONS;
         }
 
         @Override
@@ -1662,6 +1692,11 @@ public class TransactionManager {
         @Override
         Priority priority() {
             return Priority.ADD_PARTITIONS_OR_OFFSETS;
+        }
+
+        @Override
+        RequestType requestType() {
+            return RequestType.ADD_PARTITIONS;
         }
 
         @Override
