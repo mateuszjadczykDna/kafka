@@ -22,6 +22,7 @@ public class QuorumState {
     private final Set<Integer> voters;
     private EpochState state;
 
+
     public QuorumState(int localId,
                        Set<Integer> voters,
                        ElectionStore store,
@@ -56,6 +57,20 @@ public class QuorumState {
 
     public Set<Integer> remoteVoters() {
         return voters.stream().filter(voterId -> voterId != localId).collect(Collectors.toSet());
+    }
+
+    public void addVoter(Integer newVoterId) {
+        if (voters.contains(newVoterId)) {
+            log.debug("Voter is already added");
+        }
+        voters.add(newVoterId);
+    }
+
+    public void removeVoter(Integer voterId) {
+        if (!voters.contains(voterId)) {
+            log.debug("Voter is already added");
+        }
+        voters.remove(voterId);
     }
 
     public int epoch() {
