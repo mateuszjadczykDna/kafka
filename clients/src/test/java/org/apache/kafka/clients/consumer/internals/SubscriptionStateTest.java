@@ -504,7 +504,7 @@ public class SubscriptionStateTest {
         assertTrue(state.awaitingValidation(tp0));
 
         Optional<OffsetAndMetadata> divergentOffsetMetadataOpt = state.maybeCompleteValidation(tp0, initialPosition,
-                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5));
+                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5), true);
         assertEquals(Optional.empty(), divergentOffsetMetadataOpt);
         assertFalse(state.awaitingValidation(tp0));
         assertEquals(initialPosition, state.position(tp0));
@@ -531,7 +531,7 @@ public class SubscriptionStateTest {
         state.seekUnvalidated(tp0, updatePosition);
 
         Optional<OffsetAndMetadata> divergentOffsetMetadataOpt = state.maybeCompleteValidation(tp0, initialPosition,
-                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5));
+                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5), true);
         assertEquals(Optional.empty(), divergentOffsetMetadataOpt);
         assertTrue(state.awaitingValidation(tp0));
         assertEquals(updatePosition, state.position(tp0));
@@ -554,7 +554,7 @@ public class SubscriptionStateTest {
         state.requestOffsetReset(tp0);
 
         Optional<OffsetAndMetadata> divergentOffsetMetadataOpt = state.maybeCompleteValidation(tp0, initialPosition,
-                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5));
+                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5), true);
         assertEquals(Optional.empty(), divergentOffsetMetadataOpt);
         assertFalse(state.awaitingValidation(tp0));
         assertTrue(state.isOffsetResetNeeded(tp0));
@@ -577,7 +577,7 @@ public class SubscriptionStateTest {
         assertTrue(state.awaitingValidation(tp0));
 
         Optional<OffsetAndMetadata> divergentOffsetMetadata = state.maybeCompleteValidation(tp0, initialPosition,
-                new EpochEndOffset(divergentOffsetEpoch, divergentOffset));
+                new EpochEndOffset(divergentOffsetEpoch, divergentOffset), true);
         assertEquals(Optional.empty(), divergentOffsetMetadata);
         assertFalse(state.awaitingValidation(tp0));
 
@@ -604,7 +604,7 @@ public class SubscriptionStateTest {
         assertTrue(state.awaitingValidation(tp0));
 
         Optional<OffsetAndMetadata> divergentOffsetMetadata = state.maybeCompleteValidation(tp0, initialPosition,
-                new EpochEndOffset(divergentOffsetEpoch, divergentOffset));
+                new EpochEndOffset(divergentOffsetEpoch, divergentOffset), true);
         assertEquals(Optional.of(new OffsetAndMetadata(divergentOffset, Optional.of(divergentOffsetEpoch), "")),
                 divergentOffsetMetadata);
         assertTrue(state.awaitingValidation(tp0));

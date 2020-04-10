@@ -75,6 +75,7 @@ public class Metadata implements Closeable {
     private final ClusterResourceListeners clusterResourceListeners;
     private boolean isClosed;
     private final Map<TopicPartition, Integer> lastSeenLeaderEpochs;
+    private boolean hasReliableLeaderEpochs;
 
     /**
      * Create a new Metadata instance
@@ -103,6 +104,7 @@ public class Metadata implements Closeable {
         this.lastSeenLeaderEpochs = new HashMap<>();
         this.invalidTopics = Collections.emptySet();
         this.unauthorizedTopics = Collections.emptySet();
+        this.hasReliableLeaderEpochs = false;
     }
 
     /**
@@ -370,6 +372,7 @@ public class Metadata implements Closeable {
             MetadataResponse.PartitionMetadata partitionMetadata,
             boolean hasReliableLeaderEpoch) {
         TopicPartition tp = partitionMetadata.topicPartition;
+        this.hasReliableLeaderEpochs = hasReliableLeaderEpoch;
         if (hasReliableLeaderEpoch && partitionMetadata.leaderEpoch.isPresent()) {
             int newEpoch = partitionMetadata.leaderEpoch.get();
             // If the received leader epoch is at least the same as the previous one, update the metadata
@@ -496,6 +499,15 @@ public class Metadata implements Closeable {
      */
     public synchronized boolean isClosed() {
         return this.isClosed;
+    }
+
+    /**
+     * Check if this metadata instance has reliable leader epochs to decide whether to do offset validation.
+     *
+     * @return True if the latest leader epochs are reliable
+     */
+    public synchronized boolean hasReliableLeaderEpochs() {
+        return hasReliableLeaderEpochs;
     }
 
     public synchronized MetadataRequestAndVersion newMetadataRequestAndVersion(long nowMs) {

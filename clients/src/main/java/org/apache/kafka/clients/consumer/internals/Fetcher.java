@@ -796,6 +796,10 @@ public class Fetcher<K, V> implements Closeable {
 
             subscriptions.setNextAllowedRetry(fetchPostitions.keySet(), time.milliseconds() + requestTimeoutMs);
 
+            // We need to get the client epoch state before sending out the leader epoch request, and use it to
+            // decide whether we need to validate offsets in the response.
+            final boolean hasReliableLeaderEpochs = metadata.hasReliableLeaderEpochs();
+
             RequestFuture<OffsetsForLeaderEpochClient.OffsetForEpochResult> future =
                 offsetsForLeaderEpochClient.sendAsyncRequest(node, fetchPostitions);
             future.addListener(new RequestFutureListener<OffsetsForLeaderEpochClient.OffsetForEpochResult>() {
@@ -810,13 +814,26 @@ public class Fetcher<K, V> implements Closeable {
                     // For each OffsetsForLeader response, check if the end-offset is lower than our current offset
                     // for the partition. If so, it means we have experienced log truncation and need to reposition
                     // that partition's offset.
+                    //
+                    // In addition, check whether the returned offset and epoch are valid. If not, then we should treat
+                    // it as out of range and reset corresponding partition offset.
                     offsetsResult.endOffsets().forEach((respTopicPartition, respEndOffset) -> {
                         SubscriptionState.FetchPosition requestPosition = fetchPostitions.get(respTopicPartition);
                         Optional<OffsetAndMetadata> divergentOffsetOpt = subscriptions.maybeCompleteValidation(
-                                respTopicPartition, requestPosition, respEndOffset);
-                        divergentOffsetOpt.ifPresent(divergentOffset -> {
-                            truncationWithoutResetPolicy.put(respTopicPartition, divergentOffset);
-                        });
+                                respTopicPartition, requestPosition, respEndOffset, hasReliableLeaderEpochs);
+                        divergentOffsetOpt.ifPresent(
+                            divergentOffset -> truncationWithoutResetPolicy.put(respTopicPartition, divergentOffset));
+
+                        if (respEndOffset.hasUndefinedEpochOrOffset()) {
+                            if (subscriptions.hasDefaultOffsetResetPolicy()) {
+                                subscriptions.requestOffsetReset(respTopicPartition);
+                                // Should attempt to find the new leader in the next try.
+                                metadata.requestUpdate();
+                            } else {
+                                throw new OffsetOutOfRangeException(
+                                    Collections.singletonMap(respTopicPartition, respEndOffset.endOffset()));
+                            }
+                        }
                     });
 
                     if (!truncationWithoutResetPolicy.isEmpty()) {
