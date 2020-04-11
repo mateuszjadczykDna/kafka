@@ -141,7 +141,7 @@ public class MetadataTest {
     }
 
     @Test
-    public void testTimeToNextUpdate_RetryBackoff() {
+    public void testTimeToNextUpdateRetryBackoff() {
         long now = 10000;
 
         // lastRefreshMs updated to now.

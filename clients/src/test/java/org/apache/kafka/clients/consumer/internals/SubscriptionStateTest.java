@@ -547,14 +547,35 @@ public class SubscriptionStateTest {
         int initialOffsetEpoch = 5;
 
         SubscriptionState.FetchPosition initialPosition = new SubscriptionState.FetchPosition(initialOffset,
-                Optional.of(initialOffsetEpoch), new Metadata.LeaderAndEpoch(Optional.of(broker1), Optional.of(currentEpoch)));
+            Optional.of(initialOffsetEpoch), new Metadata.LeaderAndEpoch(Optional.of(broker1), Optional.of(currentEpoch)));
+        state.seekUnvalidated(tp0, initialPosition);
+        assertTrue(state.awaitingValidation(tp0));
+
+        Optional<OffsetAndMetadata> divergentOffsetMetadataOpt = state.maybeCompleteValidation(tp0, initialPosition,
+            new EpochEndOffset(initialOffsetEpoch, initialOffset + 5), false);
+        assertEquals(Optional.empty(), divergentOffsetMetadataOpt);
+        assertTrue(state.awaitingValidation(tp0));
+        assertEquals(initialPosition, state.position(tp0));
+    }
+
+    @Test
+    public void testMaybeCompleteValidationWithUnreliableLeaderEpoch() {
+        Node broker1 = new Node(1, "localhost", 9092);
+        state.assignFromUser(Collections.singleton(tp0));
+
+        int currentEpoch = 10;
+        long initialOffset = 10L;
+        int initialOffsetEpoch = 5;
+
+        SubscriptionState.FetchPosition initialPosition = new SubscriptionState.FetchPosition(initialOffset,
+            Optional.of(initialOffsetEpoch), new Metadata.LeaderAndEpoch(Optional.of(broker1), Optional.of(currentEpoch)));
         state.seekUnvalidated(tp0, initialPosition);
         assertTrue(state.awaitingValidation(tp0));
 
         state.requestOffsetReset(tp0);
 
         Optional<OffsetAndMetadata> divergentOffsetMetadataOpt = state.maybeCompleteValidation(tp0, initialPosition,
-                new EpochEndOffset(initialOffsetEpoch, initialOffset + 5), true);
+            new EpochEndOffset(initialOffsetEpoch, initialOffset + 5), false);
         assertEquals(Optional.empty(), divergentOffsetMetadataOpt);
         assertFalse(state.awaitingValidation(tp0));
         assertTrue(state.isOffsetResetNeeded(tp0));

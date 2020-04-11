@@ -441,6 +441,7 @@ public class SubscriptionState {
             log.debug("Skipping completed validation for partition {} which is no longer expecting validation.", tp);
         } else if (!hasReliableLeaderEpochs) {
             log.debug("Skipping completed validation for partition {} as the leader epoch is not reliable.", tp);
+            state.completeValidation();
         } else {
             SubscriptionState.FetchPosition currentPosition = state.position;
             if (!currentPosition.equals(requestPosition)) {
@@ -786,9 +787,7 @@ public class SubscriptionState {
          */
         private void completeValidation() {
             if (hasPosition()) {
-                transitionState(FetchStates.FETCHING, () -> {
-                    this.nextRetryTimeMs = null;
-                });
+                transitionState(FetchStates.FETCHING, () -> this.nextRetryTimeMs = null);
             }
         }
 
@@ -980,7 +979,7 @@ public class SubscriptionState {
      * This includes the offset and epoch from the last record in
      * the batch from a FetchResponse. It also includes the leader epoch at the time the batch was consumed.
      *
-     * The last fetch epoch is used to
+     * The last fetch epoch is used to indicate whether we still need offset validation.
      */
     public static class FetchPosition {
         public final long offset;

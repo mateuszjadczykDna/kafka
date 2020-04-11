@@ -3592,12 +3592,9 @@ public class FetcherTest {
             ));
 
             OffsetsForLeaderEpochResponse response = new OffsetsForLeaderEpochResponse(endOffsets);
-            client.prepareResponseFrom(new MockClient.RequestMatcher() {
-                @Override
-                public boolean matches(AbstractRequest body) {
-                    OffsetsForLeaderEpochRequest request = (OffsetsForLeaderEpochRequest) body;
-                    return expectedPartitions.equals(request.epochsByTopicPartition().keySet());
-                }
+            client.prepareResponseFrom(body -> {
+                OffsetsForLeaderEpochRequest request = (OffsetsForLeaderEpochRequest) body;
+                return expectedPartitions.equals(request.epochsByTopicPartition().keySet());
             }, response, node);
         }
 
@@ -3687,6 +3684,54 @@ public class FetcherTest {
 
         // Offset validation is skipped
         assertFalse(subscriptions.awaitingValidation(tp0));
+    }
+
+
+
+    @Test
+    public void testOffsetValidationSkippedForOldMetadataRequest() {
+        // Old metadata request could not supply reliable leader epoch, which will skip the validation then.
+        buildFetcher();
+        assignFromUser(singleton(tp0));
+
+        Map<String, Integer> partitionCounts = new HashMap<>();
+        partitionCounts.put(tp0.topic(), 4);
+
+        final int epochOne = 1;
+
+        metadata.updateWithCurrentRequestVersion(TestUtils.metadataUpdateWith("dummy", 1,
+            Collections.emptyMap(), partitionCounts, tp -> epochOne), false, 0L);
+
+        Node node = metadata.fetch().nodes().get(0);
+        apiVersions.update(node.idString(), NodeApiVersions.create(
+            ApiKeys.METADATA.id, (short) 0, (short) 8));
+
+        assertFalse(client.isConnected(node.idString()));
+
+        // Seek with a position and leader+epoch
+        Metadata.LeaderAndEpoch leaderAndEpoch = new Metadata.LeaderAndEpoch(
+            metadata.currentLeader(tp0).leader, Optional.of(epochOne));
+        subscriptions.seekUnvalidated(tp0, new SubscriptionState.FetchPosition(20L, Optional.of(epochOne), leaderAndEpoch));
+        assertFalse(client.isConnected(node.idString()));
+        assertTrue(subscriptions.awaitingValidation(tp0));
+
+        // No version information is initially available, but the node is now connected
+        fetcher.validateOffsetsIfNeeded();
+        assertTrue(subscriptions.awaitingValidation(tp0));
+        assertTrue(client.isConnected(node.idString()));
+        apiVersions.update(node.idString(), NodeApiVersions.create());
+
+        // On the next call, the OffsetForLeaderEpoch request is sent and validation completes
+        Map<TopicPartition, EpochEndOffset> endOffsetMap = new HashMap<>();
+        endOffsetMap.put(tp0, new EpochEndOffset(Errors.NONE, epochOne, 30L));
+        OffsetsForLeaderEpochResponse resp = new OffsetsForLeaderEpochResponse(endOffsetMap);
+        client.prepareResponseFrom(resp, node);
+
+        fetcher.validateOffsetsIfNeeded();
+        consumerClient.pollNoWakeup();
+
+        assertFalse(subscriptions.awaitingValidation(tp0));
+        assertEquals(20L, subscriptions.position(tp0).offset);
     }
 
     @Test
