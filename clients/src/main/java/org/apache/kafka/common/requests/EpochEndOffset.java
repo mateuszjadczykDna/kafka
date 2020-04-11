@@ -40,9 +40,7 @@ public class EpochEndOffset {
     }
 
     public EpochEndOffset(int leaderEpoch, long endOffset) {
-        this.error = Errors.NONE;
-        this.leaderEpoch = leaderEpoch;
-        this.endOffset = endOffset;
+        this(Errors.NONE, leaderEpoch, endOffset);
     }
 
     public Errors error() {
