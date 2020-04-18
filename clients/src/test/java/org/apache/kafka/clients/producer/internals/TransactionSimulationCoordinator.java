@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Random;
 
 /**
  * A reduced functionality of a combination of transaction coordinator and group coordinator.
@@ -47,13 +46,21 @@ class TransactionSimulationCoordinator {
 
     private final Map<String, ProducerIdAndEpoch> producerMap;
     private final Map<TopicPartition, List<Record>> pendingPartitionData;
+    private final Map<TopicPartition, Long> pendingOffsets;
+
     private long nextProducerId = 0L;
 
     public Map<TopicPartition, List<Record>> persistentPartitionData() {
         return persistentPartitionData;
     }
 
+    public Map<TopicPartition, Long> committedOffsets() {
+        return committedOffsets;
+    }
+
     private final Map<TopicPartition, List<Record>> persistentPartitionData;
+    private final Map<TopicPartition, Long> committedOffsets;
+
     private final MockClient networkClient;
     private final int throttleTimeMs = 10;
 
@@ -62,7 +69,9 @@ class TransactionSimulationCoordinator {
         producerMap = new HashMap<>();
         this.networkClient = networkClient;
         this.pendingPartitionData = new HashMap<>();
+        this.pendingOffsets = new HashMap<>();
         this.persistentPartitionData = new HashMap<>();
+        this.committedOffsets = new HashMap<>();
     }
 
     void runOnce() {
@@ -142,6 +151,7 @@ class TransactionSimulationCoordinator {
         Map<TopicPartition, Errors> errors = new HashMap<>();
         request.data.topics().forEach(topic -> topic.partitions().forEach(partition -> {
             errors.put(new TopicPartition(topic.name(), partition.partitionIndex()), Errors.NONE);
+            pendingOffsets.put(new TopicPartition(topic.name(), partition.partitionIndex()), partition.committedOffset());
         }));
         TxnOffsetCommitResponse response = new TxnOffsetCommitResponse(
             throttleTimeMs,
@@ -181,8 +191,11 @@ class TransactionSimulationCoordinator {
 
                 persistentPartitionData.put(entry.getKey(), materializedRecords);
             }
+
+            committedOffsets.putAll(pendingOffsets);
         }
         pendingPartitionData.clear();
+        pendingOffsets.clear();
 
         EndTxnResponse response = new EndTxnResponse(
             new EndTxnResponseData()

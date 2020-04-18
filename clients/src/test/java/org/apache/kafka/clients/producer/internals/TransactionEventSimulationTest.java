@@ -2,6 +2,8 @@ package org.apache.kafka.clients.producer.internals;
 
 import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.MockClient;
+import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.internals.TransactionManager.RequestType;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -28,6 +30,7 @@ import java.util.Random;
 import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * This test tries to test out the EOS robustness on the client side. It features a {@link TransactionSimulationCoordinator}
@@ -84,7 +87,6 @@ public class TransactionEventSimulationTest {
 
     @Test
     public void simulateTxnEvents() throws InterruptedException {
-        TopicPartition topicPartition = new TopicPartition("topic", 0);
         Random random = new Random(10);
         Node brokerNode = new Node(0, "localhost", 2211);
 
@@ -108,14 +110,18 @@ public class TransactionEventSimulationTest {
         for (int i = 0; i < numTransactions; i++) {
             transactionManager.beginTransaction();
             transactionManager.maybeAddPartitionToTransaction(key);
-            accumulator.append(topicPartition, 0L, new byte[1], new byte[1], Record.EMPTY_HEADERS, null, 0, false, time.milliseconds());
+            accumulator.append(key, 0L, new byte[1], new byte[1], Record.EMPTY_HEADERS, null, 0, false, time.milliseconds());
+            transactionManager.sendOffsetsToTransaction(Collections.singletonMap(key, new OffsetAndMetadata(numTransactions)), new ConsumerGroupMetadata("group"));
             transactionManager.beginCommit();
             System.out.println("Run " + i + " times");
 
             resolvePendingRequests();
         }
-//        transactionCoordinator.runOnce();
+
+        assertTrue(transactionCoordinator.persistentPartitionData().containsKey(key));
         assertEquals(numTransactions, transactionCoordinator.persistentPartitionData().get(key).size());
+        assertTrue(transactionCoordinator.committedOffsets().containsKey(key));
+        assertEquals((long) numTransactions, (long) transactionCoordinator.committedOffsets().get(key));
     }
 
     private void resolvePendingRequests() {
