@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
 
 /**
  * A reduced functionality of a combination of transaction coordinator and group coordinator.
@@ -49,6 +50,7 @@ class TransactionSimulationCoordinator {
     private boolean offsetsAddedToTxn = false;
 
     private long nextProducerId = 0L;
+    private Random seed = new Random();
 
     public Map<TopicPartition, List<Record>> persistentPartitionData() {
         return persistentPartitionData;
@@ -74,11 +76,13 @@ class TransactionSimulationCoordinator {
 
     void runOnce() {
         Queue<ClientRequest> incomingRequests = networkClient.requests();
+        final boolean faultInject = seed.nextBoolean();
+
         if (!incomingRequests.isEmpty()) {
             final AbstractResponse response;
             AbstractRequest nextRequest = incomingRequests.peek().requestBuilder().build();
             if (nextRequest instanceof FindCoordinatorRequest) {
-                response = handleFindCoordinator((FindCoordinatorRequest) nextRequest, false);
+                response = handleFindCoordinator((FindCoordinatorRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof InitProducerIdRequest) {
                 response = handleInitProducerId((InitProducerIdRequest) nextRequest);
             } else if (nextRequest instanceof AddPartitionsToTxnRequest) {
