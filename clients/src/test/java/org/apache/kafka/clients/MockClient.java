@@ -637,6 +637,7 @@ public class MockClient implements KafkaClient {
             MetadataRequest.Builder builder = metadata.newMetadataRequestBuilder();
             maybeCheckExpectedTopics(update, builder);
             metadata.updateWithCurrentRequestVersion(update.updateResponse, false, time.milliseconds());
+            System.out.println("Updated metadata");
             this.lastUpdate = update;
         }
 

@@ -49,7 +49,8 @@ class TransactionSimulationCoordinator {
     private final Map<TopicPartition, Long> pendingOffsets;
     private boolean offsetsAddedToTxn = false;
 
-    private long nextProducerId = 0L;
+    private long currentProducerId = 0L;
+    private short currentEpoch = 0;
     private Random seed = new Random();
 
     public Map<TopicPartition, List<Record>> persistentPartitionData() {
@@ -84,17 +85,17 @@ class TransactionSimulationCoordinator {
             if (nextRequest instanceof FindCoordinatorRequest) {
                 response = handleFindCoordinator((FindCoordinatorRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof InitProducerIdRequest) {
-                response = handleInitProducerId((InitProducerIdRequest) nextRequest);
+                response = handleInitProducerId((InitProducerIdRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof AddPartitionsToTxnRequest) {
-                response = handleAddPartitionToTxn((AddPartitionsToTxnRequest) nextRequest);
+                response = handleAddPartitionToTxn((AddPartitionsToTxnRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof AddOffsetsToTxnRequest) {
-                response = handleAddOffsetsToTxn((AddOffsetsToTxnRequest) nextRequest);
+                response = handleAddOffsetsToTxn((AddOffsetsToTxnRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof TxnOffsetCommitRequest) {
-                response = handleTxnCommit((TxnOffsetCommitRequest) nextRequest);
+                response = handleTxnCommit((TxnOffsetCommitRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof ProduceRequest) {
-                response = handleProduce((ProduceRequest) nextRequest);
+                response = handleProduce((ProduceRequest) nextRequest, faultInject);
             } else if (nextRequest instanceof EndTxnRequest) {
-                response = handleEndTxn((EndTxnRequest) nextRequest);
+                response = handleEndTxn((EndTxnRequest) nextRequest, faultInject);
             } else {
                 throw new IllegalArgumentException("Unknown request: " + nextRequest);
             }
@@ -119,21 +120,30 @@ class TransactionSimulationCoordinator {
         }
     }
 
-    private InitProducerIdResponse handleInitProducerId(InitProducerIdRequest request) {
-        InitProducerIdResponse response = new InitProducerIdResponse(
-            new InitProducerIdResponseData()
-                .setProducerId(nextProducerId)
-                .setProducerEpoch((short) (request.data.producerEpoch() + 1))
-                .setErrorCode(Errors.NONE.code())
-        );
-        nextProducerId += 1;
-        return response;
+    private InitProducerIdResponse handleInitProducerId(InitProducerIdRequest request,
+                                                        final boolean faultInject) {
+        if (faultInject) {
+            return new InitProducerIdResponse(
+                new InitProducerIdResponseData()
+                .setErrorCode(Errors.NOT_COORDINATOR.code())
+            );
+        } else {
+            currentProducerId += 1;
+            currentEpoch += 1;
+            return new InitProducerIdResponse(
+                new InitProducerIdResponseData()
+                    .setProducerId(currentProducerId)
+                    .setProducerEpoch(currentEpoch)
+                    .setErrorCode(Errors.NONE.code())
+            );
+        }
     }
 
-    private AddPartitionsToTxnResponse handleAddPartitionToTxn(AddPartitionsToTxnRequest request) {
+    private AddPartitionsToTxnResponse handleAddPartitionToTxn(AddPartitionsToTxnRequest request,
+                                                               final boolean faultInject) {
         Map<TopicPartition, Errors> errors = new HashMap<>();
         request.partitions().forEach(topicPartition ->
-            errors.put(topicPartition, Errors.NONE)
+            errors.put(topicPartition, faultInject ? Errors.COORDINATOR_NOT_AVAILABLE : Errors.NONE)
         );
         return new AddPartitionsToTxnResponse(
             throttleTimeMs,
@@ -141,56 +151,92 @@ class TransactionSimulationCoordinator {
         );
     }
 
-    private AddOffsetsToTxnResponse handleAddOffsetsToTxn(AddOffsetsToTxnRequest request) {
-        offsetsAddedToTxn = true;
-        return new AddOffsetsToTxnResponse(
-           new AddOffsetsToTxnResponseData()
-            .setErrorCode(Errors.NONE.code())
-            .setThrottleTimeMs(throttleTimeMs)
-        );
+    private AddOffsetsToTxnResponse handleAddOffsetsToTxn(AddOffsetsToTxnRequest request,
+                                                          final boolean faultInject) {
+        if (faultInject) {
+            return new AddOffsetsToTxnResponse(
+                new AddOffsetsToTxnResponseData()
+                    .setErrorCode(Errors.COORDINATOR_LOAD_IN_PROGRESS.code())
+                    .setThrottleTimeMs(throttleTimeMs)
+            );
+        } else if (request.data.producerId() != currentProducerId) {
+            return new AddOffsetsToTxnResponse(
+                new AddOffsetsToTxnResponseData()
+                    .setErrorCode(Errors.UNKNOWN_PRODUCER_ID.code())
+                    .setThrottleTimeMs(throttleTimeMs)
+            );
+        } else if (request.data.producerEpoch() != currentEpoch) {
+            return new AddOffsetsToTxnResponse(
+                new AddOffsetsToTxnResponseData()
+                    .setErrorCode(Errors.INVALID_PRODUCER_EPOCH.code())
+                    .setThrottleTimeMs(throttleTimeMs)
+            );
+        } else {
+            offsetsAddedToTxn = true;
+            return new AddOffsetsToTxnResponse(
+                new AddOffsetsToTxnResponseData()
+                    .setErrorCode(Errors.NONE.code())
+                    .setThrottleTimeMs(throttleTimeMs)
+            );
+        }
     }
 
-    private AbstractResponse handleTxnCommit(TxnOffsetCommitRequest request) {
+    private AbstractResponse handleTxnCommit(TxnOffsetCommitRequest request,
+                                             final boolean faultInject) {
         Map<TopicPartition, Errors> errors = new HashMap<>();
         request.data.topics().forEach(topic -> topic.partitions().forEach(partition -> {
             TopicPartition key = new TopicPartition(topic.name(), partition.partitionIndex());
-            if (offsetsAddedToTxn) {
+            if (faultInject) {
+                errors.put(key, Errors.COORDINATOR_LOAD_IN_PROGRESS);
+            } else if (offsetsAddedToTxn) {
                 pendingOffsets.put(key, partition.committedOffset());
                 errors.put(key, Errors.NONE);
             } else {
                 errors.put(key, Errors.UNKNOWN_TOPIC_OR_PARTITION);
             }
         }));
+
         return new TxnOffsetCommitResponse(
             throttleTimeMs,
             errors
         );
     }
 
-    private AbstractResponse handleProduce(ProduceRequest request) {
+    private AbstractResponse handleProduce(ProduceRequest request,
+                                           final boolean faultInject) {
+        Map<TopicPartition, PartitionResponse> errors = new HashMap<>();
         Map<TopicPartition, MemoryRecords> records = request.partitionRecordsOrFail();
 
-        for (Map.Entry<TopicPartition, MemoryRecords> entry : records.entrySet()) {
-            List<Record> sentRecords = pendingPartitionData.getOrDefault(entry.getKey(), new ArrayList<>());
-            for (Record record : entry.getValue().records()) {
-                sentRecords.add(record);
+        if (faultInject) {
+            records.forEach((topicPartition, record) -> errors.put(topicPartition, new PartitionResponse(Errors.UNKNOWN_PRODUCER_ID)));
+        } else {
+            for (Map.Entry<TopicPartition, MemoryRecords> entry : records.entrySet()) {
+                List<Record> sentRecords = pendingPartitionData.getOrDefault(entry.getKey(), new ArrayList<>());
+                for (Record record : entry.getValue().records()) {
+                    sentRecords.add(record);
+                }
+                pendingPartitionData.put(entry.getKey(), sentRecords);
+                errors.put(entry.getKey(), new PartitionResponse(Errors.NONE));
             }
-            pendingPartitionData.put(entry.getKey(), sentRecords);
         }
-
-        Map<TopicPartition, PartitionResponse> errors = new HashMap<>();
-        records.forEach((topicPartition, record) -> errors.put(topicPartition, new PartitionResponse(Errors.NONE)));
         return new ProduceResponse(errors, throttleTimeMs);
     }
 
-    private AbstractResponse handleEndTxn(EndTxnRequest request) {
+    private AbstractResponse handleEndTxn(EndTxnRequest request, final boolean faultInject) {
+        if (faultInject) {
+            return new EndTxnResponse(
+                new EndTxnResponseData()
+                .setErrorCode(Errors.NOT_COORDINATOR.code())
+                .setThrottleTimeMs(throttleTimeMs)
+            );
+        }
+
         if (request.result().equals(TransactionResult.COMMIT)) {
             for (Map.Entry<TopicPartition, List<Record>> entry : pendingPartitionData.entrySet()) {
                 List<Record> materializedRecords = persistentPartitionData.getOrDefault(entry.getKey(), new ArrayList<>());
                 materializedRecords.addAll(entry.getValue());
                 persistentPartitionData.put(entry.getKey(), materializedRecords);
             }
-
             committedOffsets.putAll(pendingOffsets);
         }
         pendingPartitionData.clear();

@@ -12,13 +12,16 @@ import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.requests.FindCoordinatorRequest;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
+import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -28,7 +31,13 @@ import static org.junit.Assert.assertTrue;
  * which handles the incoming transactional produce/metadata requests and gives feedback through an underlying client.
  *
  * Each iteration the transaction manager will append one record through accumulator and commit offset at the same time.
+ *
+ * Features supported:
+ * 1. Fault injection on response
+ * 2. Random order response
+ * 3. Get multiple runOnces interleaving
  */
+@Category({IntegrationTest.class})
 public class TransactionEventSimulationTest {
 
     private Logger log = LoggerFactory.getLogger(TransactionEventSimulationTest.class);
@@ -61,8 +70,10 @@ public class TransactionEventSimulationTest {
         metadata.add("topic", time.milliseconds());
         metadata.update(metadata.newMetadataRequestAndVersion(time.milliseconds()).requestVersion,
             TestUtils.metadataUpdateWith(1, Collections.singletonMap("topic", 2)), true, time.milliseconds());
+//        client.updateMetadata(TestUtils.metadataUpdateWith(1, Collections.singletonMap("topic", 2)));
+
         sender = new Sender(logContext, client, metadata, accumulator, false, 100, (short) 1,
-            1, new SenderMetricsRegistry(new Metrics()), time, 100, 10, transactionManager, new ApiVersions());
+            Integer.MAX_VALUE, new SenderMetricsRegistry(new Metrics()), time, 100, 10, transactionManager, new ApiVersions());
 
         transactionManager.initializeTransactions();
         sender.runOnce();
@@ -70,22 +81,29 @@ public class TransactionEventSimulationTest {
         final int numTransactions = 100;
 
         TopicPartition key = new TopicPartition("topic", 0);
+        long committedOffsets = 0L;
+        Random seed = new Random();
 
         for (int i = 0; i < numTransactions; i++) {
             transactionManager.beginTransaction();
             transactionManager.maybeAddPartitionToTransaction(key);
             accumulator.append(key, 0L, new byte[1], new byte[1], Record.EMPTY_HEADERS, null, 0, false, time.milliseconds());
-            transactionManager.sendOffsetsToTransaction(Collections.singletonMap(key, new OffsetAndMetadata(numTransactions)), new ConsumerGroupMetadata("group"));
-            transactionManager.beginCommit();
-            System.out.println("Run " + i + " times");
+            transactionManager.sendOffsetsToTransaction(Collections.singletonMap(key, new OffsetAndMetadata(committedOffsets)), new ConsumerGroupMetadata("group"));
+            if (seed.nextBoolean()) {
+                transactionManager.beginCommit();
+                committedOffsets += 1;
+            } else {
+                transactionManager.beginAbort();
+            }
 
+            System.out.println("Iteration " + i);
             resolvePendingRequests();
         }
 
         assertTrue(transactionCoordinator.persistentPartitionData().containsKey(key));
-        assertEquals(numTransactions, transactionCoordinator.persistentPartitionData().get(key).size());
+        assertEquals(committedOffsets, transactionCoordinator.persistentPartitionData().get(key).size());
         assertTrue(transactionCoordinator.committedOffsets().containsKey(key));
-        assertEquals((long) numTransactions, (long) transactionCoordinator.committedOffsets().get(key));
+        assertEquals(committedOffsets - 1, (long) transactionCoordinator.committedOffsets().get(key));
     }
 
     private void resolvePendingRequests() {

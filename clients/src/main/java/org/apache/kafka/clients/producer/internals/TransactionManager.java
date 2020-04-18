@@ -714,6 +714,7 @@ public class TransactionManager {
     }
 
     synchronized void handleFailedBatch(ProducerBatch batch, RuntimeException exception, boolean adjustSequenceNumbers) {
+        System.out.println("Handle failed batch");
         maybeTransitionToErrorState(exception);
         removeInFlightBatch(batch);
 
@@ -870,19 +871,25 @@ public class TransactionManager {
 
         TxnRequestHandler nextRequestHandler = pendingRequests.peek();
 
-        if (nextRequestHandler == null)
+        if (nextRequestHandler == null) {
+            System.out.println("next is null " + hasIncompleteBatches);
             return null;
+        }
 
         // Do not send the EndTxn until all batches have been flushed
-        if (nextRequestHandler.isEndTxn() && hasIncompleteBatches)
+        if (nextRequestHandler.isEndTxn() && hasIncompleteBatches) {
+            System.out.println("Incomplete batch blocks " + hasIncompleteBatches);
             return null;
+        }
 
         pendingRequests.poll();
         if (maybeTerminateRequestWithError(nextRequestHandler)) {
             log.trace("Not sending transactional request {} because we are in an error state",
                     nextRequestHandler.requestBuilder());
+            System.out.println("Need to terminate");
             return null;
         }
+        System.out.println("Pass sending transactional request");
 
         if (nextRequestHandler.isEndTxn() && !transactionStarted) {
             nextRequestHandler.result.done();

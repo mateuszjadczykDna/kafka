@@ -356,7 +356,6 @@ public class Sender implements Runnable {
 
         // create produce requests
         Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes, this.maxRequestSize, now);
-        System.out.println("batches to be sent " + batches);
         addToInflightBatches(batches);
         if (guaranteeMessageOrder) {
             // Mute all the partitions drained
@@ -436,8 +435,11 @@ public class Sender implements Runnable {
         }
 
         TransactionManager.TxnRequestHandler nextRequestHandler = transactionManager.nextRequest(accumulator.hasIncomplete());
-        if (nextRequestHandler == null)
+        if (nextRequestHandler == null) {
+            System.out.println("Next request is null");
             return false;
+        }
+
 
         AbstractRequest.Builder<?> requestBuilder = nextRequestHandler.requestBuilder();
         Node targetNode = null;
@@ -531,7 +533,6 @@ public class Sender implements Runnable {
      * Handle a produce response
      */
     private void handleProduceResponse(ClientResponse response, Map<TopicPartition, ProducerBatch> batches, long now) {
-        System.out.println("Handle produce response");
         RequestHeader requestHeader = response.requestHeader();
         int correlationId = requestHeader.correlationId();
         if (response.wasDisconnected()) {
@@ -545,6 +546,7 @@ public class Sender implements Runnable {
             for (ProducerBatch batch : batches.values())
                 completeBatch(batch, new ProduceResponse.PartitionResponse(Errors.UNSUPPORTED_VERSION), correlationId, now);
         } else {
+            System.out.println("Received Produce Response");
             log.trace("Received produce response from node {} with correlation id {}", response.destination(), correlationId);
             // if we have a response, parse it
             if (response.hasResponse()) {
@@ -599,6 +601,7 @@ public class Sender implements Runnable {
                     batch.topicPartition,
                     this.retries - batch.attempts() - 1,
                     error);
+                System.out.println("Can retry reached");
                 reenqueueBatch(batch, now);
             } else if (error == Errors.DUPLICATE_SEQUENCE_NUMBER) {
                 // If we have received a duplicate sequence error, it means that the sequence number has advanced beyond
@@ -685,6 +688,9 @@ public class Sender implements Runnable {
      * future batches are certain to fail with an OutOfOrderSequence exception.
      */
     private boolean canRetry(ProducerBatch batch, ProduceResponse.PartitionResponse response, long now) {
+        System.out.println("Txn manager can retry " + transactionManager.canRetry(response, batch));
+        System.out.println("Batch is not done " + !batch.isDone());
+        System.out.println("Attempts less than retries " + (batch.attempts() < this.retries));
         return !batch.hasReachedDeliveryTimeout(accumulator.getDeliveryTimeoutMs(), now) &&
             batch.attempts() < this.retries &&
             !batch.isDone() &&
