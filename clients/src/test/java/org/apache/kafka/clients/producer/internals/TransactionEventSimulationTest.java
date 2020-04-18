@@ -4,7 +4,6 @@ import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.MockClient;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.producer.internals.TransactionManager.RequestType;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
@@ -20,36 +19,25 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
 
-import static org.apache.kafka.common.utils.Utils.mkEntry;
-import static org.apache.kafka.common.utils.Utils.mkMap;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
  * This test tries to test out the EOS robustness on the client side. It features a {@link TransactionSimulationCoordinator}
  * which handles the incoming transactional produce/metadata requests and gives feedback through an underlying client.
+ *
+ * Each iteration the transaction manager will append one record through accumulator and commit offset at the same time.
  */
 public class TransactionEventSimulationTest {
 
     private Logger log = LoggerFactory.getLogger(TransactionEventSimulationTest.class);
 
-    private final int numPartitions = 3;
     private TransactionManager transactionManager;
     private TransactionSimulationCoordinator transactionCoordinator;
     private Sender sender;
-    private Map<Integer, Long> offsets;
     private final LogContext logContext = new LogContext();
-
-    // What is the expected state guarantee
-    // producer id, epoch, partitions in txn, partition data offset
-    Map<RequestType, List<RequestType>> artificialTransitions;
 
     private final MockTime time = new MockTime();
 
@@ -59,37 +47,14 @@ public class TransactionEventSimulationTest {
 
     @Before
     public void setup() {
-        // The external transition is made only when there is no more enqueued request to be processed.
-        artificialTransitions = mkMap(
-            mkEntry(RequestType.FIND_COORDINATOR,
-                Arrays.asList(RequestType.FIND_COORDINATOR, RequestType.INIT_PRODUCER_ID)),
-            mkEntry(RequestType.INIT_PRODUCER_ID,
-                Arrays.asList(RequestType.ADD_PARTITIONS, RequestType.FIND_COORDINATOR)),
-            mkEntry(RequestType.ADD_PARTITIONS,
-                Arrays.asList(RequestType.ADD_PARTITIONS, RequestType.COMMIT_TXN, RequestType.ABORT_TXN)),
-            mkEntry(RequestType.COMMIT_TXN,
-                Arrays.asList(RequestType.ADD_PARTITIONS, RequestType.INIT_PRODUCER_ID)),
-            mkEntry(RequestType.ABORT_TXN,
-                Arrays.asList(RequestType.ADD_PARTITIONS, RequestType.INIT_PRODUCER_ID))
-        );
-
-        offsets = new HashMap<>();
-        for (int i = 0; i < numPartitions; i++) {
-            offsets.put(i, 0L);
-        }
-
         transactionManager = new TransactionManager(logContext, "txn-id",
-            100, 0L, new ApiVersions());
+            100, 0L, new ApiVersions(), false);
 
         transactionCoordinator = new TransactionSimulationCoordinator(client);
-
     }
 
     @Test
     public void simulateTxnEvents() throws InterruptedException {
-        Random random = new Random(10);
-        Node brokerNode = new Node(0, "localhost", 2211);
-
         RecordAccumulator accumulator = new RecordAccumulator(logContext, 100, CompressionType.GZIP,
             0, 0L, 10, new Metrics(), "accumulator", time, new ApiVersions(), transactionManager,
             new BufferPool(1000, 100, new Metrics(), time, "producer-internal-metrics"));
@@ -127,7 +92,6 @@ public class TransactionEventSimulationTest {
     private void resolvePendingRequests() {
         while (!client.requests().isEmpty() || transactionManager.coordinator(FindCoordinatorRequest.CoordinatorType.TRANSACTION) == null || !transactionManager.isReady()) {
             transactionCoordinator.runOnce();
-            System.out.println("Sender run once");
             sender.runOnce();
         }
     }

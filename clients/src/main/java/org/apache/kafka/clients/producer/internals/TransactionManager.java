@@ -1315,8 +1315,6 @@ public class TransactionManager {
         abstract void handleResponse(AbstractResponse responseBody);
 
         abstract Priority priority();
-
-        abstract RequestType requestType();
     }
 
     private class InitProducerIdHandler extends TxnRequestHandler {
@@ -1337,11 +1335,6 @@ public class TransactionManager {
         @Override
         Priority priority() {
             return this.isEpochBump ? Priority.EPOCH_BUMP : Priority.INIT_PRODUCER_ID;
-        }
-
-        @Override
-        RequestType requestType() {
-            return RequestType.INIT_PRODUCER_ID;
         }
 
         @Override
@@ -1400,11 +1393,6 @@ public class TransactionManager {
         @Override
         Priority priority() {
             return Priority.ADD_PARTITIONS_OR_OFFSETS;
-        }
-
-        @Override
-        RequestType requestType() {
-            return RequestType.ADD_PARTITIONS;
         }
 
         @Override
@@ -1513,11 +1501,6 @@ public class TransactionManager {
         }
 
         @Override
-        RequestType requestType() {
-            return RequestType.FIND_COORDINATOR;
-        }
-
-        @Override
         FindCoordinatorRequest.CoordinatorType coordinatorType() {
             return null;
         }
@@ -1578,11 +1561,6 @@ public class TransactionManager {
         }
 
         @Override
-        RequestType requestType() {
-            return builder.data.committed() ? RequestType.COMMIT_TXN : RequestType.ABORT_TXN;
-        }
-
-        @Override
         boolean isEndTxn() {
             return true;
         }
@@ -1632,11 +1610,6 @@ public class TransactionManager {
         @Override
         AddOffsetsToTxnRequest.Builder requestBuilder() {
             return builder;
-        }
-
-        @Override
-        RequestType requestType() {
-            return RequestType.ADD_PARTITIONS;
         }
 
         @Override
@@ -1692,11 +1665,6 @@ public class TransactionManager {
         @Override
         Priority priority() {
             return Priority.ADD_PARTITIONS_OR_OFFSETS;
-        }
-
-        @Override
-        RequestType requestType() {
-            return RequestType.ADD_PARTITIONS;
         }
 
         @Override
