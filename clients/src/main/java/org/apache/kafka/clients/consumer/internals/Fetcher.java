@@ -797,8 +797,13 @@ public class Fetcher<K, V> implements Closeable {
             subscriptions.setNextAllowedRetry(fetchPositions.keySet(), time.milliseconds() + requestTimeoutMs);
 
             // We need to get the client epoch state before sending out the leader epoch request, and use it to
-            // decide whether we need to validate offsets in the response.
-            final boolean hasReliableLeaderEpochs = metadata.hasReliableLeaderEpochs();
+            // decide whether we need to validate offsets.
+            if (!metadata.hasReliableLeaderEpochs()) {
+                for (TopicPartition topicPartition : fetchPositions.keySet()) {
+                  subscriptions.completeValidation(topicPartition);
+                }
+                return;
+            }
 
             RequestFuture<OffsetsForLeaderEpochClient.OffsetForEpochResult> future =
                 offsetsForLeaderEpochClient.sendAsyncRequest(node, fetchPositions);
@@ -817,19 +822,19 @@ public class Fetcher<K, V> implements Closeable {
                     // that partition's offset.
                     //
                     // In addition, check whether the returned offset and epoch are valid. If not, then we should treat
-                    // it as out of range and reset corresponding partition offset.
+                    // it as out of range and update metadata for rediscovery.
                     offsetsResult.endOffsets().forEach((respTopicPartition, respEndOffset) -> {
-                        SubscriptionState.FetchPosition requestPosition = fetchPositions.get(respTopicPartition);
-                        Optional<OffsetAndMetadata> divergentOffsetOpt = subscriptions.maybeCompleteValidation(
-                                respTopicPartition, requestPosition, respEndOffset, hasReliableLeaderEpochs);
-                        divergentOffsetOpt.ifPresent(
-                            divergentOffset -> truncationWithoutResetPolicy.put(respTopicPartition, divergentOffset));
-
-                        if (respEndOffset.hasUndefinedEpochOrOffset() && !hasReliableLeaderEpochs) {
+                        if (respEndOffset.hasUndefinedEpochOrOffset()) {
                             // Should attempt to find the new leader in the next try.
                             log.debug("Requesting metadata update for partition {} due to undefined epoch or offset {}",
                                 respTopicPartition, respEndOffset);
                             metadata.requestUpdate();
+                        } else {
+                            SubscriptionState.FetchPosition requestPosition = fetchPositions.get(respTopicPartition);
+                            Optional<OffsetAndMetadata> divergentOffsetOpt = subscriptions.maybeCompleteValidation(
+                                respTopicPartition, requestPosition, respEndOffset);
+                            divergentOffsetOpt.ifPresent(
+                                divergentOffset -> truncationWithoutResetPolicy.put(respTopicPartition, divergentOffset));
                         }
                     });
 

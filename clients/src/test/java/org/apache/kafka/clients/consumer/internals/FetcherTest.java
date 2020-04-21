@@ -3686,8 +3686,6 @@ public class FetcherTest {
         assertFalse(subscriptions.awaitingValidation(tp0));
     }
 
-
-
     @Test
     public void testOffsetValidationSkippedForOldMetadataRequest() {
         // Old metadata request could not supply reliable leader epoch, which will skip the validation then.

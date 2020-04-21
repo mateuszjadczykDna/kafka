@@ -432,16 +432,12 @@ public class SubscriptionState {
      */
     public synchronized Optional<OffsetAndMetadata> maybeCompleteValidation(TopicPartition tp,
                                                                             FetchPosition requestPosition,
-                                                                            EpochEndOffset epochEndOffset,
-                                                                            final boolean hasReliableLeaderEpochs) {
+                                                                            EpochEndOffset epochEndOffset) {
         TopicPartitionState state = assignedStateOrNull(tp);
         if (state == null) {
             log.debug("Skipping completed validation for partition {} which is not currently assigned.", tp);
         } else if (!state.awaitingValidation()) {
             log.debug("Skipping completed validation for partition {} which is no longer expecting validation.", tp);
-        } else if (!hasReliableLeaderEpochs) {
-            log.debug("Skipping completed validation for partition {} as the leader epoch is not reliable.", tp);
-            state.completeValidation();
         } else {
             SubscriptionState.FetchPosition currentPosition = state.position;
             if (!currentPosition.equals(requestPosition)) {

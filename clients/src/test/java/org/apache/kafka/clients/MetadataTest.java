@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -200,6 +201,7 @@ public class MetadataTest {
             assertFalse(response.hasReliableLeaderEpochs());
             metadata.updateWithCurrentRequestVersion(response, false, 100);
             assertTrue(metadata.partitionMetadataIfCurrent(tp).isPresent());
+            assertFalse(metadata.hasReliableLeaderEpochs());
             MetadataResponse.PartitionMetadata metadata = this.metadata.partitionMetadataIfCurrent(tp).get();
             assertEquals(Optional.empty(), metadata.leaderEpoch);
         }
@@ -209,6 +211,7 @@ public class MetadataTest {
             MetadataResponse response = new MetadataResponse(struct, version);
             assertTrue(response.hasReliableLeaderEpochs());
             metadata.updateWithCurrentRequestVersion(response, false, 100);
+            assertTrue(metadata.hasReliableLeaderEpochs());
             assertTrue(metadata.partitionMetadataIfCurrent(tp).isPresent());
             MetadataResponse.PartitionMetadata info = metadata.partitionMetadataIfCurrent(tp).get();
             assertEquals(Optional.of(10), info.leaderEpoch);
@@ -338,6 +341,7 @@ public class MetadataTest {
             MetadataResponse metadataResponse = TestUtils.metadataUpdateWith("dummy", 1, Collections.emptyMap(), partitionCounts, _tp -> 100);
             metadata.updateWithCurrentRequestVersion(metadataResponse, false, 10L);
             assertNotNull(metadata.fetch().partition(tp));
+            assertTrue(metadata.lastSeenLeaderEpoch(tp).isPresent());
             assertEquals(metadata.lastSeenLeaderEpoch(tp).get().longValue(), 100);
         }
 
@@ -383,6 +387,7 @@ public class MetadataTest {
         TopicPartition tp = new TopicPartition("topic-1", 0);
         metadata.updateWithCurrentRequestVersion(emptyMetadataResponse(), false, 0L);
         assertTrue(metadata.updateLastSeenEpochIfNewer(tp, 1));
+        assertTrue(metadata.lastSeenLeaderEpoch(tp).isPresent());
         assertEquals(metadata.lastSeenLeaderEpoch(tp).get().longValue(), 1);
 
         metadata.updateWithCurrentRequestVersion(emptyMetadataResponse(), false, 1L);
@@ -412,6 +417,7 @@ public class MetadataTest {
         MetadataResponse metadataResponse = TestUtils.metadataUpdateWith("dummy", 1, Collections.emptyMap(), partitionCounts, _tp -> 100);
         metadata.updateWithCurrentRequestVersion(metadataResponse, false, 10L);
         assertNotNull(metadata.fetch().partition(tp));
+        assertTrue(metadata.lastSeenLeaderEpoch(tp).isPresent());
         assertEquals(metadata.lastSeenLeaderEpoch(tp).get().longValue(), 100);
 
         // Simulate a leader epoch from another response, like a fetch response (not yet implemented)
@@ -419,14 +425,14 @@ public class MetadataTest {
 
         // Cache of partition stays, but current partition info is not available since it's stale
         assertNotNull(metadata.fetch().partition(tp));
-        assertEquals(metadata.fetch().partitionCountForTopic("topic-1").longValue(), 5);
+        assertEquals(Objects.requireNonNull(metadata.fetch().partitionCountForTopic("topic-1")).longValue(), 5);
         assertFalse(metadata.partitionMetadataIfCurrent(tp).isPresent());
         assertEquals(metadata.lastSeenLeaderEpoch(tp).get().longValue(), 101);
 
         // Metadata with older epoch is rejected, metadata state is unchanged
         metadata.updateWithCurrentRequestVersion(metadataResponse, false, 20L);
         assertNotNull(metadata.fetch().partition(tp));
-        assertEquals(metadata.fetch().partitionCountForTopic("topic-1").longValue(), 5);
+        assertEquals(Objects.requireNonNull(metadata.fetch().partitionCountForTopic("topic-1")).longValue(), 5);
         assertFalse(metadata.partitionMetadataIfCurrent(tp).isPresent());
         assertEquals(metadata.lastSeenLeaderEpoch(tp).get().longValue(), 101);
 
@@ -434,7 +440,7 @@ public class MetadataTest {
         metadataResponse = TestUtils.metadataUpdateWith("dummy", 1, Collections.emptyMap(), partitionCounts, _tp -> 101);
         metadata.updateWithCurrentRequestVersion(metadataResponse, false, 30L);
         assertNotNull(metadata.fetch().partition(tp));
-        assertEquals(metadata.fetch().partitionCountForTopic("topic-1").longValue(), 5);
+        assertEquals(Objects.requireNonNull(metadata.fetch().partitionCountForTopic("topic-1")).longValue(), 5);
         assertTrue(metadata.partitionMetadataIfCurrent(tp).isPresent());
         assertEquals(metadata.lastSeenLeaderEpoch(tp).get().longValue(), 101);
     }
