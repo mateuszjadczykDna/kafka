@@ -46,6 +46,7 @@ import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
+import org.apache.kafka.common.message.MetadataResponseData;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
@@ -3279,9 +3280,7 @@ public class FetcherTest {
                 Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> fetchedRecords = fetchedRecords();
                 if (!fetchedRecords.isEmpty()) {
                     fetchesRemaining.decrementAndGet();
-                    fetchedRecords.entrySet().forEach(entry -> {
-                        TopicPartition tp = entry.getKey();
-                        List<ConsumerRecord<byte[], byte[]>> records = entry.getValue();
+                    fetchedRecords.forEach((tp, records) -> {
                         assertEquals(2, records.size());
                         long nextOffset = nextFetchOffsets.get(tp);
                         assertEquals(nextOffset, records.get(0).offset());
@@ -3687,8 +3686,9 @@ public class FetcherTest {
     }
 
     @Test
-    public void testOffsetValidationSkippedForOldMetadataRequest() {
-        // Old metadata request could not supply reliable leader epoch, which will skip the validation then.
+    public void testOffsetValidationSkippedForOldResponse() {
+        // Old responses may provide unreliable leader epoch,
+        // so we should skip offset validation and not send the request.
         buildFetcher();
         assignFromUser(singleton(tp0));
 
@@ -3701,9 +3701,6 @@ public class FetcherTest {
             Collections.emptyMap(), partitionCounts, tp -> epochOne), false, 0L);
 
         Node node = metadata.fetch().nodes().get(0);
-        apiVersions.update(node.idString(), NodeApiVersions.create(
-            ApiKeys.METADATA.id, (short) 0, (short) 8));
-
         assertFalse(client.isConnected(node.idString()));
 
         // Seek with a position and leader+epoch
@@ -3713,23 +3710,13 @@ public class FetcherTest {
         assertFalse(client.isConnected(node.idString()));
         assertTrue(subscriptions.awaitingValidation(tp0));
 
-        // No version information is initially available, but the node is now connected
+        // Inject an older version of the metadata response
+        final short responseVersion = 8;
+        metadata.updateWithCurrentRequestVersion(TestUtils.metadataUpdateWith("dummy", 1,
+            Collections.emptyMap(), partitionCounts, responseVersion), false, 0L);
         fetcher.validateOffsetsIfNeeded();
-        assertTrue(subscriptions.awaitingValidation(tp0));
-        assertTrue(client.isConnected(node.idString()));
-        apiVersions.update(node.idString(), NodeApiVersions.create());
-
-        // On the next call, the OffsetForLeaderEpoch request is sent and validation completes
-        Map<TopicPartition, EpochEndOffset> endOffsetMap = new HashMap<>();
-        endOffsetMap.put(tp0, new EpochEndOffset(Errors.NONE, epochOne, 30L));
-        OffsetsForLeaderEpochResponse resp = new OffsetsForLeaderEpochResponse(endOffsetMap);
-        client.prepareResponseFrom(resp, node);
-
-        fetcher.validateOffsetsIfNeeded();
-        consumerClient.pollNoWakeup();
-
+        // Offset validation is skipped
         assertFalse(subscriptions.awaitingValidation(tp0));
-        assertEquals(20L, subscriptions.position(tp0).offset);
     }
 
     @Test
@@ -4028,9 +4015,7 @@ public class FetcherTest {
         assertTrue(fetcher.hasCompletedFetches());
 
         // Trigger the exception.
-        assertThrows(KafkaException.class, () -> {
-            fetchedRecords();
-        });
+        assertThrows(KafkaException.class, this::fetchedRecords);
     }
 
     @Test

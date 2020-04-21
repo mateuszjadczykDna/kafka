@@ -609,10 +609,10 @@ public class SubscriptionStateTest {
     }
 
     private static class MockRebalanceListener implements ConsumerRebalanceListener {
-        public Collection<TopicPartition> revoked;
+        Collection<TopicPartition> revoked;
         public Collection<TopicPartition> assigned;
-        public int revokedCount = 0;
-        public int assignedCount = 0;
+        int revokedCount = 0;
+        int assignedCount = 0;
 
         @Override
         public void onPartitionsAssigned(Collection<TopicPartition> partitions) {

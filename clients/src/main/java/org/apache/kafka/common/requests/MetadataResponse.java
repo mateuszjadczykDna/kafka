@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.PartitionInfo;
@@ -429,7 +430,8 @@ public class MetadataResponse extends AbstractResponse {
 
     public static MetadataResponse prepareResponse(int throttleTimeMs, Collection<Node> brokers, String clusterId,
                                                    int controllerId, List<TopicMetadata> topicMetadataList,
-                                                   int clusterAuthorizedOperations) {
+                                                   int clusterAuthorizedOperations,
+                                                   short responseVersion) {
         MetadataResponseData responseData = new MetadataResponseData();
         responseData.setThrottleTimeMs(throttleTimeMs);
         brokers.forEach(broker ->
@@ -464,22 +466,41 @@ public class MetadataResponse extends AbstractResponse {
             }
             responseData.topics().add(metadataResponseTopic);
         });
-        return new MetadataResponse(responseData);
+        return new MetadataResponse(responseData.toStruct(responseVersion), responseVersion);
     }
 
-    public static MetadataResponse prepareResponse(int throttleTimeMs, Collection<Node> brokers, String clusterId,
-                                                   int controllerId, List<TopicMetadata> topicMetadataList) {
+    public static MetadataResponse prepareResponse(int throttleTimeMs,
+                                                   Collection<Node> brokers,
+                                                   String clusterId,
+                                                   int controllerId,
+                                                   List<TopicMetadata> topicMetadataList,
+                                                   short responseVersion) {
         return prepareResponse(throttleTimeMs, brokers, clusterId, controllerId, topicMetadataList,
-                MetadataResponse.AUTHORIZED_OPERATIONS_OMITTED);
+                MetadataResponse.AUTHORIZED_OPERATIONS_OMITTED, responseVersion);
     }
 
-    public static MetadataResponse prepareResponse(Collection<Node> brokers, String clusterId, int controllerId,
+    public static MetadataResponse prepareResponse(Collection<Node> brokers,
+                                                   String clusterId,
+                                                   int controllerId,
+                                                   List<TopicMetadata> topicMetadata,
+                                                   short responseVersion) {
+        return prepareResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, brokers, clusterId, controllerId,
+            topicMetadata, responseVersion);
+    }
+
+    public static MetadataResponse prepareResponse(Collection<Node> brokers,
+                                                   String clusterId,
+                                                   int controllerId,
                                                    List<TopicMetadata> topicMetadata) {
-        return prepareResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, brokers, clusterId, controllerId, topicMetadata);
+        return prepareResponse(AbstractResponse.DEFAULT_THROTTLE_TIME, brokers, clusterId, controllerId,
+            topicMetadata, ApiKeys.METADATA.latestVersion());
     }
 
-    public static MetadataResponse prepareResponse(int throttleTimeMs, List<MetadataResponseTopic> topicMetadataList,
-                                                   Collection<Node> brokers, String clusterId, int controllerId,
+    public static MetadataResponse prepareResponse(int throttleTimeMs,
+                                                   List<MetadataResponseTopic> topicMetadataList,
+                                                   Collection<Node> brokers,
+                                                   String clusterId,
+                                                   int controllerId,
                                                    int clusterAuthorizedOperations) {
         MetadataResponseData responseData = new MetadataResponseData();
         responseData.setThrottleTimeMs(throttleTimeMs);
