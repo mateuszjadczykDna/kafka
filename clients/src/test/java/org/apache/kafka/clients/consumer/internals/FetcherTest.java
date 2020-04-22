@@ -46,7 +46,6 @@ import org.apache.kafka.common.errors.TopicAuthorizationException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.internals.ClusterResourceListeners;
-import org.apache.kafka.common.message.MetadataResponseData;
 import org.apache.kafka.common.metrics.KafkaMetric;
 import org.apache.kafka.common.metrics.MetricConfig;
 import org.apache.kafka.common.metrics.Metrics;
@@ -67,7 +66,6 @@ import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.record.TimestampType;
-import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.ApiVersionsResponse;
 import org.apache.kafka.common.requests.EpochEndOffset;
 import org.apache.kafka.common.requests.FetchRequest;
@@ -3717,6 +3715,51 @@ public class FetcherTest {
         fetcher.validateOffsetsIfNeeded();
         // Offset validation is skipped
         assertFalse(subscriptions.awaitingValidation(tp0));
+    }
+
+    @Test
+    public void testOffsetValidationRequestMetadataUpdateForUndefinedEpoch() {
+        testOffsetValidationWithGivenEpochOffset(new EpochEndOffset(EpochEndOffset.UNDEFINED_EPOCH, 0L));
+
+    }
+    @Test
+    public void testOffsetValidationRequestMetadataUpdateForUndefinedOffset() {
+        testOffsetValidationWithGivenEpochOffset(new EpochEndOffset(2, EpochEndOffset.UNDEFINED_EPOCH_OFFSET));
+    }
+
+    private void testOffsetValidationWithGivenEpochOffset(final EpochEndOffset epochEndOffset) {
+        buildFetcher();
+        assignFromUser(singleton(tp0));
+
+        Map<String, Integer> partitionCounts = new HashMap<>();
+        partitionCounts.put(tp0.topic(), 4);
+
+        final int epochOne = 1;
+
+        metadata.updateWithCurrentRequestVersion(TestUtils.metadataUpdateWith("dummy", 1,
+            Collections.emptyMap(), partitionCounts, tp -> epochOne), false, 0L);
+
+        // Offset validation requires OffsetForLeaderEpoch request v3 or higher
+        Node node = metadata.fetch().nodes().get(0);
+        apiVersions.update(node.idString(), NodeApiVersions.create());
+
+        Metadata.LeaderAndEpoch leaderAndEpoch = new Metadata.LeaderAndEpoch(metadata.currentLeader(tp0).leader, Optional.of(epochOne));
+        subscriptions.seekUnvalidated(tp0, new SubscriptionState.FetchPosition(0, Optional.of(epochOne), leaderAndEpoch));
+
+        fetcher.validateOffsetsIfNeeded();
+        consumerClient.poll(time.timer(Duration.ZERO));
+        assertTrue(subscriptions.awaitingValidation(tp0));
+        assertTrue(client.hasInFlightRequests());
+
+        client.respond(request -> {
+            OffsetsForLeaderEpochRequest epochRequest = (OffsetsForLeaderEpochRequest) request;
+            OffsetsForLeaderEpochRequest.PartitionData partitionData = epochRequest.epochsByTopicPartition().get(tp0);
+            return partitionData.currentLeaderEpoch.equals(Optional.of(epochOne)) && partitionData.leaderEpoch == epochOne;
+        }, new OffsetsForLeaderEpochResponse(singletonMap(tp0, epochEndOffset)));
+        consumerClient.poll(time.timer(Duration.ZERO));
+
+        assertTrue(subscriptions.awaitingValidation(tp0));
+        assertTrue(metadata.updateRequested());
     }
 
     @Test
