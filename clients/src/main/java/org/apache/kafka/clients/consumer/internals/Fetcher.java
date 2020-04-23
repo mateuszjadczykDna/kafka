@@ -498,104 +498,6 @@ public class Fetcher<K, V> implements Closeable {
         validateOffsetsAsync(partitionsToValidate);
     }
 
-    /**
-     * For each partition which needs validation, make an asynchronous request to get the end-offsets for the partition
-     * with the epoch less than or equal to the epoch the partition last saw.
-     *
-     * Requests are grouped by Node for efficiency.
-     */
-    private void validateOffsetsAsync(Map<TopicPartition, SubscriptionState.FetchPosition> partitionsToValidate) {
-        final Map<Node, Map<TopicPartition, SubscriptionState.FetchPosition>> regrouped =
-            regroupFetchPositionsByLeader(partitionsToValidate);
-
-        regrouped.forEach((node, fetchPositions) -> {
-            if (node.isEmpty()) {
-                metadata.requestUpdate();
-                return;
-            }
-
-            NodeApiVersions nodeApiVersions = apiVersions.get(node.idString());
-            if (nodeApiVersions == null) {
-                client.tryConnect(node);
-                return;
-            }
-
-            if (!hasUsableOffsetForLeaderEpochVersion(nodeApiVersions)) {
-                log.debug("Skipping validation of fetch offsets for partitions {} since the broker does not " +
-                              "support the required protocol version (introduced in Kafka 2.3)",
-                    fetchPositions.keySet());
-                completeAllValidations(fetchPositions);
-                return;
-            }
-
-            // We need to get the client epoch state before sending out the leader epoch request, and use it to
-            // decide whether we need to validate offsets.
-            if (!metadata.hasReliableLeaderEpochs()) {
-                log.debug("Skipping validation of fetch offsets for partitions {} since the provided leader broker " +
-                              "is not reliable", fetchPositions.keySet());
-                completeAllValidations(fetchPositions);
-                return;
-            }
-
-            subscriptions.setNextAllowedRetry(fetchPositions.keySet(), time.milliseconds() + requestTimeoutMs);
-
-            RequestFuture<OffsetsForLeaderEpochClient.OffsetForEpochResult> future =
-                offsetsForLeaderEpochClient.sendAsyncRequest(node, fetchPositions);
-
-            future.addListener(new RequestFutureListener<OffsetsForLeaderEpochClient.OffsetForEpochResult>() {
-                @Override
-                public void onSuccess(OffsetsForLeaderEpochClient.OffsetForEpochResult offsetsResult) {
-                    Map<TopicPartition, OffsetAndMetadata> truncationWithoutResetPolicy = new HashMap<>();
-                    if (!offsetsResult.partitionsToRetry().isEmpty()) {
-                        subscriptions.setNextAllowedRetry(offsetsResult.partitionsToRetry(), time.milliseconds() + retryBackoffMs);
-                        metadata.requestUpdate();
-                    }
-
-                    // For each OffsetsForLeader response, check if the end-offset is lower than our current offset
-                    // for the partition. If so, it means we have experienced log truncation and need to reposition
-                    // that partition's offset.
-                    //
-                    // In addition, check whether the returned offset and epoch are valid. If not, then we should treat
-                    // it as out of range and update metadata for rediscovery.
-                    offsetsResult.endOffsets().forEach((respTopicPartition, respEndOffset) -> {
-                        if (respEndOffset.hasUndefinedEpochOrOffset()) {
-                            // Should attempt to find the new leader in the next try.
-                            log.debug("Requesting metadata update for partition {} due to undefined epoch or offset {}",
-                                respTopicPartition, respEndOffset);
-                            metadata.requestUpdate();
-                        } else {
-                            SubscriptionState.FetchPosition requestPosition = fetchPositions.get(respTopicPartition);
-                            Optional<OffsetAndMetadata> divergentOffsetOpt = subscriptions.maybeCompleteValidation(
-                                respTopicPartition, requestPosition, respEndOffset);
-                            divergentOffsetOpt.ifPresent(
-                                divergentOffset -> truncationWithoutResetPolicy.put(respTopicPartition, divergentOffset));
-                        }
-                    });
-
-                    if (!truncationWithoutResetPolicy.isEmpty()) {
-                        throw new LogTruncationException(truncationWithoutResetPolicy);
-                    }
-                }
-
-                @Override
-                public void onFailure(RuntimeException e) {
-                    subscriptions.requestFailed(fetchPositions.keySet(), time.milliseconds() + retryBackoffMs);
-                    metadata.requestUpdate();
-
-                    if (!(e instanceof RetriableException) && !cachedOffsetForLeaderException.compareAndSet(null, e)) {
-                        log.error("Discarding error in OffsetsForLeaderEpoch because another error is pending", e);
-                    }
-                }
-            });
-        });
-    }
-
-    private void completeAllValidations(Map<TopicPartition, SubscriptionState.FetchPosition> fetchPositions) {
-        for (TopicPartition partition : fetchPositions.keySet()) {
-            subscriptions.completeValidation(partition);
-        }
-    }
-
     public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch,
                                                                    Timer timer) {
         metadata.addTransientTopics(topicsForPartitions(timestampsToSearch.keySet()));
@@ -849,6 +751,104 @@ public class Fetcher<K, V> implements Closeable {
                         log.error("Discarding error in ListOffsetResponse because another error is pending", e);
                 }
             });
+        }
+    }
+
+    /**
+     * For each partition which needs validation, make an asynchronous request to get the end-offsets for the partition
+     * with the epoch less than or equal to the epoch the partition last saw.
+     *
+     * Requests are grouped by Node for efficiency.
+     */
+    private void validateOffsetsAsync(Map<TopicPartition, SubscriptionState.FetchPosition> partitionsToValidate) {
+        final Map<Node, Map<TopicPartition, SubscriptionState.FetchPosition>> regrouped =
+            regroupFetchPositionsByLeader(partitionsToValidate);
+
+        regrouped.forEach((node, fetchPositions) -> {
+            if (node.isEmpty()) {
+                metadata.requestUpdate();
+                return;
+            }
+
+            NodeApiVersions nodeApiVersions = apiVersions.get(node.idString());
+            if (nodeApiVersions == null) {
+                client.tryConnect(node);
+                return;
+            }
+
+            if (!hasUsableOffsetForLeaderEpochVersion(nodeApiVersions)) {
+                log.debug("Skipping validation of fetch offsets for partitions {} since the broker does not " +
+                              "support the required protocol version (introduced in Kafka 2.3)",
+                    fetchPositions.keySet());
+                completeAllValidations(fetchPositions);
+                return;
+            }
+
+            // We need to get the client epoch state before sending out the leader epoch request, and use it to
+            // decide whether we need to validate offsets.
+            if (!metadata.hasReliableLeaderEpochs()) {
+                log.debug("Skipping validation of fetch offsets for partitions {} since the provided leader broker " +
+                              "is not reliable", fetchPositions.keySet());
+                completeAllValidations(fetchPositions);
+                return;
+            }
+
+            subscriptions.setNextAllowedRetry(fetchPositions.keySet(), time.milliseconds() + requestTimeoutMs);
+
+            RequestFuture<OffsetsForLeaderEpochClient.OffsetForEpochResult> future =
+                offsetsForLeaderEpochClient.sendAsyncRequest(node, fetchPositions);
+
+            future.addListener(new RequestFutureListener<OffsetsForLeaderEpochClient.OffsetForEpochResult>() {
+                @Override
+                public void onSuccess(OffsetsForLeaderEpochClient.OffsetForEpochResult offsetsResult) {
+                    Map<TopicPartition, OffsetAndMetadata> truncationWithoutResetPolicy = new HashMap<>();
+                    if (!offsetsResult.partitionsToRetry().isEmpty()) {
+                        subscriptions.setNextAllowedRetry(offsetsResult.partitionsToRetry(), time.milliseconds() + retryBackoffMs);
+                        metadata.requestUpdate();
+                    }
+
+                    // For each OffsetsForLeader response, check if the end-offset is lower than our current offset
+                    // for the partition. If so, it means we have experienced log truncation and need to reposition
+                    // that partition's offset.
+                    //
+                    // In addition, check whether the returned offset and epoch are valid. If not, then we should treat
+                    // it as out of range and update metadata for rediscovery.
+                    offsetsResult.endOffsets().forEach((respTopicPartition, respEndOffset) -> {
+                        if (respEndOffset.hasUndefinedEpochOrOffset()) {
+                            // Should attempt to find the new leader in the next try.
+                            log.debug("Requesting metadata update for partition {} due to undefined epoch or offset {}",
+                                respTopicPartition, respEndOffset);
+                            metadata.requestUpdate();
+                        } else {
+                            SubscriptionState.FetchPosition requestPosition = fetchPositions.get(respTopicPartition);
+                            Optional<OffsetAndMetadata> divergentOffsetOpt = subscriptions.maybeCompleteValidation(
+                                respTopicPartition, requestPosition, respEndOffset);
+                            divergentOffsetOpt.ifPresent(
+                                divergentOffset -> truncationWithoutResetPolicy.put(respTopicPartition, divergentOffset));
+                        }
+                    });
+
+                    if (!truncationWithoutResetPolicy.isEmpty()) {
+                        throw new LogTruncationException(truncationWithoutResetPolicy);
+                    }
+                }
+
+                @Override
+                public void onFailure(RuntimeException e) {
+                    subscriptions.requestFailed(fetchPositions.keySet(), time.milliseconds() + retryBackoffMs);
+                    metadata.requestUpdate();
+
+                    if (!(e instanceof RetriableException) && !cachedOffsetForLeaderException.compareAndSet(null, e)) {
+                        log.error("Discarding error in OffsetsForLeaderEpoch because another error is pending", e);
+                    }
+                }
+            });
+        });
+    }
+
+    private void completeAllValidations(Map<TopicPartition, SubscriptionState.FetchPosition> fetchPositions) {
+        for (TopicPartition partition : fetchPositions.keySet()) {
+            subscriptions.completeValidation(partition);
         }
     }
 
