@@ -754,6 +754,14 @@ public class Fetcher<K, V> implements Closeable {
         }
     }
 
+    private boolean hasUsableOffsetForLeaderEpochVersion(NodeApiVersions nodeApiVersions) {
+        ApiVersion apiVersion = nodeApiVersions.apiVersion(ApiKeys.OFFSET_FOR_LEADER_EPOCH);
+        if (apiVersion == null)
+            return false;
+
+        return OffsetsForLeaderEpochRequest.supportsTopicPermission(apiVersion.maxVersion);
+    }
+
     /**
      * For each partition which needs validation, make an asynchronous request to get the end-offsets for the partition
      * with the epoch less than or equal to the epoch the partition last saw.
@@ -816,8 +824,8 @@ public class Fetcher<K, V> implements Closeable {
                     offsetsResult.endOffsets().forEach((respTopicPartition, respEndOffset) -> {
                         if (respEndOffset.hasUndefinedEpochOrOffset()) {
                             // Should attempt to find the new leader in the next try.
-                            log.debug("Requesting metadata update for partition {} due to undefined epoch or offset {}",
-                                respTopicPartition, respEndOffset);
+                            log.debug("Requesting metadata update for partition {} due to undefined epoch or offset {} " +
+                                          "from OffsetsForLeaderEpoch response", respTopicPartition, respEndOffset);
                             metadata.requestUpdate();
                         } else {
                             SubscriptionState.FetchPosition requestPosition = fetchPositions.get(respTopicPartition);
@@ -850,14 +858,6 @@ public class Fetcher<K, V> implements Closeable {
         for (TopicPartition partition : fetchPositions.keySet()) {
             subscriptions.completeValidation(partition);
         }
-    }
-
-    private boolean hasUsableOffsetForLeaderEpochVersion(NodeApiVersions nodeApiVersions) {
-        ApiVersion apiVersion = nodeApiVersions.apiVersion(ApiKeys.OFFSET_FOR_LEADER_EPOCH);
-        if (apiVersion == null)
-            return false;
-
-        return OffsetsForLeaderEpochRequest.supportsTopicPermission(apiVersion.maxVersion);
     }
 
     /**
