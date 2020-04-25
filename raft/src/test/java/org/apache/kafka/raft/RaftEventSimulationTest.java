@@ -455,7 +455,7 @@ public class RaftEventSimulationTest {
     }
 
     private static class PersistentState {
-        final MockElectionStore store = new MockElectionStore();
+        final MockQuorumStateStore store = new MockQuorumStateStore();
         final MockLog log = new MockLog();
     }
 
@@ -539,13 +539,13 @@ public class RaftEventSimulationTest {
                 return false;
 
             RaftNode first = iter.next();
-            ElectionState election = first.store.read();
+            ElectionState election = first.store.readElectionState();
             if (!election.hasLeader())
                 return false;
 
             while (iter.hasNext()) {
                 RaftNode next = iter.next();
-                if (!election.equals(next.store.read()))
+                if (!election.equals(next.store.readElectionState()))
                     return false;
             }
 
@@ -573,7 +573,7 @@ public class RaftEventSimulationTest {
                 throw new IllegalArgumentException("Illegal election of observer " + election.leaderId());
 
             nodes.values().forEach(state -> {
-                state.store.write(election);
+                state.store.writeElectionState(election);
                 if (election.hasLeader()) {
                     Optional<OffsetAndEpoch> endOffset = state.log.endOffsetForEpoch(election.epoch);
                     if (!endOffset.isPresent())
@@ -639,7 +639,7 @@ public class RaftEventSimulationTest {
         final KafkaRaftClient manager;
         final MockLog log;
         final MockNetworkChannel channel;
-        final MockElectionStore store;
+        final MockQuorumStateStore store;
         final QuorumState quorum;
         final LogContext logContext;
         DistributedCounter counter;
@@ -648,7 +648,7 @@ public class RaftEventSimulationTest {
                          KafkaRaftClient manager,
                          MockLog log,
                          MockNetworkChannel channel,
-                         MockElectionStore store,
+                         MockQuorumStateStore store,
                          QuorumState quorum,
                          LogContext logContext) {
             this.nodeId = nodeId;
@@ -753,7 +753,7 @@ public class RaftEventSimulationTest {
             for (Map.Entry<Integer, PersistentState> nodeStateEntry : cluster.nodes.entrySet()) {
                 Integer nodeId = nodeStateEntry.getKey();
                 PersistentState state = nodeStateEntry.getValue();
-                nodeEpochs.put(nodeId, state.store.read().epoch);
+                nodeEpochs.put(nodeId, state.store.readElectionState().epoch);
             }
         }
 
@@ -763,7 +763,7 @@ public class RaftEventSimulationTest {
                 Integer nodeId = nodeStateEntry.getKey();
                 PersistentState state = nodeStateEntry.getValue();
                 Integer oldEpoch = nodeEpochs.get(nodeId);
-                Integer newEpoch = state.store.read().epoch;
+                Integer newEpoch = state.store.readElectionState().epoch;
                 if (oldEpoch > newEpoch) {
                     fail("Non-monotonic update of high watermark detected: " +
                             oldEpoch + " -> " + newEpoch);
