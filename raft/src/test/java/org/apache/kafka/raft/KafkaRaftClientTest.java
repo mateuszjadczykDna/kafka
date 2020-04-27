@@ -18,7 +18,9 @@ package org.apache.kafka.raft;
 
 import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
+import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
+import org.apache.kafka.common.message.EndQuorumEpochResponseData;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindQuorumRequestData;
@@ -41,6 +43,7 @@ import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
+
 import org.junit.After;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -75,6 +78,8 @@ public class KafkaRaftClientTest {
     private final MockNetworkChannel channel = new MockNetworkChannel();
     private final Random random = Mockito.spy(new Random());
 
+    private final NoOpStateMachine stateMachine = new NoOpStateMachine();
+
     private QuorumStateStore quorumStateStore = new MockQuorumStateStore();
 
     @After
@@ -87,17 +92,22 @@ public class KafkaRaftClientTest {
     }
 
     private KafkaRaftClient buildClient(Set<Integer> voters) throws IOException {
+        return buildClient(voters, quorumStateStore);
+    }
+
+    private KafkaRaftClient buildClient(Set<Integer> voters, QuorumStateStore quorumStateStore) throws IOException {
         LogContext logContext = new LogContext();
         QuorumState quorum = new QuorumState(localId, voters, quorumStateStore, logContext);
 
         List<InetSocketAddress> bootstrapServers = voters.stream()
-            .map(this::mockAddress)
-            .collect(Collectors.toList());
+                                                       .map(this::mockAddress)
+                                                       .collect(Collectors.toList());
 
         KafkaRaftClient client = new KafkaRaftClient(channel, log, quorum, time,
             mockAddress(localId), bootstrapServers, electionTimeoutMs, electionJitterMs,
             retryBackoffMs, requestTimeoutMs, logContext, random);
-        client.initialize(new NoOpStateMachine());
+        client.initialize(stateMachine);
+
         return client;
     }
 
@@ -107,6 +117,58 @@ public class KafkaRaftClientTest {
         assertEquals(ElectionState.withElectedLeader(1, localId), quorumStateStore.readElectionState());
         client.poll();
         assertEquals(0, channel.drainSendQueue().size());
+    }
+
+    @Test
+    public void testInitializeAsLeaderFromStateStore() throws IOException {
+        Set<Integer> voters = Utils.mkSet(localId, 1);
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withElectedLeader(2, localId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(stateMachine.state().isPresent());
+        assertTrue(stateMachine.state().get() instanceof LeaderState);
+        assertTrue(client.quorumState().isLeader());
+        assertEquals(1L, log.endOffset());
+
+        // Should have sent out connection info query for other node id.
+        client.poll();
+        List<RaftMessage> unsent = channel.drainSendQueue();
+        assertEquals(1, unsent.size());
+
+        assertTrue(unsent.get(0) instanceof RaftRequest.Outbound);
+        assertTrue(unsent.get(0).data() instanceof FindQuorumRequestData);
+
+        assertTrue(unsent.get(0) instanceof RaftRequest.Outbound);
+        assertEquals(-1, ((RaftRequest.Outbound) unsent.get(0)).destinationId());
+    }
+
+    @Test
+    public void testInitializeAsCandidateFromStateStore() throws IOException {
+        // Need 3 node to require a 2-node majority
+        Set<Integer> voters = Utils.mkSet(localId, 1, 2);
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withVotedCandidate(2, localId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertFalse(stateMachine.state().isPresent());
+        assertEquals(0L, log.endOffset());
+        assertTrue(client.quorumState().isCandidate());
+
+        // Should have sent out connection info query for other node id.
+        client.poll();
+        List<RaftMessage> unsent = channel.drainSendQueue();
+        assertEquals(1, unsent.size());
+
+        assertTrue(unsent.get(0) instanceof RaftRequest.Outbound);
+        assertTrue(unsent.get(0).data() instanceof FindQuorumRequestData);
+        assertEquals(-1, ((RaftRequest.Outbound) unsent.get(0)).destinationId());
     }
 
     @Test
@@ -151,6 +213,119 @@ public class KafkaRaftClientTest {
     }
 
     @Test
+    public void testHandleBeginQuorumRequest() throws Exception {
+        int otherNodeId = 1;
+        int votedCandidateEpoch = 2;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withVotedCandidate(votedCandidateEpoch, otherNodeId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(client.quorumState().isFollower());
+        assertTrue(client.quorumState().followerStateOrThrow().hasVoted());
+
+        BeginQuorumEpochRequestData beginQuorumEpochRequest = new BeginQuorumEpochRequestData()
+                                          .setLeaderId(otherNodeId)
+                                          .setLeaderEpoch(votedCandidateEpoch);
+        channel.mockReceive(new RaftRequest.Inbound(channel.newCorrelationId(), beginQuorumEpochRequest, time.milliseconds()));
+
+        client.poll();
+        assertTrue(client.quorumState().isFollower());
+        assertTrue(client.quorumState().followerStateOrThrow().hasLeader());
+        assertEquals(client.quorumState().followerStateOrThrow().leaderId(), otherNodeId);
+
+        List<RaftMessage> unsent = channel.drainSendQueue();
+        assertEquals(1, unsent.size());
+
+        assertTrue(unsent.get(0) instanceof RaftResponse.Outbound);
+        assertTrue(unsent.get(0).data() instanceof BeginQuorumEpochResponseData);
+    }
+
+    @Test
+    public void testHandleBeginQuorumResponse() throws Exception {
+        int otherNodeId = 1;
+        int leaderEpoch = 2;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withElectedLeader(leaderEpoch, localId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(client.quorumState().isLeader());
+        assertEquals(Collections.singleton(otherNodeId), client.quorumState().leaderStateOrThrow().nonEndorsingFollowers());
+
+        BeginQuorumEpochResponseData beginQuorumEpochRequest = new BeginQuorumEpochResponseData()
+                                                                   .setLeaderId(localId)
+                                                                   .setLeaderEpoch(leaderEpoch);
+        channel.mockReceive(new RaftResponse.Inbound(channel.newCorrelationId(), beginQuorumEpochRequest, otherNodeId));
+
+        client.poll();
+        assertTrue(client.quorumState().isLeader());
+        assertEquals(Collections.emptySet(), client.quorumState().leaderStateOrThrow().nonEndorsingFollowers());
+    }
+
+    @Test
+    public void testHandleEndQuorumRequest() throws Exception {
+        int oldLeaderId = 1;
+        int leaderEpoch = 2;
+        Set<Integer> voters = Utils.mkSet(localId, oldLeaderId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withElectedLeader(leaderEpoch, oldLeaderId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(client.quorumState().isFollower());
+        assertTrue(client.quorumState().followerStateOrThrow().hasLeader());
+
+        EndQuorumEpochRequestData endQuorumEpochRequest = new EndQuorumEpochRequestData()
+                                                                  .setLeaderId(oldLeaderId)
+                                                                  .setLeaderEpoch(leaderEpoch);
+        channel.mockReceive(new RaftRequest.Inbound(channel.newCorrelationId(), endQuorumEpochRequest, time.milliseconds()));
+
+        pollUntilSend(client);
+
+
+        List<RaftMessage> sentMessages = channel.drainSendQueue();
+        assertEquals(2, sentMessages.size());
+        RaftMessage raftMessage = sentMessages.get(0);
+        assertTrue(raftMessage.data() instanceof FindQuorumRequestData);
+        FindQuorumRequestData request = (FindQuorumRequestData) raftMessage.data();
+        assertEquals(localId, request.replicaId());
+        int findQuorumCorrelationId = raftMessage.correlationId();
+
+        raftMessage = sentMessages.get(1);
+        assertTrue(raftMessage.data() instanceof EndQuorumEpochResponseData);
+
+        channel.mockReceive(new RaftResponse.Inbound(findQuorumCorrelationId,
+            findQuorumResponse(localId, leaderEpoch, voters), -1));
+
+        pollUntilSend(client);
+
+        List<RaftMessage> unsent = channel.drainSendQueue();
+
+        assertTrue(client.quorumState().isCandidate());
+        assertFalse(client.quorumState().candidateStateOrThrow().isVoteGranted());
+        // Should have already done self-voting
+        assertFalse(client.quorumState().candidateStateOrThrow().voteGrantedBy(localId));
+
+        assertEquals(1, unsent.size());
+
+        assertTrue(unsent.get(0) instanceof RaftRequest.Outbound);
+        assertTrue(unsent.get(0).data() instanceof VoteRequestData);
+        assertEquals(oldLeaderId, ((RaftRequest.Outbound) unsent.get(0)).destinationId());
+    }
+
+    @Test
     public void testVoteRequestTimeout() throws Exception {
         int epoch = 1;
         int otherNodeId = 1;
@@ -184,6 +359,251 @@ public class KafkaRaftClientTest {
         channel.mockReceive(new RaftResponse.Inbound(retryId, retryResponse, otherNodeId));
         client.poll();
         assertEquals(ElectionState.withElectedLeader(epoch, localId), quorumStateStore.readElectionState());
+    }
+
+    @Test
+    public void testHandleValidVoteRequestAsFollower() throws Exception {
+        int leaderEpoch = 2;
+        int otherNodeId = 1;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withUnknownLeader(leaderEpoch);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertFalse(client.quorumState().followerStateOrThrow().hasVoted());
+
+        handleVoteRequest(leaderEpoch, otherNodeId, client, true);
+
+        assertTrue(client.quorumState().isFollower());
+        assertTrue(client.quorumState().followerStateOrThrow().hasVoted());
+        assertEquals(client.quorumState().followerStateOrThrow().votedId(), otherNodeId);
+    }
+
+    @Test
+    public void testHandleVoteRequestAsFollowerWithElectedLeader() throws Exception {
+        int leaderEpoch = 2;
+        int otherNodeId = 1;
+        int electedLeaderId = 3;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId, electedLeaderId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withElectedLeader(leaderEpoch, electedLeaderId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertFalse(client.quorumState().followerStateOrThrow().hasVoted());
+
+        handleVoteRequest(leaderEpoch - 1, otherNodeId, client, false);
+
+        assertTrue(client.quorumState().isFollower());
+        assertFalse(client.quorumState().followerStateOrThrow().hasVoted());
+        assertEquals(client.quorumState().followerStateOrThrow().leaderId(), electedLeaderId);
+    }
+
+    @Test
+    public void testHandleVoteRequestAsFollowerWithVotedCandidate() throws Exception {
+        int leaderEpoch = 2;
+        int otherNodeId = 1;
+        int votedCandidateId = 3;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId, votedCandidateId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withVotedCandidate(leaderEpoch, votedCandidateId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(client.quorumState().followerStateOrThrow().hasVoted());
+
+        handleVoteRequest(leaderEpoch - 1, otherNodeId, client, false);
+
+        assertTrue(client.quorumState().isFollower());
+        assertTrue(client.quorumState().followerStateOrThrow().hasVoted());
+        assertEquals(client.quorumState().followerStateOrThrow().votedId(), votedCandidateId);
+    }
+
+    private void handleVoteRequest(int lastEpoch,
+                                   int otherNodeId,
+                                   KafkaRaftClient client,
+                                   boolean voteGranted) throws Exception {
+        assertTrue(client.quorumState().isFollower());
+
+        VoteRequestData voteRequest = new VoteRequestData()
+                                          .setLastEpoch(lastEpoch)
+                                          .setLastEpochEndOffset(1)
+                                          .setCandidateId(otherNodeId)
+                                          .setCandidateEpoch(lastEpoch + 1);
+        channel.mockReceive(new RaftRequest.Inbound(
+            channel.newCorrelationId(), voteRequest, time.milliseconds()));
+
+        client.poll();
+
+        List<RaftMessage> unsent = channel.drainSendQueue();
+
+        assertTrue(unsent.size() >= 1);
+        RaftMessage lastMessage = unsent.get(unsent.size() - 1);
+
+        assertTrue(lastMessage instanceof RaftResponse.Outbound);
+        assertTrue(lastMessage.data() instanceof VoteResponseData);
+        assertEquals(voteGranted, ((VoteResponseData) lastMessage.data()).voteGranted());
+    }
+
+    @Test
+    public void testHandleInvalidVoteRequestWithOlderEpoch() throws Exception {
+        int leaderEpoch = 2;
+        int otherNodeId = 1;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withUnknownLeader(leaderEpoch);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        handleInvalidVoteRequest(leaderEpoch - 2, otherNodeId, client, Errors.FENCED_LEADER_EPOCH);
+    }
+
+    @Test
+    public void testHandleInvalidVoteRequestAsObserver() throws Exception {
+        int leaderEpoch = 2;
+        int otherNodeId = 1;
+        int otherNodeId2 = 2;
+        Set<Integer> voters = Utils.mkSet(otherNodeId, otherNodeId2);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withUnknownLeader(leaderEpoch);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        handleInvalidVoteRequest(leaderEpoch, otherNodeId, client, Errors.INVALID_REQUEST);
+    }
+
+    @Test
+    public void testHandleInvalidVoteRequestFromNonVoter() throws Exception {
+        int leaderEpoch = 2;
+        int otherNodeId = 1;
+        int nonVoterId = 2;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withUnknownLeader(leaderEpoch);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        handleInvalidVoteRequest(leaderEpoch, nonVoterId, client, Errors.INVALID_REQUEST);
+    }
+
+    private void handleInvalidVoteRequest(int lastEpoch,
+                                          int otherNodeId,
+                                          KafkaRaftClient client,
+                                          Errors expectedError) throws Exception {
+        assertFalse(client.quorumState().followerStateOrThrow().hasVoted());
+
+        assertTrue(client.quorumState().isFollower());
+
+        VoteRequestData voteRequest = new VoteRequestData()
+                                          .setLastEpoch(lastEpoch)
+                                          .setLastEpochEndOffset(1)
+                                          .setCandidateId(otherNodeId)
+                                          .setCandidateEpoch(lastEpoch + 1);
+        channel.mockReceive(new RaftRequest.Inbound(
+            channel.newCorrelationId(), voteRequest, time.milliseconds()));
+
+        client.poll();
+
+        List<RaftMessage> unsent = channel.drainSendQueue();
+
+        assertTrue(unsent.size() >= 1);
+        RaftMessage lastMessage = unsent.get(unsent.size() - 1);
+
+        assertTrue(lastMessage instanceof RaftResponse.Outbound);
+        assertTrue(lastMessage.data() instanceof VoteResponseData);
+        assertEquals(expectedError,
+            Errors.forCode(((VoteResponseData) lastMessage.data()).errorCode()));
+
+        assertTrue(client.quorumState().isFollower());
+        assertFalse(client.quorumState().followerStateOrThrow().hasVoted());
+    }
+
+    @Test
+    public void testLeaderIgnoreVoteRequestOnSameEpoch() throws Exception {
+        int otherNodeId = 1;
+        int leaderEpoch = 2;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withElectedLeader(leaderEpoch, localId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(client.quorumState().isLeader());
+
+        VoteRequestData voteRequest = new VoteRequestData()
+                                          .setLastEpoch(leaderEpoch - 1)
+                                          .setLastEpochEndOffset(1)
+                                          .setCandidateId(otherNodeId)
+                                          .setCandidateEpoch(leaderEpoch);
+        channel.mockReceive(new RaftRequest.Inbound(channel.newCorrelationId(), voteRequest, time.milliseconds()));
+
+        client.poll();
+        assertTrue(client.quorumState().isLeader());
+
+        List<RaftMessage> unsent = channel.drainSendQueue();
+        assertEquals(2, unsent.size());
+        assertTrue(unsent.get(0) instanceof RaftRequest.Outbound);
+        assertTrue(unsent.get(0).data() instanceof FindQuorumRequestData);
+
+        assertTrue(unsent.get(1) instanceof RaftResponse.Outbound);
+        assertTrue(unsent.get(1).data() instanceof VoteResponseData);
+    }
+
+    @Test
+    public void testCandidateIgnoreVoteRequestOnSameEpoch() throws Exception {
+        int otherNodeId = 1;
+        int leaderEpoch = 2;
+        Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
+
+        MockQuorumStateStore electionStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() {
+                return ElectionState.withVotedCandidate(leaderEpoch, localId);
+            }
+        };
+        KafkaRaftClient client = buildClient(voters, electionStore);
+        assertTrue(client.quorumState().isCandidate());
+
+        VoteRequestData voteRequest = new VoteRequestData()
+                                          .setLastEpoch(leaderEpoch - 1)
+                                          .setLastEpochEndOffset(1)
+                                          .setCandidateId(otherNodeId)
+                                          .setCandidateEpoch(leaderEpoch);
+        channel.mockReceive(new RaftRequest.Inbound(channel.newCorrelationId(), voteRequest, time.milliseconds()));
+
+        client.poll();
+        assertTrue(client.quorumState().isCandidate());
+
+        List<RaftMessage> unsent = channel.drainSendQueue();
+        assertEquals(2, unsent.size());
+
+        assertTrue(unsent.get(0) instanceof RaftRequest.Outbound);
+        assertTrue(unsent.get(0).data() instanceof FindQuorumRequestData);
+
+        assertTrue(unsent.get(1) instanceof RaftResponse.Outbound);
+        assertTrue(unsent.get(1).data() instanceof VoteResponseData);
     }
 
     @Test
