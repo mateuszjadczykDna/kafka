@@ -35,6 +35,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import static org.apache.kafka.common.record.RaftLeaderChangeMessageUtils.getLeaderChangeMessageSize;
+
 /**
  * A {@link Records} implementation backed by a ByteBuffer. This is used only for reading or
  * modifying in-place an existing buffer of record batches. To create a new buffer see {@link MemoryRecordsBuilder},
@@ -629,27 +631,30 @@ public class MemoryRecords extends AbstractRecords {
                                                    int partitionLeaderEpoch, long producerId, short producerEpoch,
                                                    EndTransactionMarker marker) {
         boolean isTransactional = true;
-        boolean isControlBatch = true;
         MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, RecordBatch.CURRENT_MAGIC_VALUE, CompressionType.NONE,
                 TimestampType.CREATE_TIME, initialOffset, timestamp, producerId, producerEpoch,
-                RecordBatch.NO_SEQUENCE, isTransactional, isControlBatch, partitionLeaderEpoch,
+                RecordBatch.NO_SEQUENCE, isTransactional, true, partitionLeaderEpoch,
                 buffer.capacity());
         builder.appendEndTxnMarker(timestamp, marker);
         builder.close();
     }
 
-    public static MemoryRecords withLeaderChangeMessage(long timestamp, LeaderChangeMessageData leaderChangeMessage) {
-        ByteBuffer buffer = ByteBuffer.allocate(leaderChangeMessage.toStruct(leaderChangeMessage.highestSupportedVersion()).sizeOf());
-        writeLeaderChangeMessage(buffer, 0L, timestamp, leaderChangeMessage);
+    public static MemoryRecords withLeaderChangeMessage(long timestamp, int leaderEpoch, LeaderChangeMessageData leaderChangeMessage) {
+        ByteBuffer buffer = ByteBuffer.allocate(getLeaderChangeMessageSize(leaderChangeMessage));
+        writeLeaderChangeMessage(buffer, 0L, timestamp, leaderEpoch, leaderChangeMessage);
         buffer.flip();
         return MemoryRecords.readableRecords(buffer);
     }
 
-    private static void writeLeaderChangeMessage(ByteBuffer buffer, long initialOffset, long timestamp, LeaderChangeMessageData leaderChangeMessage) {
+    private static void writeLeaderChangeMessage(ByteBuffer buffer,
+                                                 long initialOffset,
+                                                 long timestamp,
+                                                 int leaderEpoch,
+                                                 LeaderChangeMessageData leaderChangeMessage) {
         MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, RecordBatch.CURRENT_MAGIC_VALUE, CompressionType.NONE,
             TimestampType.CREATE_TIME, initialOffset, timestamp,
             RecordBatch.NO_PRODUCER_ID, RecordBatch.NO_PRODUCER_EPOCH, RecordBatch.NO_SEQUENCE,
-            false, false, RecordBatch.NO_PARTITION_LEADER_EPOCH, buffer.capacity());
+            false, true, leaderEpoch, buffer.capacity());
         builder.appendLeaderChangeMessage(timestamp, leaderChangeMessage);
         builder.close();
     }

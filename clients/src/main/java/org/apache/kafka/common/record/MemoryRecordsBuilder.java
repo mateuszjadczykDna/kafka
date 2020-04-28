@@ -569,9 +569,11 @@ public class MemoryRecordsBuilder implements AutoCloseable {
     }
 
     public Long appendLeaderChangeMessage(long timestamp, LeaderChangeMessageData leaderChangeMessage) {
-        ByteBuffer serializedMessage = ByteBuffer.wrap(leaderChangeMessage.toJson(
-            leaderChangeMessage.highestSupportedVersion()).toString().getBytes());
-        return appendControlRecord(timestamp, ControlRecordType.LEADER_CHANGE_MESSAGE, serializedMessage);
+        Struct messageStruct = leaderChangeMessage.toStruct(leaderChangeMessage.highestSupportedVersion());
+        ByteBuffer serializedMessage = ByteBuffer.allocate(messageStruct.sizeOf());
+        messageStruct.writeTo(serializedMessage);
+        serializedMessage.flip();
+        return appendControlRecord(timestamp, ControlRecordType.LEADER_CHANGE, serializedMessage);
     }
 
     /**

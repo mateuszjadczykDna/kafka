@@ -32,7 +32,7 @@ import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.Errors;
-import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.LogContext;
@@ -229,15 +229,16 @@ public class KafkaRaftClient implements RaftClient {
         // Add a control message for faster high watermark advance.
         if (!log.endOffsetForEpoch(quorum.epoch()).isPresent()) {
             append(MemoryRecords.withLeaderChangeMessage(0L,
+                quorum.epoch(),
                 new LeaderChangeMessageData()
                     .setLeaderId(state.election().leaderId())
                     .setGrantedVoters(
-                        state.followers().stream().map(
-                            followerId -> new Voter().setVoterId(followerId)).collect(Collectors.toList()))));
+                        state.followers().stream().map(follower ->
+                            new Voter().setVoterId(follower)).collect(Collectors.toList()))),
+                Optional.of(ControlRecordType.LEADER_CHANGE));
         }
 
         log.assignEpochStartOffset(quorum.epoch(), log.endOffset());
-
         electionTimer.reset(Long.MAX_VALUE);
         resetConnections();
     }
@@ -514,8 +515,8 @@ public class KafkaRaftClient implements RaftClient {
         electionTimer.reset(electionTimeoutMs);
     }
 
-    private OptionalLong maybeAppendAsLeader(LeaderState state, Records records) {
-        if (state.highWatermark().isPresent() && stateMachine.accept(records)) {
+    private OptionalLong maybeAppendAsLeader(LeaderState state, Records records, boolean isLeaderChangeMessage) {
+        if ((state.highWatermark().isPresent() || isLeaderChangeMessage) && stateMachine.accept(records)) {
             Long baseOffset = log.appendAsLeader(records, quorum.epoch());
             updateLeaderEndOffset(state);
             logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());
@@ -936,7 +937,9 @@ public class KafkaRaftClient implements RaftClient {
         } else if (quorum.isLeader()) {
             LeaderState leaderState = quorum.leaderStateOrThrow();
             int epoch = quorum.epoch();
-            OptionalLong baseOffsetOpt = maybeAppendAsLeader(leaderState, unsentAppend.records);
+            final boolean isLeaderChangeMessage = unsentAppend.recordType.isPresent() &&
+                                                      unsentAppend.recordType.get() == ControlRecordType.LEADER_CHANGE;
+            OptionalLong baseOffsetOpt = maybeAppendAsLeader(leaderState, unsentAppend.records, isLeaderChangeMessage);
             if (baseOffsetOpt.isPresent()) {
                 unsentAppend.complete(new OffsetAndEpoch(baseOffsetOpt.getAsLong(), epoch));
             } else {
@@ -946,19 +949,21 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     /**
-     * Append a set of records to the log. Acknowledgement of this
+     * Append a set of records to the log. Successful completion of the future indicates a success of
+     * the append, with the uncommitted base offset and epoch.
      *
-     * @param records The records to write to the log.
+     * @param records The records to write to the log
+     * @param recordType The record type if this is a control record batch
      * @return The uncommitted base offset and epoch of the appended records
      */
     @Override
-    public CompletableFuture<OffsetAndEpoch> append(Records records) {
+    public CompletableFuture<OffsetAndEpoch> append(Records records, Optional<ControlRecordType> recordType) {
         if (shutdown.get() != null)
             throw new IllegalStateException("Cannot append records while we are shutting down");
 
         CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
         PendingAppendRequest pendingAppendRequest = new PendingAppendRequest(
-            records, future, time.milliseconds(), requestTimeoutMs);
+            records, future, time.milliseconds(), requestTimeoutMs, recordType);
 
         if (!unsentAppends.offer(pendingAppendRequest)) {
             future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
@@ -1036,15 +1041,18 @@ public class KafkaRaftClient implements RaftClient {
         private final CompletableFuture<OffsetAndEpoch> future;
         private final long createTimeMs;
         private final long requestTimeoutMs;
+        private final Optional<ControlRecordType> recordType;
 
         private PendingAppendRequest(Records records,
                                      CompletableFuture<OffsetAndEpoch> future,
                                      long createTimeMs,
-                                     long requestTimeoutMs) {
+                                     long requestTimeoutMs,
+                                     Optional<ControlRecordType> recordType) {
             this.records = records;
             this.future = future;
             this.createTimeMs = createTimeMs;
             this.requestTimeoutMs = requestTimeoutMs;
+            this.recordType = recordType;
         }
 
         public void complete(OffsetAndEpoch offsetAndEpoch) {

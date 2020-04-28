@@ -17,6 +17,7 @@
 package org.apache.kafka.raft;
 
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
@@ -26,10 +27,12 @@ import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Utils;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
@@ -71,7 +74,7 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
     public synchronized CompletableFuture<OffsetAndEpoch> putAll(Map<K, V> map) {
         // Append returns after the data was accepted by the leader, but we need to wait
         // for it to be committed.
-        CompletableFuture<OffsetAndEpoch> appendFuture = client.append(buildRecords(map));
+        CompletableFuture<OffsetAndEpoch> appendFuture = client.append(buildRecords(map), Optional.empty());
         return appendFuture.thenCompose(offsetAndEpoch -> {
             synchronized (this) {
                 // It is possible when this is invoked that the operation has already been applied to
@@ -127,8 +130,15 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
             for (Record record : batch) {
                 byte[] keyBytes = Utils.toArray(record.key());
                 byte[] valueBytes = Utils.toArray(record.value());
+
                 K key = keySerde.deserializer().deserialize(null, keyBytes);
+                if (valueBytes.length != 4 &&
+                        ControlRecordType.parse(ByteBuffer.wrap(keyBytes)) == ControlRecordType.LEADER_CHANGE) {
+                    // Skip deserialization of control records.
+                    continue;
+                }
                 V value = valueSerde.deserializer().deserialize(null, valueBytes);
+
                 action.accept(key, value);
             }
         }
