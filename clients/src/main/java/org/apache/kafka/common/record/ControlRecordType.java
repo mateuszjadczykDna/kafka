@@ -43,6 +43,9 @@ import java.nio.ByteBuffer;
 public enum ControlRecordType {
     ABORT((short) 0),
     COMMIT((short) 1),
+    // Raft quorum related control messages.
+    QUORUM_REASSIGNMENT((short) 2),
+    LEADER_CHANGE_MESSAGE((short) 3),
 
     // UNKNOWN is used to indicate a control type which the client is not aware of and should be ignored
     UNKNOWN((short) -1);

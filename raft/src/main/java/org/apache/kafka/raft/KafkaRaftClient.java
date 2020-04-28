@@ -26,10 +26,13 @@ import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsResponseData;
 import org.apache.kafka.common.message.FindQuorumRequestData;
 import org.apache.kafka.common.message.FindQuorumResponseData;
+import org.apache.kafka.common.message.LeaderChangeMessageData;
+import org.apache.kafka.common.message.LeaderChangeMessageData.Voter;
 import org.apache.kafka.common.message.VoteRequestData;
 import org.apache.kafka.common.message.VoteResponseData;
 import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.LogContext;
@@ -55,6 +58,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * This class implements a Kafkaesque version of the Raft protocol. Leader election
@@ -221,7 +225,19 @@ public class KafkaRaftClient implements RaftClient {
     private void onBecomeLeader(LeaderState state) {
         stateMachine.becomeLeader(quorum.epoch());
         updateLeaderEndOffset(state);
+
+        // Add a control message for faster high watermark advance.
+        if (!log.endOffsetForEpoch(quorum.epoch()).isPresent()) {
+            append(MemoryRecords.withLeaderChangeMessage(0L,
+                new LeaderChangeMessageData()
+                    .setLeaderId(state.election().leaderId())
+                    .setGrantedVoters(
+                        state.followers().stream().map(
+                            followerId -> new Voter().setVoterId(followerId)).collect(Collectors.toList()))));
+        }
+
         log.assignEpochStartOffset(quorum.epoch(), log.endOffset());
+
         electionTimer.reset(Long.MAX_VALUE);
         resetConnections();
     }

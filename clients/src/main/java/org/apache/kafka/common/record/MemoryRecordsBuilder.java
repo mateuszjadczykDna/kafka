@@ -18,6 +18,7 @@ package org.apache.kafka.common.record;
 
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.message.LeaderChangeMessageData;
 import org.apache.kafka.common.protocol.types.Struct;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
@@ -74,7 +75,7 @@ public class MemoryRecordsBuilder implements AutoCloseable {
     private int uncompressedRecordsSizeInBytes = 0; // Number of bytes (excluding the header) written before compression
     private int numRecords = 0;
     private float actualCompressionRatio = 1;
-    private long maxTimestamp = RecordBatch.NO_TIMESTAMP;
+    private long maxTimestamp;
     private long offsetOfMaxTimestamp = -1;
     private Long lastOffset = null;
     private Long firstTimestamp = null;
@@ -565,6 +566,12 @@ public class MemoryRecordsBuilder implements AutoCloseable {
             throw new IllegalArgumentException("End transaction marker depends on batch transactional flag being enabled");
         ByteBuffer value = marker.serializeValue();
         return appendControlRecord(timestamp, marker.controlType(), value);
+    }
+
+    public Long appendLeaderChangeMessage(long timestamp, LeaderChangeMessageData leaderChangeMessage) {
+        ByteBuffer serializedMessage = ByteBuffer.wrap(leaderChangeMessage.toJson(
+            leaderChangeMessage.highestSupportedVersion()).toString().getBytes());
+        return appendControlRecord(timestamp, ControlRecordType.LEADER_CHANGE_MESSAGE, serializedMessage);
     }
 
     /**

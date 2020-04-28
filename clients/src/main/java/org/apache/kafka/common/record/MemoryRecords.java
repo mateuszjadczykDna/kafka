@@ -18,6 +18,7 @@ package org.apache.kafka.common.record;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.CorruptRecordException;
+import org.apache.kafka.common.message.LeaderChangeMessageData;
 import org.apache.kafka.common.record.MemoryRecords.RecordFilter.BatchRetention;
 import org.apache.kafka.common.utils.AbstractIterator;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
@@ -637,4 +638,19 @@ public class MemoryRecords extends AbstractRecords {
         builder.close();
     }
 
+    public static MemoryRecords withLeaderChangeMessage(long timestamp, LeaderChangeMessageData leaderChangeMessage) {
+        ByteBuffer buffer = ByteBuffer.allocate(leaderChangeMessage.toStruct(leaderChangeMessage.highestSupportedVersion()).sizeOf());
+        writeLeaderChangeMessage(buffer, 0L, timestamp, leaderChangeMessage);
+        buffer.flip();
+        return MemoryRecords.readableRecords(buffer);
+    }
+
+    private static void writeLeaderChangeMessage(ByteBuffer buffer, long initialOffset, long timestamp, LeaderChangeMessageData leaderChangeMessage) {
+        MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, RecordBatch.CURRENT_MAGIC_VALUE, CompressionType.NONE,
+            TimestampType.CREATE_TIME, initialOffset, timestamp,
+            RecordBatch.NO_PRODUCER_ID, RecordBatch.NO_PRODUCER_EPOCH, RecordBatch.NO_SEQUENCE,
+            false, false, RecordBatch.NO_PARTITION_LEADER_EPOCH, buffer.capacity());
+        builder.appendLeaderChangeMessage(timestamp, leaderChangeMessage);
+        builder.close();
+    }
 }

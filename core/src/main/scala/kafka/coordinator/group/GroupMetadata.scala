@@ -759,7 +759,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
   def allOffsets = offsets.map { case (topicPartition, commitRecordMetadataAndOffset) =>
     (topicPartition, commitRecordMetadataAndOffset.offsetAndMetadata)
   }.toMap
-
+  
   def offset(topicPartition: TopicPartition): Option[OffsetAndMetadata] = offsets.get(topicPartition).map(_.offsetAndMetadata)
 
   // visible for testing
