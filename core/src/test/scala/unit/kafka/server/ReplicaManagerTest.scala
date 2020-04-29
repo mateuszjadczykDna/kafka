@@ -1367,13 +1367,13 @@ class ReplicaManagerTest {
     EasyMock.replay(metadataCache)
 
     val timer = new MockTimer
-    val mockProducePurgatory = new DelayedOperationPurgatory[DelayedProduce](
+    val mockProducePurgatory = new DelayedOperationPurgatoryImpl[DelayedProduce](
       purgatoryName = "Produce", timer, reaperEnabled = false)
-    val mockFetchPurgatory = new DelayedOperationPurgatory[DelayedFetch](
+    val mockFetchPurgatory = new DelayedOperationPurgatoryImpl[DelayedFetch](
       purgatoryName = "Fetch", timer, reaperEnabled = false)
-    val mockDeleteRecordsPurgatory = new DelayedOperationPurgatory[DelayedDeleteRecords](
+    val mockDeleteRecordsPurgatory = new DelayedOperationPurgatoryImpl[DelayedDeleteRecords](
       purgatoryName = "DeleteRecords", timer, reaperEnabled = false)
-    val mockElectLeaderPurgatory = new DelayedOperationPurgatory[DelayedElectLeader](
+    val mockElectLeaderPurgatory = new DelayedOperationPurgatoryImpl[DelayedElectLeader](
       purgatoryName = "ElectLeader", timer, reaperEnabled = false)
 
     // Mock network client to show leader offset of 5
@@ -1545,13 +1545,13 @@ class ReplicaManagerTest {
         .thenReturn(Option(createBroker(brokerId, s"host$brokerId", brokerId)))
     }
 
-    val mockProducePurgatory = new DelayedOperationPurgatory[DelayedProduce](
+    val mockProducePurgatory = new DelayedOperationPurgatoryImpl[DelayedProduce](
       purgatoryName = "Produce", timer, reaperEnabled = false)
-    val mockFetchPurgatory = new DelayedOperationPurgatory[DelayedFetch](
+    val mockFetchPurgatory = new DelayedOperationPurgatoryImpl[DelayedFetch](
       purgatoryName = "Fetch", timer, reaperEnabled = false)
-    val mockDeleteRecordsPurgatory = new DelayedOperationPurgatory[DelayedDeleteRecords](
+    val mockDeleteRecordsPurgatory = new DelayedOperationPurgatoryImpl[DelayedDeleteRecords](
       purgatoryName = "DeleteRecords", timer, reaperEnabled = false)
-    val mockDelayedElectLeaderPurgatory = new DelayedOperationPurgatory[DelayedElectLeader](
+    val mockDelayedElectLeaderPurgatory = new DelayedOperationPurgatoryImpl[DelayedElectLeader](
       purgatoryName = "DelayedElectLeader", timer, reaperEnabled = false)
 
     new ReplicaManager(config, metrics, time, kafkaZkClient, new MockScheduler(time), mockLogMgr,

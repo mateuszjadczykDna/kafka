@@ -54,8 +54,8 @@ class GroupCoordinator(val brokerId: Int,
                        val groupConfig: GroupConfig,
                        val offsetConfig: OffsetConfig,
                        val groupManager: GroupMetadataManager,
-                       val heartbeatPurgatory: DelayedOperationPurgatory[DelayedHeartbeat],
-                       val joinPurgatory: DelayedOperationPurgatory[DelayedJoin],
+                       val heartbeatPurgatory: DelayedOperationPurgatoryImpl[DelayedHeartbeat],
+                       val joinPurgatory: DelayedOperationPurgatoryImpl[DelayedJoin],
                        time: Time,
                        metrics: Metrics) extends Logging {
   import GroupCoordinator._
@@ -1259,8 +1259,8 @@ object GroupCoordinator {
             replicaManager: ReplicaManager,
             time: Time,
             metrics: Metrics): GroupCoordinator = {
-    val heartbeatPurgatory = DelayedOperationPurgatory[DelayedHeartbeat]("Heartbeat", config.brokerId)
-    val joinPurgatory = DelayedOperationPurgatory[DelayedJoin]("Rebalance", config.brokerId)
+    val heartbeatPurgatory = DelayedOperationPurgatoryImpl[DelayedHeartbeat]("Heartbeat", config.brokerId)
+    val joinPurgatory = DelayedOperationPurgatoryImpl[DelayedJoin]("Rebalance", config.brokerId)
     apply(config, zkClient, replicaManager, heartbeatPurgatory, joinPurgatory, time, metrics)
   }
 
@@ -1280,8 +1280,8 @@ object GroupCoordinator {
   def apply(config: KafkaConfig,
             zkClient: KafkaZkClient,
             replicaManager: ReplicaManager,
-            heartbeatPurgatory: DelayedOperationPurgatory[DelayedHeartbeat],
-            joinPurgatory: DelayedOperationPurgatory[DelayedJoin],
+            heartbeatPurgatory: DelayedOperationPurgatoryImpl[DelayedHeartbeat],
+            joinPurgatory: DelayedOperationPurgatoryImpl[DelayedJoin],
             time: Time,
             metrics: Metrics): GroupCoordinator = {
     val offsetConfig = this.offsetConfig(config)

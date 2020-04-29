@@ -87,9 +87,9 @@ class ZkPartitionStateStore(topicPartition: TopicPartition,
 }
 
 class DelayedOperations(topicPartition: TopicPartition,
-                        produce: DelayedOperationPurgatory[DelayedProduce],
-                        fetch: DelayedOperationPurgatory[DelayedFetch],
-                        deleteRecords: DelayedOperationPurgatory[DelayedDeleteRecords]) {
+                        produce: DelayedOperationPurgatoryImpl[DelayedProduce],
+                        fetch: DelayedOperationPurgatoryImpl[DelayedFetch],
+                        deleteRecords: DelayedOperationPurgatoryImpl[DelayedDeleteRecords]) {
 
   def checkAndCompleteAll(): Unit = {
     val requestKey = TopicPartitionOperationKey(topicPartition)

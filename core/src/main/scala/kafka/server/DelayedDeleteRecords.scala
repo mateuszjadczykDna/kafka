@@ -45,7 +45,7 @@ class DelayedDeleteRecords(delayMs: Long,
                            deleteRecordsStatus:  Map[TopicPartition, DeleteRecordsPartitionStatus],
                            replicaManager: ReplicaManager,
                            responseCallback: Map[TopicPartition, DeleteRecordsResponseData.DeleteRecordsPartitionResult] => Unit)
-  extends DelayedOperation(delayMs) {
+  extends DelayedOperationImpl(delayMs) {
 
   // first update the acks pending variable according to the error code
   deleteRecordsStatus.foreach { case (topicPartition, status) =>

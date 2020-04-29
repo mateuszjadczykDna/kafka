@@ -34,7 +34,7 @@ class DelayedDeleteTopics(delayMs: Long,
                           deleteMetadata: Seq[DeleteTopicMetadata],
                           adminManager: AdminManager,
                           responseCallback: Map[String, Errors] => Unit)
-  extends DelayedOperation(delayMs) {
+  extends DelayedOperationImpl(delayMs) {
 
   /**
     * The operation can be completed if all of the topics not in error have been removed

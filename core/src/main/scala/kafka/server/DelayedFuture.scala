@@ -32,7 +32,7 @@ import scala.collection.Seq
 class DelayedFuture[T](timeoutMs: Long,
                        futures: Seq[CompletableFuture[T]],
                        responseCallback: () => Unit)
-  extends DelayedOperation(timeoutMs) {
+  extends DelayedOperationImpl(timeoutMs) {
 
   /**
    * The operation can be completed if all the futures have completed successfully
@@ -70,7 +70,7 @@ class DelayedFuture[T](timeoutMs: Long,
 }
 
 class DelayedFuturePurgatory(purgatoryName: String, brokerId: Int) {
-  private val purgatory = DelayedOperationPurgatory[DelayedFuture[_]](purgatoryName, brokerId)
+  private val purgatory = DelayedOperationPurgatoryImpl[DelayedFuture[_]](purgatoryName, brokerId)
   private val executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
     new LinkedBlockingQueue[Runnable](),
     new ThreadFactory {

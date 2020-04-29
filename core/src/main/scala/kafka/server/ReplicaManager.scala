@@ -165,10 +165,10 @@ class ReplicaManager(val config: KafkaConfig,
                      val brokerTopicStats: BrokerTopicStats,
                      val metadataCache: MetadataCache,
                      logDirFailureChannel: LogDirFailureChannel,
-                     val delayedProducePurgatory: DelayedOperationPurgatory[DelayedProduce],
-                     val delayedFetchPurgatory: DelayedOperationPurgatory[DelayedFetch],
-                     val delayedDeleteRecordsPurgatory: DelayedOperationPurgatory[DelayedDeleteRecords],
-                     val delayedElectLeaderPurgatory: DelayedOperationPurgatory[DelayedElectLeader],
+                     val delayedProducePurgatory: DelayedOperationPurgatoryImpl[DelayedProduce],
+                     val delayedFetchPurgatory: DelayedOperationPurgatoryImpl[DelayedFetch],
+                     val delayedDeleteRecordsPurgatory: DelayedOperationPurgatoryImpl[DelayedDeleteRecords],
+                     val delayedElectLeaderPurgatory: DelayedOperationPurgatoryImpl[DelayedElectLeader],
                      threadNamePrefix: Option[String]) extends Logging with KafkaMetricsGroup {
 
   def this(config: KafkaConfig,
@@ -185,16 +185,16 @@ class ReplicaManager(val config: KafkaConfig,
            threadNamePrefix: Option[String] = None) = {
     this(config, metrics, time, zkClient, scheduler, logManager, isShuttingDown,
       quotaManagers, brokerTopicStats, metadataCache, logDirFailureChannel,
-      DelayedOperationPurgatory[DelayedProduce](
+      DelayedOperationPurgatoryImpl[DelayedProduce](
         purgatoryName = "Produce", brokerId = config.brokerId,
         purgeInterval = config.producerPurgatoryPurgeIntervalRequests),
-      DelayedOperationPurgatory[DelayedFetch](
+      DelayedOperationPurgatoryImpl[DelayedFetch](
         purgatoryName = "Fetch", brokerId = config.brokerId,
         purgeInterval = config.fetchPurgatoryPurgeIntervalRequests),
-      DelayedOperationPurgatory[DelayedDeleteRecords](
+      DelayedOperationPurgatoryImpl[DelayedDeleteRecords](
         purgatoryName = "DeleteRecords", brokerId = config.brokerId,
         purgeInterval = config.deleteRecordsPurgatoryPurgeIntervalRequests),
-      DelayedOperationPurgatory[DelayedElectLeader](
+      DelayedOperationPurgatoryImpl[DelayedElectLeader](
         purgatoryName = "ElectLeader", brokerId = config.brokerId),
       threadNamePrefix)
   }

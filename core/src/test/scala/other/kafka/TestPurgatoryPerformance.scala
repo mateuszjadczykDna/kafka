@@ -23,7 +23,7 @@ import java.util.Random
 import java.util.concurrent._
 
 import joptsimple._
-import kafka.server.{DelayedOperation, DelayedOperationPurgatory}
+import kafka.server.{DelayedOperationImpl, DelayedOperationPurgatoryImpl}
 import kafka.utils._
 import org.apache.kafka.common.utils.Time
 
@@ -96,7 +96,7 @@ object TestPurgatoryPerformance {
     val latencySamples = new LatencySamples(1000000, pct75, pct50)
     val intervalSamples = new IntervalSamples(1000000, requestRate)
 
-    val purgatory = DelayedOperationPurgatory[FakeOperation]("fake purgatory")
+    val purgatory = DelayedOperationPurgatoryImpl[FakeOperation]("fake purgatory")
     val queue = new CompletionQueue()
 
     val gcNames = gcMXBeans.map(_.getName)
@@ -237,7 +237,7 @@ object TestPurgatoryPerformance {
     }
   }
 
-  private class FakeOperation(delayMs: Long, size: Int, val latencyMs: Long, latch: CountDownLatch) extends DelayedOperation(delayMs) {
+  private class FakeOperation(delayMs: Long, size: Int, val latencyMs: Long, latch: CountDownLatch) extends DelayedOperationImpl(delayMs) {
     val completesAt = System.currentTimeMillis + latencyMs
 
     def onExpiration(): Unit = {}

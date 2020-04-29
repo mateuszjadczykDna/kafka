@@ -17,7 +17,7 @@
 
 package kafka.coordinator.group
 
-import kafka.server.{DelayedOperation, DelayedOperationPurgatory, GroupKey}
+import kafka.server.{DelayedOperationImpl, DelayedOperationPurgatoryImpl, GroupKey}
 
 import scala.math.{max, min}
 
@@ -33,7 +33,7 @@ import scala.math.{max, min}
  */
 private[group] class DelayedJoin(coordinator: GroupCoordinator,
                                  group: GroupMetadata,
-                                 rebalanceTimeout: Long) extends DelayedOperation(rebalanceTimeout, Some(group.lock)) {
+                                 rebalanceTimeout: Long) extends DelayedOperationImpl(rebalanceTimeout, Some(group.lock)) {
 
   override def tryComplete(): Boolean = coordinator.tryCompleteJoin(group, forceComplete _)
   override def onExpiration() = coordinator.onExpireJoin()
@@ -49,7 +49,7 @@ private[group] class DelayedJoin(coordinator: GroupCoordinator,
   * rebalance.
   */
 private[group] class InitialDelayedJoin(coordinator: GroupCoordinator,
-                                        purgatory: DelayedOperationPurgatory[DelayedJoin],
+                                        purgatory: DelayedOperationPurgatoryImpl[DelayedJoin],
                                         group: GroupMetadata,
                                         configuredRebalanceDelay: Int,
                                         delayMs: Int,

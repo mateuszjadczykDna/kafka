@@ -17,6 +17,7 @@
 
 package kafka.server
 
+import java.util
 import java.util.concurrent._
 import java.util.concurrent.atomic._
 import java.util.concurrent.locks.{Lock, ReentrantLock}
@@ -25,31 +26,32 @@ import kafka.metrics.KafkaMetricsGroup
 import kafka.utils.CoreUtils.inLock
 import kafka.utils._
 import kafka.utils.timer._
+import org.apache.kafka.purgatory.{DelayedOperation, DelayedOperationPurgatory}
 
 import scala.collection._
 import scala.collection.mutable.ListBuffer
 
 /**
- * An operation whose processing needs to be delayed for at most the given delayMs. For example
- * a delayed produce operation could be waiting for specified number of acks; or
- * a delayed fetch operation could be waiting for a given number of bytes to accumulate.
- *
- * The logic upon completing a delayed operation is defined in onComplete() and will be called exactly once.
- * Once an operation is completed, isCompleted() will return true. onComplete() can be triggered by either
- * forceComplete(), which forces calling onComplete() after delayMs if the operation is not yet completed,
- * or tryComplete(), which first checks if the operation can be completed or not now, and if yes calls
- * forceComplete().
- *
- * A subclass of DelayedOperation needs to provide an implementation of both onComplete() and tryComplete().
- */
-abstract class DelayedOperation(override val delayMs: Long,
-                                lockOpt: Option[Lock] = None)
-  extends TimerTask with Logging {
+  * An operation whose processing needs to be delayed for at most the given delayMs. For example
+  * a delayed produce operation could be waiting for specified number of acks; or
+  * a delayed fetch operation could be waiting for a given number of bytes to accumulate.
+  *
+  * The logic upon completing a delayed operation is defined in onComplete() and will be called exactly once.
+  * Once an operation is completed, isCompleted() will return true. onComplete() can be triggered by either
+  * forceComplete(), which forces calling onComplete() after delayMs if the operation is not yet completed,
+  * or tryComplete(), which first checks if the operation can be completed or not now, and if yes calls
+  * forceComplete().
+  *
+  * A subclass of DelayedOperation needs to provide an implementation of both onComplete() and tryComplete().
+  */
+abstract class DelayedOperationImpl(override val delayMs: Long,
+                                    lockOpt: Option[Lock] = None)
+  extends DelayedOperation with TimerTask with Logging {
 
   private val completed = new AtomicBoolean(false)
   private val tryCompletePending = new AtomicBoolean(false)
   // Visible for testing
-  private[server] val lock: Lock = lockOpt.getOrElse(new ReentrantLock)
+  private[server] val lock = lockOpt.getOrElse(new ReentrantLock)
 
   /*
    * Force completing the delayed operation, if not already completed.
@@ -63,16 +65,12 @@ abstract class DelayedOperation(override val delayMs: Long,
    * the first thread will succeed in completing the operation and return
    * true, others will still return false
    */
-  def forceComplete(): Boolean = {
-    if (completed.compareAndSet(false, true)) {
-      // cancel the timeout timer
-      cancel()
-      onComplete()
-      true
-    } else {
-      false
-    }
-  }
+  def forceComplete(): Boolean = if (completed.compareAndSet(false, true)) {
+    // cancel the timeout timer
+    cancel()
+    onComplete()
+    true
+  } else false
 
   /**
    * Check if the delayed operation is already completed
@@ -82,13 +80,13 @@ abstract class DelayedOperation(override val delayMs: Long,
   /**
    * Call-back to execute when a delayed operation gets expired and hence forced to complete.
    */
-  def onExpiration(): Unit
+  override def onExpiration(): Unit
 
   /**
    * Process for completing an operation; This function needs to be defined
    * in subclasses and will be called exactly once in forceComplete()
    */
-  def onComplete(): Unit
+  override def onComplete(): Unit
 
   /**
    * Try to complete the delayed operation by first checking if the operation
@@ -97,7 +95,7 @@ abstract class DelayedOperation(override val delayMs: Long,
    *
    * This function needs to be defined in subclasses
    */
-  def tryComplete(): Boolean
+  override def tryComplete(): Boolean
 
   /**
    * Thread-safe variant of tryComplete() that attempts completion only if the lock can be acquired
@@ -111,27 +109,23 @@ abstract class DelayedOperation(override val delayMs: Long,
    * every invocation of `maybeTryComplete` is followed by at least one invocation of `tryComplete` until
    * the operation is actually completed.
    */
-  private[server] def maybeTryComplete(): Boolean = {
+  private[server] def maybeTryComplete() = {
     var retry = false
     var done = false
-    do {
-      if (lock.tryLock()) {
-        try {
-          tryCompletePending.set(false)
-          done = tryComplete()
-        } finally {
-          lock.unlock()
-        }
-        // While we were holding the lock, another thread may have invoked `maybeTryComplete` and set
-        // `tryCompletePending`. In this case we should retry.
-        retry = tryCompletePending.get()
-      } else {
-        // Another thread is holding the lock. If `tryCompletePending` is already set and this thread failed to
-        // acquire the lock, then the thread that is holding the lock is guaranteed to see the flag and retry.
-        // Otherwise, we should set the flag and retry on this thread since the thread holding the lock may have
-        // released the lock and returned by the time the flag is set.
-        retry = !tryCompletePending.getAndSet(true)
-      }
+    do if (lock.tryLock()) {
+      try {
+        tryCompletePending.set(false)
+        done = tryComplete()
+      } finally lock.unlock()
+      // While we were holding the lock, another thread may have invoked `maybeTryComplete` and set
+      // `tryCompletePending`. In this case we should retry.
+      retry = tryCompletePending.get()
+    } else {
+      // Another thread is holding the lock. If `tryCompletePending` is already set and this thread failed to
+      // acquire the lock, then the thread that is holding the lock is guaranteed to see the flag and retry.
+      // Otherwise, we should set the flag and retry on this thread since the thread holding the lock may have
+      // released the lock and returned by the time the flag is set.
+      retry = !tryCompletePending.getAndSet(true)
     } while (!isCompleted && retry)
     done
   }
@@ -145,17 +139,17 @@ abstract class DelayedOperation(override val delayMs: Long,
   }
 }
 
-object DelayedOperationPurgatory {
+object DelayedOperationPurgatoryImpl {
 
   private val Shards = 512 // Shard the watcher list to reduce lock contention
 
-  def apply[T <: DelayedOperation](purgatoryName: String,
-                                   brokerId: Int = 0,
-                                   purgeInterval: Int = 1000,
-                                   reaperEnabled: Boolean = true,
-                                   timerEnabled: Boolean = true): DelayedOperationPurgatory[T] = {
+  def apply[T <: DelayedOperationImpl](purgatoryName: String,
+                                       brokerId: Int = 0,
+                                       purgeInterval: Int = 1000,
+                                       reaperEnabled: Boolean = true,
+                                       timerEnabled: Boolean = true): DelayedOperationPurgatoryImpl[T] = {
     val timer = new SystemTimer(purgatoryName)
-    new DelayedOperationPurgatory[T](purgatoryName, timer, brokerId, purgeInterval, reaperEnabled, timerEnabled)
+    new DelayedOperationPurgatoryImpl[T](purgatoryName, timer, brokerId, purgeInterval, reaperEnabled, timerEnabled)
   }
 
 }
@@ -163,13 +157,13 @@ object DelayedOperationPurgatory {
 /**
  * A helper purgatory class for bookkeeping delayed operations with a timeout, and expiring timed out operations.
  */
-final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: String,
-                                                             timeoutTimer: Timer,
-                                                             brokerId: Int = 0,
-                                                             purgeInterval: Int = 1000,
-                                                             reaperEnabled: Boolean = true,
-                                                             timerEnabled: Boolean = true)
-        extends Logging with KafkaMetricsGroup {
+final class DelayedOperationPurgatoryImpl[T <: DelayedOperationImpl](purgatoryName: String,
+                                                                     timeoutTimer: Timer,
+                                                                     brokerId: Int = 0,
+                                                                     purgeInterval: Int = 1000,
+                                                                     reaperEnabled: Boolean = true,
+                                                                     timerEnabled: Boolean = true)
+        extends DelayedOperationPurgatory[T] with Logging with KafkaMetricsGroup {
   /* a list of operation watching keys */
   private class WatcherList {
     val watchersByKey = new Pool[Any, Watchers](Some((key: Any) => new Watchers(key)))
@@ -185,7 +179,7 @@ final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: Stri
     }
   }
 
-  private val watcherLists = Array.fill[WatcherList](DelayedOperationPurgatory.Shards)(new WatcherList)
+  private val watcherLists = Array.fill[WatcherList](DelayedOperationPurgatoryImpl.Shards)(new WatcherList)
   private def watcherList(key: Any): WatcherList = {
     watcherLists(Math.abs(key.hashCode() % watcherLists.length))
   }
@@ -216,6 +210,11 @@ final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: Stri
    * @param watchKeys keys for bookkeeping the operation
    * @return true iff the delayed operations can be completed by the caller
    */
+  override def tryCompleteElseWatch(operation: T, watchKeys: util.List[AnyRef]): Boolean = {
+    tryCompleteElseWatch(operation, Seq(watchKeys))
+  }
+
+  // The scala convention caller.
   def tryCompleteElseWatch(operation: T, watchKeys: Seq[Any]): Boolean = {
     assert(watchKeys.nonEmpty, "The watch key list can't be empty")
 
@@ -271,7 +270,7 @@ final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: Stri
    *
    * @return the number of completed operations during this process
    */
-  def checkAndComplete(key: Any): Int = {
+  override def checkAndComplete(key: Any): Int = {
     val wl = watcherList(key)
     val watchers = inLock(wl.watchersLock) { wl.watchersByKey.get(key) }
     val numCompleted = if (watchers == null)
@@ -449,4 +448,19 @@ final class DelayedOperationPurgatory[T <: DelayedOperation](purgatoryName: Stri
       advanceClock(200L)
     }
   }
+//
+//  /**
+//    * Check if the operation can be completed, if not watch it based on the given watch keys
+//    *
+//    * Note that a delayed operation can be watched on multiple keys. It is possible that
+//    * an operation is completed after it has been added to the watch list for some, but
+//    * not all of the keys. In this case, the operation is considered completed and won't
+//    * be added to the watch list of the remaining keys. The expiration reaper thread will
+//    * remove this operation from any watcher list in which the operation exists.
+//    *
+//    * @param operation the delayed operation to be checked
+//    * @param watchKeys keys for bookkeeping the operation
+//    * @return true iff the delayed operations can be completed by the caller
+//    */
+//  override def tryCompleteElseWatch(operation: T, watchKeys: util.List[AnyRef]): Boolean = ???
 }

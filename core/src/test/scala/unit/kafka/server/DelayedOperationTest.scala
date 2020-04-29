@@ -33,12 +33,12 @@ import scala.jdk.CollectionConverters._
 
 class DelayedOperationTest {
 
-  var purgatory: DelayedOperationPurgatory[MockDelayedOperation] = null
+  var purgatory: DelayedOperationPurgatoryImpl[MockDelayedOperation] = null
   var executorService: ExecutorService = null
 
   @Before
   def setUp(): Unit = {
-    purgatory = DelayedOperationPurgatory[MockDelayedOperation](purgatoryName = "mock")
+    purgatory = DelayedOperationPurgatoryImpl[MockDelayedOperation](purgatoryName = "mock")
   }
 
   @After
@@ -389,7 +389,7 @@ class DelayedOperationTest {
   class MockDelayedOperation(delayMs: Long,
                              lockOpt: Option[ReentrantLock] = None,
                              val responseLockOpt: Option[ReentrantLock] = None)
-                             extends DelayedOperation(delayMs, lockOpt) {
+                             extends DelayedOperationImpl(delayMs, lockOpt) {
     var completable = false
 
     def awaitExpiration(): Unit = {

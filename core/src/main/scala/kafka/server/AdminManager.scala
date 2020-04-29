@@ -55,7 +55,7 @@ class AdminManager(val config: KafkaConfig,
 
   this.logIdent = "[Admin Manager on Broker " + config.brokerId + "]: "
 
-  private val topicPurgatory = DelayedOperationPurgatory[DelayedOperation]("topic", config.brokerId)
+  private val topicPurgatory = DelayedOperationPurgatoryImpl[DelayedOperationImpl]("topic", config.brokerId)
   private val adminZkClient = new AdminZkClient(zkClient)
 
   private val createTopicPolicy =

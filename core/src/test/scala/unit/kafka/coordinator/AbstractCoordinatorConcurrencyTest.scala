@@ -160,10 +160,10 @@ object AbstractCoordinatorConcurrencyTest {
   class TestReplicaManager extends ReplicaManager(
     null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, None) {
 
-    var producePurgatory: DelayedOperationPurgatory[DelayedProduce] = _
+    var producePurgatory: DelayedOperationPurgatoryImpl[DelayedProduce] = _
     var watchKeys: mutable.Set[TopicPartitionOperationKey] = _
     def createDelayedProducePurgatory(timer: MockTimer): Unit = {
-      producePurgatory = new DelayedOperationPurgatory[DelayedProduce]("Produce", timer, 1, reaperEnabled = false)
+      producePurgatory = new DelayedOperationPurgatoryImpl[DelayedProduce]("Produce", timer, 1, reaperEnabled = false)
       watchKeys = Collections.newSetFromMap(new ConcurrentHashMap[TopicPartitionOperationKey, java.lang.Boolean]()).asScala
     }
     def tryCompleteDelayedRequests(): Unit = {

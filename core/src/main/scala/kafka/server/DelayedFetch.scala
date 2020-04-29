@@ -65,7 +65,7 @@ class DelayedFetch(delayMs: Long,
                    quota: ReplicaQuota,
                    clientMetadata: Option[ClientMetadata],
                    responseCallback: Seq[(TopicPartition, FetchPartitionData)] => Unit)
-  extends DelayedOperation(delayMs) {
+  extends DelayedOperationImpl(delayMs) {
 
   /**
    * The operation can be completed if:

@@ -54,7 +54,7 @@ class DelayedProduce(delayMs: Long,
                      replicaManager: ReplicaManager,
                      responseCallback: Map[TopicPartition, PartitionResponse] => Unit,
                      lockOpt: Option[Lock] = None)
-  extends DelayedOperation(delayMs, lockOpt) {
+  extends DelayedOperationImpl(delayMs, lockOpt) {
 
   // first update the acks pending variable according to the error code
   produceMetadata.produceStatus.foreach { case (topicPartition, status) =>

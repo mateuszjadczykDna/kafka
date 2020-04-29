@@ -35,6 +35,8 @@ import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
+import org.apache.kafka.purgatory.DelayedOperation;
+import org.apache.kafka.purgatory.DelayedOperationPurgatory;
 import org.apache.kafka.raft.ConnectionCache.HostInfo;
 import org.slf4j.Logger;
 
@@ -116,8 +118,10 @@ public class KafkaRaftClient implements RaftClient {
     private final Random random = new Random();
     private final ConnectionCache connections;
 
+
     private BlockingQueue<PendingAppendRequest> unsentAppends;
     private DistributedStateMachine stateMachine;
+    private final DelayedOperationPurgatory<DelayedOperation> fetchRecordsPurgatory;
 
     public KafkaRaftClient(NetworkChannel channel,
                            ReplicatedLog log,
@@ -129,7 +133,8 @@ public class KafkaRaftClient implements RaftClient {
                            int electionJitterMs,
                            int retryBackoffMs,
                            int requestTimeoutMs,
-                           LogContext logContext) {
+                           LogContext logContext,
+                           DelayedOperationPurgatory<DelayedOperation> fetchRecordsPurgatory) {
         this.channel = channel;
         this.log = log;
         this.quorum = quorum;
@@ -146,6 +151,7 @@ public class KafkaRaftClient implements RaftClient {
             retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
         this.connections.maybeUpdate(quorum.localId, new HostInfo(advertisedListener, bootTimestamp));
+        this.fetchRecordsPurgatory = fetchRecordsPurgatory;
     }
 
     private void applyCommittedRecordsToStateMachine() {
