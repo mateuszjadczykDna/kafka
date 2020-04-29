@@ -568,7 +568,14 @@ public class MemoryRecordsBuilder implements AutoCloseable {
         return appendControlRecord(timestamp, marker.controlType(), value);
     }
 
+    /**
+     * Return CRC of the record or null if record-level CRC is not supported for the message format
+     */
     public Long appendLeaderChangeMessage(long timestamp, LeaderChangeMessageData leaderChangeMessage) {
+        if (partitionLeaderEpoch == RecordBatch.NO_PARTITION_LEADER_EPOCH) {
+            throw new IllegalArgumentException("Partition leader epoch must be valid, but get " + partitionLeaderEpoch);
+        }
+
         Struct messageStruct = leaderChangeMessage.toStruct(leaderChangeMessage.highestSupportedVersion());
         ByteBuffer serializedMessage = ByteBuffer.allocate(messageStruct.sizeOf());
         messageStruct.writeTo(serializedMessage);
