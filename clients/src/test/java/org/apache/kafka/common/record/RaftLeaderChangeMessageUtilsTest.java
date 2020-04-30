@@ -18,21 +18,19 @@ package org.apache.kafka.common.record;
 
 import org.apache.kafka.common.message.LeaderChangeMessageData;
 import org.apache.kafka.common.message.LeaderChangeMessageData.Voter;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collections;
-
-import static org.junit.Assert.*;
 
 public class RaftLeaderChangeMessageUtilsTest {
 
     @Test
     public void testInvalidControlRecordType() {
-        IllegalArgumentException thrown = assertThrows(
+        IllegalArgumentException thrown = Assert.assertThrows(
             IllegalArgumentException.class, () -> testDeserializeRecord(ControlRecordType.COMMIT));
-        assertEquals("Expected LEADER_CHANGE control record type(3), but get 1", thrown.getMessage());
+        Assert.assertEquals("Expected LEADER_CHANGE control record type(3), but get 1", thrown.getMessage());
     }
 
     @Test
@@ -60,15 +58,13 @@ public class RaftLeaderChangeMessageUtilsTest {
 
         LeaderChangeMessageData deserializedData = RaftLeaderChangeMessageUtils.deserialize(record);
 
-        assertEquals(leaderId, deserializedData.leaderId());
-        assertEquals(Collections.singletonList(
+        Assert.assertEquals(leaderId, deserializedData.leaderId());
+        Assert.assertEquals(Collections.singletonList(
             new Voter().setVoterId(voterId)), deserializedData.grantedVoters());
     }
 
     @Test
     public void testGetMessageSize() {
-        assertEquals(256, RaftLeaderChangeMessageUtils.getLeaderChangeMessageSize());
+        Assert.assertEquals(256, RaftLeaderChangeMessageUtils.getLeaderChangeMessageSize());
     }
-
-
 }

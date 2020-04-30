@@ -67,11 +67,10 @@ public class SimpleKeyValueStoreTest {
 
         CompletableFuture<OffsetAndEpoch> future = store.put(0, 1);
         manager.poll();
-        manager.poll();
+
         assertTrue(future.isDone());
         // The control record takes up one offset.
         assertEquals(new OffsetAndEpoch(1L, 1), future.get());
         assertEquals(1, store.get(0).intValue());
     }
-
 }

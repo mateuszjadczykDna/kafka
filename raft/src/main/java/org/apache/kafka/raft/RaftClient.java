@@ -16,18 +16,16 @@
  */
 package org.apache.kafka.raft;
 
-import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.Records;
 
 import java.io.IOException;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 public interface RaftClient {
 
     /**
      * Initialize the state machine that will be used by this client. This should
-     * only be called once after creation and calls to {@link #append(Records, Optional)} should
+     * only be called once after creation and calls to {@link #append(Records)} should
      * be made until this method returns.
      *
      * @param stateMachine The state machine implementation
@@ -45,10 +43,17 @@ public interface RaftClient {
      * This method must be thread-safe.
      *
      * @param records The records to append to the log
-     * @param recordType control record type if any
      * @return A future containing the base offset and epoch of the appended records (if successful)
      */
-    CompletableFuture<OffsetAndEpoch> append(Records records, Optional<ControlRecordType> recordType);
+    CompletableFuture<OffsetAndEpoch> append(Records records);
+
+    /**
+     * Append a control record to the log. The client must be in the leader state to
+     * accept a control record append. The control record append happens immediately.
+     *
+     * @param controlRecord the control record
+     */
+    OffsetAndEpoch appendControlRecord(Records controlRecord);
 
     /**
      * Shutdown the client.

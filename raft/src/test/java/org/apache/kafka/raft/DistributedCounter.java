@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -111,7 +110,7 @@ public class DistributedCounter implements DistributedStateMachine {
             uncommitted.get() + 1 :
             value() + 1;
         Records records = MemoryRecords.withRecords(CompressionType.NONE, serialize(incremented));
-        CompletableFuture<OffsetAndEpoch> future = client.append(records, Optional.empty());
+        CompletableFuture<OffsetAndEpoch> future = client.append(records);
         return future.thenApply(offsetAndEpoch -> incremented);
     }
 

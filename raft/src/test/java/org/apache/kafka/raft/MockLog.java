@@ -17,6 +17,7 @@
 package org.apache.kafka.raft;
 
 import org.apache.kafka.common.record.CompressionType;
+import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MemoryRecordsBuilder;
 import org.apache.kafka.common.record.Record;
@@ -104,10 +105,15 @@ public class MockLog implements ReplicatedLog {
     private List<LogEntry> convert(Records records) {
         List<LogEntry> entries = new ArrayList<>();
         for (RecordBatch batch : records.batches()) {
+            final boolean isControlBatch = batch.isControlBatch();
             for (Record record : batch) {
                 int epoch = batch.partitionLeaderEpoch();
                 long offset = record.offset();
-                entries.add(new LogEntry(offset, epoch, new SimpleRecord(record)));
+                ControlRecordType controlRecordType =
+                    isControlBatch ? ControlRecordType.parse(record.key().duplicate())
+                        : ControlRecordType.UNKNOWN;
+                entries.add(new LogEntry(offset,
+                    epoch, new SimpleRecord(record), controlRecordType));
             }
         }
         return entries;
@@ -115,22 +121,27 @@ public class MockLog implements ReplicatedLog {
 
     @Override
     public Long appendAsLeader(Records records, int epoch) {
-        return appendAsLeader(convert(records).stream().map(entry -> entry.record)
-                .collect(Collectors.toList()), epoch);
+        return appendAsLeader(convert(records), epoch, endOffset());
     }
 
     public Long appendAsLeader(Collection<SimpleRecord> records, int epoch) {
         long firstOffset = endOffset();
         long offset = firstOffset;
 
+        List<LogEntry> entries = new ArrayList<>();
+        for (SimpleRecord record : records) {
+            entries.add(new LogEntry(offset, epoch, record, ControlRecordType.UNKNOWN));
+            offset += 1;
+        }
+        return appendAsLeader(entries, epoch, firstOffset);
+    }
+
+    private Long appendAsLeader(Collection<LogEntry> entries, int epoch, long firstOffset) {
         if (epoch > lastFetchedEpoch()) {
             epochStartOffsets.add(new EpochStartOffset(epoch, firstOffset));
         }
 
-        for (SimpleRecord record : records) {
-            log.add(new LogEntry(offset, epoch, record));
-            offset += 1;
-        }
+        log.addAll(entries);
         return firstOffset;
     }
 
@@ -155,18 +166,39 @@ public class MockLog implements ReplicatedLog {
 
     private void writeToBuffer(ByteBuffer buffer, List<LogEntry> entries, int epoch) {
         LogEntry first = entries.get(0);
-        MemoryRecordsBuilder builder = MemoryRecords.builder(buffer,
+        MemoryRecordsBuilder builder;
+
+        if (first.controlRecordType != ControlRecordType.UNKNOWN) {
+            final boolean controlBatch = true;
+            builder = MemoryRecords.builder(
+                buffer, RecordBatch.CURRENT_MAGIC_VALUE, CompressionType.NONE,
+                TimestampType.CREATE_TIME, first.offset, first.record.timestamp(),
+                RecordBatch.NO_PRODUCER_ID, RecordBatch.NO_PRODUCER_EPOCH,
+                RecordBatch.NO_SEQUENCE, false, controlBatch, epoch);
+
+            builder.appendControlRecord(first.record.timestamp(),
+                first.controlRecordType, first.record.value());
+            builder.close();
+            entries = entries.subList(1, entries.size());
+        }
+
+        if (entries.size() > 0) {
+            LogEntry firstRegularEntry = entries.get(0);
+            builder = MemoryRecords.builder(buffer,
                 RecordBatch.CURRENT_MAGIC_VALUE,
                 CompressionType.NONE,
                 TimestampType.CREATE_TIME,
-                first.offset,
-                first.record.timestamp(),
+                firstRegularEntry.offset,
+                firstRegularEntry.record.timestamp(),
                 epoch);
 
-        for (LogEntry entry : entries)
-            builder.appendWithOffset(entry.offset, entry.record);
+            // Skip the first record if it is already being appended as control record.
+            for (LogEntry entry : entries) {
+                builder.appendWithOffset(entry.offset, entry.record);
+            }
 
-        builder.close();
+            builder.close();
+        }
     }
 
     @Override
@@ -176,19 +208,19 @@ public class MockLog implements ReplicatedLog {
             return MemoryRecords.EMPTY;
         } else {
             ByteBuffer buffer = ByteBuffer.allocate(1024);
-            int epoch = entries.get(0).epoch;
+            int currentEpoch = entries.get(0).epoch;
             List<LogEntry> epochEntries = new ArrayList<>();
             for (LogEntry entry: entries) {
-                if (entry.epoch != epoch) {
-                    writeToBuffer(buffer, epochEntries, epoch);
+                if (entry.epoch != currentEpoch) {
+                    writeToBuffer(buffer, epochEntries, currentEpoch);
                     epochEntries.clear();
-                    epoch = entry.epoch;
+                    currentEpoch = entry.epoch;
                 }
                 epochEntries.add(entry);
             }
 
             if (!epochEntries.isEmpty())
-                writeToBuffer(buffer, epochEntries, epoch);
+                writeToBuffer(buffer, epochEntries, currentEpoch);
 
             buffer.flip();
             return MemoryRecords.readableRecords(buffer);
@@ -206,11 +238,16 @@ public class MockLog implements ReplicatedLog {
         final long offset;
         final int epoch;
         final SimpleRecord record;
+        final ControlRecordType controlRecordType;
 
-        private LogEntry(long offset, int epoch, SimpleRecord record) {
+        private LogEntry(long offset,
+                         int epoch,
+                         SimpleRecord record,
+                         ControlRecordType controlRecordType) {
             this.offset = offset;
             this.epoch = epoch;
             this.record = record;
+            this.controlRecordType = controlRecordType;
         }
     }
 

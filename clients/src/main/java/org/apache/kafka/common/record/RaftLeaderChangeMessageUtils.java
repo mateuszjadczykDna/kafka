@@ -49,13 +49,6 @@ public class RaftLeaderChangeMessageUtils {
     }
 
     static int getLeaderChangeMessageSize() {
-//        if (!messageSizeByVersion.containsKey(version)) {
-//            messageSizeByVersion.put(version, DefaultRecordBatch.RECORD_BATCH_OVERHEAD + DefaultRecord.sizeInBytes(0, 0L,
-//                ControlRecordType.CURRENT_CONTROL_RECORD_KEY_SIZE,
-//                leaderChangeMessage.toStruct(version).sizeOf(),
-//                Record.EMPTY_HEADERS));
-//        }
-//        return messageSizeByVersion.get(version);
         return GENEROUS_MESSAGE_SIZE;
     }
 }

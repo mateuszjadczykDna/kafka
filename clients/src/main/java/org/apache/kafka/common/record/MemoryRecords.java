@@ -658,4 +658,5 @@ public class MemoryRecords extends AbstractRecords {
         builder.appendLeaderChangeMessage(timestamp, leaderChangeMessage);
         builder.close();
     }
+
 }

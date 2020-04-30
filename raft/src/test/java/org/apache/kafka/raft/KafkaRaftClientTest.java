@@ -97,6 +97,7 @@ public class KafkaRaftClientTest {
 
     @Test
     public void testInitializeAsCandidateAndBecomeLeader() throws Exception {
+        long now = time.milliseconds();
         final int otherNodeId = 1;
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
         KafkaRaftClient client = buildClient(voters);
@@ -118,17 +119,19 @@ public class KafkaRaftClientTest {
         client.poll();
         assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
-        assertEquals(log.endOffset(), 0);
+        // Leader change record appended
+        assertEquals(1, log.endOffset());
 
-        // Send BeginQuorumEpoch to voters and finish the appending of leader control message
+        // Send BeginQuorumEpoch to voters
         client.poll();
         assertBeginQuorumEpochRequest(1);
 
-        assertEquals(log.endOffset(), 1);
         List<MockLog.LogEntry> entries = log.readEntries(0, 1);
 
+        SimpleRecord record = entries.get(0).record;
+        assertEquals(now, record.timestamp());
         verifyLeaderChangeMessage(localId, Collections.singletonList(otherNodeId),
-            entries.get(0).record.key(), entries.get(0).record.value());
+            record.key(), record.value());
     }
 
     @Test
@@ -543,6 +546,7 @@ public class KafkaRaftClientTest {
 
     @Test
     public void testLeaderAppendSingleMemberQuorum() throws IOException {
+        long now = time.milliseconds();
         KafkaRaftClient client = buildClient(Collections.singleton(localId));
         assertEquals(ElectionState.withElectedLeader(1, localId), electionStore.read());
 
@@ -551,14 +555,15 @@ public class KafkaRaftClientTest {
             new SimpleRecord("b".getBytes()),
             new SimpleRecord("c".getBytes())
         };
-        Records records = MemoryRecords.withRecords(0L, CompressionType.NONE, 1, appendRecords);
+        Records records = MemoryRecords.withRecords(1L, CompressionType.NONE, 1, appendRecords);
 
-        // First poll the leader control record
-        client.append(records, Optional.empty());
+        // First poll has no high watermark advance
         client.poll();
-        assertEquals(OptionalLong.of(1L), client.highWatermark());
+        assertEquals(OptionalLong.of(0L), client.highWatermark());
 
-        // Then poll the appended data
+        client.append(records);
+
+        // Then poll the appended data with leader change record
         client.poll();
         assertEquals(OptionalLong.of(4L), client.highWatermark());
 
@@ -571,20 +576,25 @@ public class KafkaRaftClientTest {
 
         MemoryRecords fetchedRecords = assertFetchQuorumRecordsResponse(1, localId);
         List<MutableRecordBatch> batches = Utils.toList(fetchedRecords.batchIterator());
-        assertEquals(1, batches.size());
+        assertEquals(2, batches.size());
 
-        MutableRecordBatch batch = batches.get(0);
+        MutableRecordBatch leaderChangeBatch = batches.get(0);
+        assertTrue(leaderChangeBatch.isControlBatch());
+        List<Record> readRecords = Utils.toList(leaderChangeBatch.iterator());
+        assertEquals(1, readRecords.size());
+
+        Record record = readRecords.get(0);
+        assertEquals(now, record.timestamp());
+        verifyLeaderChangeMessage(localId, Collections.emptyList(),
+            record.key(), record.value());
+
+        MutableRecordBatch batch = batches.get(1);
         assertEquals(1, batch.partitionLeaderEpoch());
-        List<Record> readRecords = Utils.toList(batch.iterator());
-        assertEquals(4, readRecords.size());
-
-        verifyLeaderChangeMessage(localId,
-            Collections.emptyList(), readRecords.get(0).key(), readRecords.get(0).value());
-
-        List<Record> readAppendedRecords = readRecords.subList(1, 4);
+        readRecords = Utils.toList(batch.iterator());
+        assertEquals(3, readRecords.size());
 
         for (int i = 0; i < appendRecords.length; i++) {
-            assertEquals(appendRecords[i].value(), readAppendedRecords.get(i).value());
+            assertEquals(appendRecords[i].value(), readRecords.get(i).value());
         }
     }
 
@@ -626,7 +636,10 @@ public class KafkaRaftClientTest {
         assertSentFetchQuorumRecordsRequest(epoch, 1L, lastEpoch);
     }
 
-    private void verifyLeaderChangeMessage(int leaderId, List<Integer> voters, ByteBuffer recordKey, ByteBuffer recordValue) {
+    private void verifyLeaderChangeMessage(int leaderId,
+                                           List<Integer> voters,
+                                           ByteBuffer recordKey,
+                                           ByteBuffer recordValue) {
         assertEquals(ControlRecordType.LEADER_CHANGE, ControlRecordType.parse(recordKey));
 
         LeaderChangeMessageData leaderChangeMessage = RaftLeaderChangeMessageUtils.deserialize(recordValue);
