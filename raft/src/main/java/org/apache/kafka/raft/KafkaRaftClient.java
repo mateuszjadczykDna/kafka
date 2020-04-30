@@ -228,7 +228,7 @@ public class KafkaRaftClient implements RaftClient {
 
         // Add a control message for faster high watermark advance.
         if (!log.endOffsetForEpoch(quorum.epoch()).isPresent()) {
-            append(MemoryRecords.withLeaderChangeMessage(0L,
+            append(MemoryRecords.withLeaderChangeMessage(time.milliseconds(),
                 quorum.epoch(),
                 new LeaderChangeMessageData()
                     .setLeaderId(state.election().leaderId())

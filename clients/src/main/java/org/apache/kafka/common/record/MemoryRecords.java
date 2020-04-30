@@ -640,7 +640,7 @@ public class MemoryRecords extends AbstractRecords {
     }
 
     public static MemoryRecords withLeaderChangeMessage(long timestamp, int leaderEpoch, LeaderChangeMessageData leaderChangeMessage) {
-        ByteBuffer buffer = ByteBuffer.allocate(getLeaderChangeMessageSize(leaderChangeMessage));
+        ByteBuffer buffer = ByteBuffer.allocate(getLeaderChangeMessageSize());
         writeLeaderChangeMessage(buffer, 0L, timestamp, leaderEpoch, leaderChangeMessage);
         buffer.flip();
         return MemoryRecords.readableRecords(buffer);

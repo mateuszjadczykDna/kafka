@@ -127,16 +127,19 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
 
     private void withRecords(Records records, BiConsumer<K, V> action) {
         for (RecordBatch batch : records.batches()) {
+            if (batch.isControlBatch()) {
+                continue;
+            }
             for (Record record : batch) {
                 byte[] keyBytes = Utils.toArray(record.key());
                 byte[] valueBytes = Utils.toArray(record.value());
 
                 K key = keySerde.deserializer().deserialize(null, keyBytes);
-                if (valueBytes.length != 4 &&
-                        ControlRecordType.parse(ByteBuffer.wrap(keyBytes)) == ControlRecordType.LEADER_CHANGE) {
-                    // Skip deserialization of control records.
-                    continue;
-                }
+//                if (valueBytes.length != 4 &&
+//                        ControlRecordType.parse(ByteBuffer.wrap(keyBytes)) == ControlRecordType.LEADER_CHANGE) {
+//                    // Skip deserialization of control records.
+//                    continue;
+//                }
                 V value = valueSerde.deserializer().deserialize(null, valueBytes);
 
                 action.accept(key, value);

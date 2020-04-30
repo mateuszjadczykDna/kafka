@@ -459,9 +459,6 @@ public class MemoryRecordsTest {
             MemoryRecords records = MemoryRecords.withLeaderChangeMessage(System.currentTimeMillis(),
                 leaderEpoch, leaderChangeMessage);
 
-            // verify that buffer allocation was precise
-            assertEquals(records.buffer().remaining(), records.buffer().capacity());
-
             List<MutableRecordBatch> batches = TestUtils.toList(records.batches());
             assertEquals(1, batches.size());
 

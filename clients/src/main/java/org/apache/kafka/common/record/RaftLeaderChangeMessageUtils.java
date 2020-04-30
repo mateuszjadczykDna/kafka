@@ -26,7 +26,17 @@ import java.nio.ByteBuffer;
  */
 public class RaftLeaderChangeMessageUtils {
 
+    // To avoid calling message toStruct multiple times, we supply a fixed message size
+    // for leader change, as it happens rare and the buffer could still grow if not sufficient in
+    // certain edge cases.
+    private static final int GENEROUS_MESSAGE_SIZE = 256;
+
     public static LeaderChangeMessageData deserialize(Record record) {
+        ControlRecordType recordType = ControlRecordType.parse(record.key());
+        if (recordType != ControlRecordType.LEADER_CHANGE) {
+            throw new IllegalArgumentException(
+                "Expected LEADER_CHANGE control record type(3), but get " + recordType.type);
+        }
         return deserialize(record.value().duplicate());
     }
 
@@ -38,10 +48,14 @@ public class RaftLeaderChangeMessageUtils {
         return leaderChangeMessage;
     }
 
-    static int getLeaderChangeMessageSize(LeaderChangeMessageData leaderChangeMessage) {
-        return DefaultRecordBatch.RECORD_BATCH_OVERHEAD + DefaultRecord.sizeInBytes(0, 0L,
-            ControlRecordType.CURRENT_CONTROL_RECORD_KEY_SIZE,
-            leaderChangeMessage.toStruct(leaderChangeMessage.highestSupportedVersion()).sizeOf(),
-            Record.EMPTY_HEADERS);
+    static int getLeaderChangeMessageSize() {
+//        if (!messageSizeByVersion.containsKey(version)) {
+//            messageSizeByVersion.put(version, DefaultRecordBatch.RECORD_BATCH_OVERHEAD + DefaultRecord.sizeInBytes(0, 0L,
+//                ControlRecordType.CURRENT_CONTROL_RECORD_KEY_SIZE,
+//                leaderChangeMessage.toStruct(version).sizeOf(),
+//                Record.EMPTY_HEADERS));
+//        }
+//        return messageSizeByVersion.get(version);
+        return GENEROUS_MESSAGE_SIZE;
     }
 }

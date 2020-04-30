@@ -22,7 +22,7 @@
     {"name": "LeaderId", "type": "int32", "versions": "0+",
       "about": "The ID of the newly elected leader"},
     {"name": "GrantedVoters", "type": "[]Voter", "versions": "0+",
-      "about": "The IDs of the voters who voted for the current leader"}
+      "about": "The voters who voted for the current leader"}
   ],
   "commonStructs": [
     { "name": "Voter", "versions": "0+", "fields": [
