@@ -83,7 +83,8 @@ public class QuorumState {
     }
 
     public OptionalLong highWatermark() {
-        return state.highWatermark();
+        OptionalLong optionalLong = state.highWatermark();
+        return optionalLong;
     }
 
     public OptionalInt leaderId() {
@@ -142,8 +143,10 @@ public class QuorumState {
         if (!isVoter(leaderId))
             throw new IllegalArgumentException("Cannot become follower of non-voter " + leaderId);
         boolean transitioned = becomeFollower(epoch, state -> state.acknowledgeLeader(leaderId));
-        if (transitioned)
+        if (transitioned) {
             log.info("Become follower of leader {} in epoch {}", leaderId, epoch);
+        }
+
         return transitioned;
     }
 
@@ -202,6 +205,7 @@ public class QuorumState {
     public FollowerState followerStateOrThrow() {
         if (isFollower())
             return (FollowerState) state;
+        System.out.println("Node " + localId + " is not a follower");
         throw new IllegalStateException("Expected to be a follower, but current state is " + state);
     }
 

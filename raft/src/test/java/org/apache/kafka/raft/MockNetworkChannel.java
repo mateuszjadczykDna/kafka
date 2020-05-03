@@ -66,6 +66,9 @@ public class MockNetworkChannel implements NetworkChannel {
 
     @Override
     public void updateEndpoint(int id, InetSocketAddress address) {
+        if (id == -1) {
+            System.out.println("Bootstrap server address update to " + address);
+        }
         addressCache.put(id, address);
     }
 

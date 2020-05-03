@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.stream.Collectors;
 
@@ -102,18 +103,19 @@ public class MockLog implements ReplicatedLog {
         return firstEntry().map(entry -> entry.offset).orElse(0L);
     }
 
-    private List<LogEntry> convert(Records records) {
+    private List<LogEntry> convert(Records records, OptionalInt nodeEpoch) {
+        long offset = endOffset();
         List<LogEntry> entries = new ArrayList<>();
         for (RecordBatch batch : records.batches()) {
             final boolean isControlBatch = batch.isControlBatch();
             for (Record record : batch) {
-                int epoch = batch.partitionLeaderEpoch();
-                long offset = record.offset();
+                int epoch = nodeEpoch.orElse(batch.partitionLeaderEpoch());
                 ControlRecordType controlRecordType =
                     isControlBatch ? ControlRecordType.parse(record.key().duplicate())
                         : ControlRecordType.UNKNOWN;
                 entries.add(new LogEntry(offset,
                     epoch, new SimpleRecord(record), controlRecordType));
+                offset += 1;
             }
         }
         return entries;
@@ -121,7 +123,7 @@ public class MockLog implements ReplicatedLog {
 
     @Override
     public Long appendAsLeader(Records records, int epoch) {
-        return appendAsLeader(convert(records), epoch, endOffset());
+        return appendAsLeader(convert(records, OptionalInt.of(epoch)), epoch, endOffset());
     }
 
     public Long appendAsLeader(Collection<SimpleRecord> records, int epoch) {
@@ -156,7 +158,7 @@ public class MockLog implements ReplicatedLog {
 
     @Override
     public void appendAsFollower(Records records) {
-        appendAsFollower(convert(records));
+        appendAsFollower(convert(records, OptionalInt.empty()));
     }
 
     public List<LogEntry> readEntries(long startOffset, long endOffset) {
