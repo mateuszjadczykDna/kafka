@@ -268,7 +268,6 @@ public class RaftEventSimulationTest {
         assumeTrue(config.numVoters > 2);
 
         for (int seed = 0; seed < 100; seed++) {
-            System.out.println("Begin round " + seed);
             Cluster cluster = new Cluster(config, seed);
             MessageRouter router = new MessageRouter(cluster);
             EventScheduler scheduler = schedulerWithDefaultInvariants(cluster);
@@ -299,7 +298,6 @@ public class RaftEventSimulationTest {
 
             assertTrue(majorityHighWatermark > minorityHighWatermark);
 
-            System.out.println("Verify catch up in round " + seed);
             // Now restore the partition and verify everyone catches up
             router.filter(0, new PermitAllTraffic());
             router.filter(1, new PermitAllTraffic());
@@ -510,10 +508,7 @@ public class RaftEventSimulationTest {
 
         boolean anyReachedHighWatermark(long offset) {
             return running.values().stream()
-                    .anyMatch(node ->{
-//                        System.out.println("Node " + node.nodeId + " hw reaches " + node.quorum.highWatermark().orElse(0));
-                        return node.quorum.highWatermark().orElse(0) > offset;
-                    } );
+                    .anyMatch(node -> node.quorum.highWatermark().orElse(0) > offset);
         }
 
         long maxHighWatermarkReached(Set<Integer> nodeIds) {
@@ -876,6 +871,7 @@ public class RaftEventSimulationTest {
             int requestId = outbound.requestId();
             RaftResponse.Inbound inbound = new RaftResponse.Inbound(requestId, outbound.data(), senderId);
             InflightRequest inflightRequest = inflight.remove(requestId);
+
             if (!filters.get(inflightRequest.sourceId).acceptInbound(inbound))
                 return;
 

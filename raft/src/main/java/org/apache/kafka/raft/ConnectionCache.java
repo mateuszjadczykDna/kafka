@@ -36,19 +36,16 @@ public class ConnectionCache {
     private final Logger log;
     private final int retryBackoffMs;
     private final int requestTimeoutMs;
-    private final int quorumId;
 
     public ConnectionCache(NetworkChannel channel,
                            List<InetSocketAddress> bootstrapServers,
                            int retryBackoffMs,
                            int requestTimeoutMs,
-                           LogContext logContext,
-                           int quorumId) {
+                           LogContext logContext) {
         this.channel = channel;
         this.log = logContext.logger(ConnectionCache.class);
         this.retryBackoffMs = retryBackoffMs;
         this.requestTimeoutMs = requestTimeoutMs;
-        this.quorumId = quorumId;
 
         // Mimic logic in `Cluster.bootstrap` until we think of something smarter
         int nodeId = -1;
@@ -58,9 +55,6 @@ public class ConnectionCache {
             bootstrapConnections.put(nodeId, connection);
             channel.updateEndpoint(nodeId, address);
             nodeId--;
-        }
-        if (quorumId == 0) {
-            System.out.println("Initial servers " + bootstrapServers);
         }
     }
 
@@ -78,14 +72,8 @@ public class ConnectionCache {
             int nodeId = connectionEntry.getKey();
             ConnectionState connection = connectionEntry.getValue();
             if (connection.isReady(currentTimeMs)) {
-                if (quorumId == 0) {
-                    System.out.println("Found connection " + nodeId + " ready at time " + currentTimeMs);
-                }
                 return OptionalInt.of(nodeId);
             } else if (connection.inFlightRequestId.isPresent()) {
-                if (quorumId == 0) {
-                    System.out.println("Found connection " + nodeId + " with inflight request " + connection.inFlightRequestId);
-                }
                 return OptionalInt.empty();
             }
         }
@@ -97,9 +85,6 @@ public class ConnectionCache {
     }
 
     public HostInfo maybeUpdate(int id, HostInfo update) {
-        if (quorumId == 0) {
-            System.out.println("Update connection " + id + " info " + update);
-        }
         HostInfo latest = getOrCreate(id).maybeUpdate(update);
         channel.updateEndpoint(id, latest.address);
         return latest;

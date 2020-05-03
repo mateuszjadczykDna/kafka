@@ -118,7 +118,6 @@ public class KafkaRaftClient implements RaftClient {
     private final QuorumState quorum;
     private final Random random = new Random();
     private final ConnectionCache connections;
-    private boolean flipToCandidate = false;
 
     private BlockingQueue<PendingAppendRequest> unsentAppends;
     private DistributedStateMachine stateMachine;
@@ -147,7 +146,7 @@ public class KafkaRaftClient implements RaftClient {
         this.advertisedListener = advertisedListener;
         this.logger = logContext.logger(KafkaRaftClient.class);
         this.connections = new ConnectionCache(channel, bootstrapServers,
-            retryBackoffMs, requestTimeoutMs, logContext, quorum.localId);
+            retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
         this.connections.maybeUpdate(quorum.localId, new HostInfo(advertisedListener, bootTimestamp));
     }
@@ -273,7 +272,7 @@ public class KafkaRaftClient implements RaftClient {
     private void becomeVotedFollower(int candidateId, int epoch) throws IOException {
         if (quorum.becomeVotedFollower(epoch, candidateId)) {
             electionTimer.reset(electionTimeoutMs);
-            System.out.println(quorum.localId + " converted to a follower at time " + electionTimer.currentTimeMs());
+            logger.debug("Become voted follower to candidate {} at epoch {}", candidateId, epoch);
             resetConnections();
         }
     }
@@ -286,7 +285,7 @@ public class KafkaRaftClient implements RaftClient {
 
     private void becomeFollower(int leaderId, int epoch) throws IOException {
         if (quorum.becomeFollower(epoch, leaderId)) {
-            System.out.println(quorum.localId + " become follower of leader " + leaderId + " at time " + electionTimer.currentTimeMs());
+            logger.debug("Become follower of leader " + leaderId + " at epoch " + epoch);
             onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
         }
     }
@@ -496,10 +495,6 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void handleFetchQuorumRecordsResponse(FetchQuorumRecordsResponseData response) {
-        if (!quorum.isFollower() && flipToCandidate) {
-            System.out.println(quorum.localId + " failed in the same iteration");
-        }
-
         FollowerState state = quorum.followerStateOrThrow();
 
         if (response.errorCode() == Errors.OFFSET_OUT_OF_RANGE.code()) {
@@ -608,6 +603,10 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean maybeHandleError(RaftResponse.Inbound response, long currentTimeMs) throws IOException {
         ConnectionCache.ConnectionState connection = connections.getOrCreate(response.sourceId());
+        if (response.sourceId() == quorum.localId) {
+            // Should complete?
+            connection = connections.getOrCreate(-1);
+        }
 
         final ApiMessage data = response.data();
         final Errors responseError;
@@ -648,9 +647,6 @@ public class KafkaRaftClient implements RaftClient {
 
             // TODO: Find a new home for this. The main point is that we need to do it even
             // if the response has an error
-            if (quorum.localId == 0) {
-                System.out.println("Get response for find quorum " + findQuorumResponse.leaderId());
-            }
             updateVoterConnections(findQuorumResponse);
         } else {
             throw new IllegalStateException("Received unexpected response " + response);
@@ -746,9 +742,6 @@ public class KafkaRaftClient implements RaftClient {
 
     private void handleRequest(RaftRequest.Inbound request) throws IOException {
         ApiMessage requestData = request.data();
-        if (request.requestId() == 411) {
-            System.out.println("Handle request 411 on instance " + quorum.localId);
-        }
         final ApiMessage responseData;
         if (requestData instanceof FetchQuorumRecordsRequestData) {
             responseData = handleFetchQuorumRecordsRequest((FetchQuorumRecordsRequestData) requestData);
@@ -793,15 +786,10 @@ public class KafkaRaftClient implements RaftClient {
             int requestId = channel.newRequestId();
             ApiMessage request = requestData.get();
             logger.debug("Sending request with id {} to {}: {}", requestId, destinationId, request);
-            if (quorum.localId == 0 && requestId == 411) {
-                System.out.println("Sending out request 411 to " + destinationId + " as " + request.toString());
-            }
+
             channel.send(new RaftRequest.Outbound(requestId, request, destinationId, currentTimeMs));
             connection.onRequestSent(requestId, time.milliseconds());
             return OptionalInt.of(requestId);
-        } else if (quorum.localId == 0) {
-            System.out.println("Connection state is " + connection.state() +
-                                   " for destination " + destinationId + " with host info " + connection.hostInfo());
         }
         return OptionalInt.empty();
     }
@@ -855,10 +843,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void maybeSendFetchQuorumRecords(long currentTimeMs, int leaderId) throws IOException {
-        OptionalInt result = maybeSendRequest(currentTimeMs, leaderId, this::buildFetchQuorumRecordsRequest);
-        if (result.isPresent() && flipToCandidate && quorum.localId == 0) {
-            System.out.println(quorum.localId + " successfully sent out fetch request to " + leaderId + " under future flip sessions at time " + electionTimer.currentTimeMs());
-        }
+        maybeSendRequest(currentTimeMs, leaderId, this::buildFetchQuorumRecordsRequest);
     }
 
     private FindQuorumRequestData buildFindQuorumRequest() {
@@ -874,10 +859,6 @@ public class KafkaRaftClient implements RaftClient {
         // FindLeader, but we only send one request at a time.
         OptionalInt readyNodeIdOpt = connections.findReadyBootstrapServer(currentTimeMs);
         if (readyNodeIdOpt.isPresent()) {
-            if (quorum.localId == 0) {
-                System.out.println("Node 0 sends out find quorum to " + readyNodeIdOpt.getAsInt() +
-                                       " at time " + electionTimer.currentTimeMs());
-            }
             maybeSendRequest(currentTimeMs, readyNodeIdOpt.getAsInt(), this::buildFindQuorumRequest);
         }
     }
@@ -940,9 +921,8 @@ public class KafkaRaftClient implements RaftClient {
             electionTimer.update();
 
             if (quorum.isVoter() && electionTimer.isExpired()) {
-                System.out.println("Node " + quorum.localId + " becomes a candidate at time " + electionTimer.currentTimeMs());
+                logger.debug("Become candidate due to election timeout");
                 becomeCandidate();
-                flipToCandidate = true;
             }
 
             maybeSendRequests(electionTimer.currentTimeMs());
@@ -954,8 +934,6 @@ public class KafkaRaftClient implements RaftClient {
 
             for (RaftMessage message : inboundMessages)
                 handleInboundMessage(message, electionTimer.currentTimeMs());
-
-//            flipToCandidate = false;
         }
     }
 
