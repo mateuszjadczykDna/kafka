@@ -603,10 +603,6 @@ public class KafkaRaftClient implements RaftClient {
 
     private boolean maybeHandleError(RaftResponse.Inbound response, long currentTimeMs) throws IOException {
         ConnectionCache.ConnectionState connection = connections.getOrCreate(response.sourceId());
-        if (response.sourceId() == quorum.localId) {
-            // Should complete?
-            connection = connections.getOrCreate(-1);
-        }
 
         final ApiMessage data = response.data();
         final Errors responseError;

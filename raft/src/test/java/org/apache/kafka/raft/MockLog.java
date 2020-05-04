@@ -185,7 +185,7 @@ public class MockLog implements ReplicatedLog {
                 RecordBatch.NO_SEQUENCE, false, controlBatch, epoch);
 
             builder.appendLeaderChangeMessage(first.record.timestamp(),
-                RaftLeaderChangeMessageUtils.deserialize(first.record.value()));
+                RaftLeaderChangeMessageUtils.deserialize(first.record.value().duplicate()));
             builder.close();
             entries = entries.subList(1, entries.size());
         }
