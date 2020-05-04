@@ -35,8 +35,8 @@ import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
-import org.apache.kafka.purgatory.DelayedOperation;
 import org.apache.kafka.purgatory.DelayedOperationPurgatory;
+import org.apache.kafka.purgatory.DelayedQuorumFetch;
 import org.apache.kafka.raft.ConnectionCache.HostInfo;
 import org.slf4j.Logger;
 
@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -121,7 +122,8 @@ public class KafkaRaftClient implements RaftClient {
 
     private BlockingQueue<PendingAppendRequest> unsentAppends;
     private DistributedStateMachine stateMachine;
-    private final DelayedOperationPurgatory<DelayedOperation> fetchRecordsPurgatory;
+    private final DelayedOperationPurgatory<DelayedQuorumFetch> fetchRecordsPurgatory;
+    private static final String DELAY_FETCH_KEY = "delay_fetch_key";
 
     public KafkaRaftClient(NetworkChannel channel,
                            ReplicatedLog log,
@@ -134,7 +136,7 @@ public class KafkaRaftClient implements RaftClient {
                            int retryBackoffMs,
                            int requestTimeoutMs,
                            LogContext logContext,
-                           DelayedOperationPurgatory<DelayedOperation> fetchRecordsPurgatory) {
+                           DelayedOperationPurgatory<DelayedQuorumFetch> fetchRecordsPurgatory) {
         this.channel = channel;
         this.log = log;
         this.quorum = quorum;
@@ -439,6 +441,8 @@ public class KafkaRaftClient implements RaftClient {
         int replicaId = request.replicaId();
         OptionalLong highWatermark = state.highWatermark();
 
+        fetchRecordsPurgatory.tryCompleteElseWatch(new DelayedQuorumFetch(), Collections.singletonList(DELAY_FETCH_KEY));
+
         Optional<OffsetAndEpoch> nextOffsetOpt = validateFetchOffsetAndEpoch(fetchOffset, lastFetchedEpoch);
         if (nextOffsetOpt.isPresent()) {
             return buildOutOfRangeFetchQuorumRecordsResponse(nextOffsetOpt.get(), highWatermark);
@@ -447,6 +451,7 @@ public class KafkaRaftClient implements RaftClient {
             updateReplicaEndOffset(state, replicaId, fetchOffset);
             state.highWatermark().ifPresent(log::updateHighWatermark);
             Records records = log.read(fetchOffset, OptionalLong.empty());
+            fetchRecordsPurgatory.checkAndComplete(DELAY_FETCH_KEY);
             return buildFetchQuorumRecordsResponse(Errors.NONE, records, highWatermark);
         } else {
             Records records = highWatermark.isPresent() ?

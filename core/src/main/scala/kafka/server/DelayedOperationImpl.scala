@@ -448,19 +448,4 @@ final class DelayedOperationPurgatoryImpl[T <: DelayedOperationImpl](purgatoryNa
       advanceClock(200L)
     }
   }
-//
-//  /**
-//    * Check if the operation can be completed, if not watch it based on the given watch keys
-//    *
-//    * Note that a delayed operation can be watched on multiple keys. It is possible that
-//    * an operation is completed after it has been added to the watch list for some, but
-//    * not all of the keys. In this case, the operation is considered completed and won't
-//    * be added to the watch list of the remaining keys. The expiration reaper thread will
-//    * remove this operation from any watcher list in which the operation exists.
-//    *
-//    * @param operation the delayed operation to be checked
-//    * @param watchKeys keys for bookkeeping the operation
-//    * @return true iff the delayed operations can be completed by the caller
-//    */
-//  override def tryCompleteElseWatch(operation: T, watchKeys: util.List[AnyRef]): Boolean = ???
 }
