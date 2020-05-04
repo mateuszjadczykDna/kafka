@@ -51,7 +51,7 @@ public interface RaftClient {
      * Append a control record to the log. The client must be in the leader state to
      * accept a control record append. The control record append happens immediately.
      *
-     * @param controlRecord the control record
+     * @param controlRecord the control record to be appended
      */
     OffsetAndEpoch appendControlRecord(Records controlRecord);
 

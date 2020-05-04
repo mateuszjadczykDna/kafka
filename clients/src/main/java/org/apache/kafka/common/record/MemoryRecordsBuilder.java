@@ -548,7 +548,7 @@ public class MemoryRecordsBuilder implements AutoCloseable {
      * @param value The control record value
      * @return CRC of the record or null if record-level CRC is not supported for the message format
      */
-    public Long appendControlRecord(long timestamp, ControlRecordType type, ByteBuffer value) {
+    private Long appendControlRecord(long timestamp, ControlRecordType type, ByteBuffer value) {
         Struct keyStruct = type.recordKey();
         ByteBuffer key = ByteBuffer.allocate(keyStruct.sizeOf());
         keyStruct.writeTo(key);

@@ -752,7 +752,6 @@ public class KafkaRaftClient implements RaftClient {
         } else if (requestData instanceof EndQuorumEpochRequestData) {
             responseData = handleEndQuorumEpochRequest((EndQuorumEpochRequestData) requestData);
         } else if (requestData instanceof FindQuorumRequestData) {
-
             responseData = handleFindQuorumRequest((FindQuorumRequestData) requestData);
         } else {
             throw new IllegalStateException("Unexpected request type " + requestData);
@@ -982,7 +981,7 @@ public class KafkaRaftClient implements RaftClient {
     /**
      * Append a control record to the local log.
      *
-     * @param controlRecord the control record
+     * @param controlRecord the control record to be appended
      * @return the updated log end offset and epoch
      */
     @Override

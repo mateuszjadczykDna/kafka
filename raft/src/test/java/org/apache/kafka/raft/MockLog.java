@@ -20,6 +20,7 @@ import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MemoryRecordsBuilder;
+import org.apache.kafka.common.record.RaftLeaderChangeMessageUtils;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
@@ -30,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -53,6 +55,10 @@ public class MockLog implements ReplicatedLog {
             throw new IllegalArgumentException("Non-monotonic update of current high watermark " +
                 highWatermark + " to new value " + offset);
         this.highWatermark = offset;
+    }
+
+    long highWatermark() {
+        return highWatermark;
     }
 
     @Override
@@ -126,7 +132,7 @@ public class MockLog implements ReplicatedLog {
         return appendAsLeader(convert(records, OptionalInt.of(epoch)), epoch, endOffset());
     }
 
-    public Long appendAsLeader(Collection<SimpleRecord> records, int epoch) {
+    Long appendAsLeader(Collection<SimpleRecord> records, int epoch) {
         long firstOffset = endOffset();
         long offset = firstOffset;
 
@@ -147,7 +153,7 @@ public class MockLog implements ReplicatedLog {
         return firstOffset;
     }
 
-    public void appendAsFollower(Collection<LogEntry> entries) {
+    private void appendAsFollower(Collection<LogEntry> entries) {
         for (LogEntry entry : entries) {
             if (entry.epoch > lastFetchedEpoch()) {
                 epochStartOffsets.add(new EpochStartOffset(entry.epoch, entry.offset));
@@ -178,8 +184,8 @@ public class MockLog implements ReplicatedLog {
                 RecordBatch.NO_PRODUCER_ID, RecordBatch.NO_PRODUCER_EPOCH,
                 RecordBatch.NO_SEQUENCE, false, controlBatch, epoch);
 
-            builder.appendControlRecord(first.record.timestamp(),
-                first.controlRecordType, first.record.value());
+            builder.appendLeaderChangeMessage(first.record.timestamp(),
+                RaftLeaderChangeMessageUtils.deserialize(first.record.value()));
             builder.close();
             entries = entries.subList(1, entries.size());
         }
@@ -232,11 +238,12 @@ public class MockLog implements ReplicatedLog {
     @Override
     public void assignEpochStartOffset(int epoch, long startOffset) {
         if (startOffset != endOffset())
-            throw new IllegalStateException("Can only assign epoch for the end offset");
+            throw new IllegalArgumentException(
+                "Can only assign epoch for the end offset " + endOffset() + ", but get offset " + startOffset);
         epochStartOffsets.add(new EpochStartOffset(epoch, startOffset));
     }
 
-    public static class LogEntry {
+    static class LogEntry {
         final long offset;
         final int epoch;
         final SimpleRecord record;
@@ -250,6 +257,32 @@ public class MockLog implements ReplicatedLog {
             this.epoch = epoch;
             this.record = record;
             this.controlRecordType = controlRecordType;
+        }
+
+        static LogEntry with(long offset, int epoch, SimpleRecord record) {
+            return new LogEntry(offset, epoch, record, ControlRecordType.UNKNOWN);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+
+            if (!(other instanceof LogEntry)) {
+                return false;
+            }
+            LogEntry otherEntry = (LogEntry) other;
+
+            return this.offset == otherEntry.offset
+                && this.epoch == otherEntry.epoch
+                && this.record == otherEntry.record
+                && this.controlRecordType == otherEntry.controlRecordType;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(offset, epoch, record, controlRecordType);
         }
     }
 

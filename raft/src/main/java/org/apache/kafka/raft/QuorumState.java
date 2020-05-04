@@ -205,7 +205,6 @@ public class QuorumState {
     public FollowerState followerStateOrThrow() {
         if (isFollower())
             return (FollowerState) state;
-        System.out.println("Node " + localId + " is not a follower");
         throw new IllegalStateException("Expected to be a follower, but current state is " + state);
     }
 
