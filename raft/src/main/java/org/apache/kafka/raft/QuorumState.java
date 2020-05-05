@@ -83,8 +83,7 @@ public class QuorumState {
     }
 
     public OptionalLong highWatermark() {
-        OptionalLong optionalLong = state.highWatermark();
-        return optionalLong;
+        return state.highWatermark();
     }
 
     public OptionalInt leaderId() {

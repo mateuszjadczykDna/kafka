@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 
-import static org.apache.kafka.common.record.RaftLeaderChangeMessageUtils.deserialize;
+import static org.apache.kafka.common.record.RaftUtils.deserialize;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;

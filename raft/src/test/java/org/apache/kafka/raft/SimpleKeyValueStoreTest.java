@@ -70,7 +70,7 @@ public class SimpleKeyValueStoreTest {
 
         assertTrue(future.isDone());
         // The control record takes up one offset.
-        assertEquals(new OffsetAndEpoch(1L, 1), future.get());
+        assertEquals(new OffsetAndEpoch(2L, 1), future.get());
         assertEquals(1, store.get(0).intValue());
     }
 }

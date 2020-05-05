@@ -75,7 +75,7 @@ public class MemoryRecordsBuilder implements AutoCloseable {
     private int uncompressedRecordsSizeInBytes = 0; // Number of bytes (excluding the header) written before compression
     private int numRecords = 0;
     private float actualCompressionRatio = 1;
-    private long maxTimestamp;
+    private long maxTimestamp = RecordBatch.NO_TIMESTAMP;
     private long offsetOfMaxTimestamp = -1;
     private Long lastOffset = null;
     private Long firstTimestamp = null;

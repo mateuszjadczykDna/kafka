@@ -31,7 +31,7 @@ import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MutableRecordBatch;
-import org.apache.kafka.common.record.RaftLeaderChangeMessageUtils;
+import org.apache.kafka.common.record.RaftUtils;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.record.SimpleRecord;
@@ -642,7 +642,7 @@ public class KafkaRaftClientTest {
                                            ByteBuffer recordValue) {
         assertEquals(ControlRecordType.LEADER_CHANGE, ControlRecordType.parse(recordKey));
 
-        LeaderChangeMessageData leaderChangeMessage = RaftLeaderChangeMessageUtils.deserialize(recordValue);
+        LeaderChangeMessageData leaderChangeMessage = RaftUtils.deserialize(recordValue);
         assertEquals(leaderId, leaderChangeMessage.leaderId());
         assertEquals(voters.stream().map(voterId -> new Voter().setVoterId(voterId)).collect(Collectors.toList()),
             leaderChangeMessage.grantedVoters());

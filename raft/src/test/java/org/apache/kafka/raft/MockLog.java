@@ -20,7 +20,7 @@ import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MemoryRecordsBuilder;
-import org.apache.kafka.common.record.RaftLeaderChangeMessageUtils;
+import org.apache.kafka.common.record.RaftUtils;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
@@ -116,9 +116,9 @@ public class MockLog implements ReplicatedLog {
             final boolean isControlBatch = batch.isControlBatch();
             for (Record record : batch) {
                 int epoch = nodeEpoch.orElse(batch.partitionLeaderEpoch());
-                ControlRecordType controlRecordType =
-                    isControlBatch ? ControlRecordType.parse(record.key().duplicate())
-                        : ControlRecordType.UNKNOWN;
+                Optional<ControlRecordType> controlRecordType =
+                    isControlBatch ? Optional.of(ControlRecordType.parse(record.key().duplicate()))
+                        : Optional.empty();
                 entries.add(new LogEntry(offset,
                     epoch, new SimpleRecord(record), controlRecordType));
                 offset += 1;
@@ -138,7 +138,7 @@ public class MockLog implements ReplicatedLog {
 
         List<LogEntry> entries = new ArrayList<>();
         for (SimpleRecord record : records) {
-            entries.add(new LogEntry(offset, epoch, record, ControlRecordType.UNKNOWN));
+            entries.add(LogEntry.with(offset, epoch, record));
             offset += 1;
         }
         return appendAsLeader(entries, epoch, firstOffset);
@@ -176,7 +176,8 @@ public class MockLog implements ReplicatedLog {
         LogEntry first = entries.get(0);
         MemoryRecordsBuilder builder;
 
-        if (first.controlRecordType != ControlRecordType.UNKNOWN) {
+        if (first.controlRecordType.isPresent() &&
+                first.controlRecordType.get() == ControlRecordType.LEADER_CHANGE) {
             final boolean controlBatch = true;
             builder = MemoryRecords.builder(
                 buffer, RecordBatch.CURRENT_MAGIC_VALUE, CompressionType.NONE,
@@ -185,7 +186,7 @@ public class MockLog implements ReplicatedLog {
                 RecordBatch.NO_SEQUENCE, false, controlBatch, epoch);
 
             builder.appendLeaderChangeMessage(first.record.timestamp(),
-                RaftLeaderChangeMessageUtils.deserialize(first.record.value().duplicate()));
+                RaftUtils.deserialize(first.record.value().duplicate()));
             builder.close();
             entries = entries.subList(1, entries.size());
         }
@@ -247,12 +248,12 @@ public class MockLog implements ReplicatedLog {
         final long offset;
         final int epoch;
         final SimpleRecord record;
-        final ControlRecordType controlRecordType;
+        final Optional<ControlRecordType> controlRecordType;
 
         private LogEntry(long offset,
                          int epoch,
                          SimpleRecord record,
-                         ControlRecordType controlRecordType) {
+                         Optional<ControlRecordType> controlRecordType) {
             this.offset = offset;
             this.epoch = epoch;
             this.record = record;
@@ -260,7 +261,7 @@ public class MockLog implements ReplicatedLog {
         }
 
         static LogEntry with(long offset, int epoch, SimpleRecord record) {
-            return new LogEntry(offset, epoch, record, ControlRecordType.UNKNOWN);
+            return new LogEntry(offset, epoch, record, Optional.empty());
         }
 
         @Override

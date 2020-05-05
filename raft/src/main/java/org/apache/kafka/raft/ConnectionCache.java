@@ -160,10 +160,6 @@ public class ConnectionCache {
             return state == State.READY;
         }
 
-        State state() {
-            return state;
-        }
-
         HostInfo maybeUpdate(HostInfo update) {
             if (hostInfo == null || hostInfo.bootTimestamp < update.bootTimestamp) {
                 hostInfo = update;

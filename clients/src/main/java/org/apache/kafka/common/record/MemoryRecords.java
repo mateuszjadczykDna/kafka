@@ -35,8 +35,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-import static org.apache.kafka.common.record.RaftLeaderChangeMessageUtils.getLeaderChangeMessageSize;
-
 /**
  * A {@link Records} implementation backed by a ByteBuffer. This is used only for reading or
  * modifying in-place an existing buffer of record batches. To create a new buffer see {@link MemoryRecordsBuilder},
@@ -640,7 +638,10 @@ public class MemoryRecords extends AbstractRecords {
     }
 
     public static MemoryRecords withLeaderChangeMessage(long timestamp, int leaderEpoch, LeaderChangeMessageData leaderChangeMessage) {
-        ByteBuffer buffer = ByteBuffer.allocate(getLeaderChangeMessageSize());
+        // To avoid calling message toStruct multiple times, we supply a fixed message size
+        // for leader change, as it happens rare and the buffer could still grow if not sufficient in
+        // certain edge cases.
+        ByteBuffer buffer = ByteBuffer.allocate(256);
         writeLeaderChangeMessage(buffer, 0L, timestamp, leaderEpoch, leaderChangeMessage);
         buffer.flip();
         return MemoryRecords.readableRecords(buffer);

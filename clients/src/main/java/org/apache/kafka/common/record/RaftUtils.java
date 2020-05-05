@@ -22,20 +22,15 @@ import org.apache.kafka.common.protocol.types.Struct;
 import java.nio.ByteBuffer;
 
 /**
- * Utility class for easy interaction with {@link LeaderChangeMessageData}.
+ * Utility class for easy interaction with Raft library.
  */
-public class RaftLeaderChangeMessageUtils {
-
-    // To avoid calling message toStruct multiple times, we supply a fixed message size
-    // for leader change, as it happens rare and the buffer could still grow if not sufficient in
-    // certain edge cases.
-    private static final int GENEROUS_MESSAGE_SIZE = 256;
+public class RaftUtils {
 
     public static LeaderChangeMessageData deserialize(Record record) {
         ControlRecordType recordType = ControlRecordType.parse(record.key());
         if (recordType != ControlRecordType.LEADER_CHANGE) {
             throw new IllegalArgumentException(
-                "Expected LEADER_CHANGE control record type(3), but get " + recordType.type);
+                "Expected LEADER_CHANGE control record type(3), but found " + recordType.toString());
         }
         return deserialize(record.value().duplicate());
     }
@@ -46,9 +41,5 @@ public class RaftLeaderChangeMessageUtils {
                                                .read(data);
         leaderChangeMessage.fromStruct(leaderChangeMessageStruct, leaderChangeMessage.highestSupportedVersion());
         return leaderChangeMessage;
-    }
-
-    static int getLeaderChangeMessageSize() {
-        return GENEROUS_MESSAGE_SIZE;
     }
 }

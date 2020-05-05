@@ -48,14 +48,6 @@ public interface RaftClient {
     CompletableFuture<OffsetAndEpoch> append(Records records);
 
     /**
-     * Append a control record to the log. The client must be in the leader state to
-     * accept a control record append. The control record append happens immediately.
-     *
-     * @param controlRecord the control record to be appended
-     */
-    OffsetAndEpoch appendControlRecord(Records controlRecord);
-
-    /**
      * Shutdown the client.
      *
      * @param timeoutMs How long to wait for graceful completion of pending operations.

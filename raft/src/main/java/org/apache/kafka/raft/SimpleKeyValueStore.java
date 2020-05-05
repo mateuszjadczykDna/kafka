@@ -144,7 +144,7 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
         for (Map.Entry<K, V> entry : map.entrySet()) {
             records[i++] = serialize(entry.getKey(), entry.getValue());
         }
-        return MemoryRecords.withRecords(currentPosition.offset, CompressionType.NONE, currentPosition.epoch, records);
+        return MemoryRecords.withRecords(CompressionType.NONE, records);
     }
 
     private SimpleRecord serialize(K key, V value) {

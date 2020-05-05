@@ -24,13 +24,13 @@ import org.junit.Test;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 
-public class RaftLeaderChangeMessageUtilsTest {
+public class RaftUtilsTest {
 
     @Test
     public void testInvalidControlRecordType() {
         IllegalArgumentException thrown = Assert.assertThrows(
             IllegalArgumentException.class, () -> testDeserializeRecord(ControlRecordType.COMMIT));
-        Assert.assertEquals("Expected LEADER_CHANGE control record type(3), but get 1", thrown.getMessage());
+        Assert.assertEquals("Expected LEADER_CHANGE control record type(3), but found COMMIT", thrown.getMessage());
     }
 
     @Test
@@ -56,15 +56,10 @@ public class RaftLeaderChangeMessageUtilsTest {
             256, (byte) 0, 0, 0L, 0, ByteBuffer.wrap(keyData),  valueBuffer, null
         );
 
-        LeaderChangeMessageData deserializedData = RaftLeaderChangeMessageUtils.deserialize(record);
+        LeaderChangeMessageData deserializedData = RaftUtils.deserialize(record);
 
         Assert.assertEquals(leaderId, deserializedData.leaderId());
         Assert.assertEquals(Collections.singletonList(
             new Voter().setVoterId(voterId)), deserializedData.grantedVoters());
-    }
-
-    @Test
-    public void testGetMessageSize() {
-        Assert.assertEquals(256, RaftLeaderChangeMessageUtils.getLeaderChangeMessageSize());
     }
 }

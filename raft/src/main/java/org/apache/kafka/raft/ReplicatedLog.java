@@ -28,7 +28,7 @@ public interface ReplicatedLog {
      * be written atomically in a single batch or the call will fail and raise an
      * exception.
      *
-     * @return the last log end offset.
+     * @return the base offset of the first appended record.
      */
     Long appendAsLeader(Records records, int epoch);
 

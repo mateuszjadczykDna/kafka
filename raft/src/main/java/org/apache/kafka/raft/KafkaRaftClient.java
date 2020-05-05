@@ -226,21 +226,25 @@ public class KafkaRaftClient implements RaftClient {
         updateLeaderEndOffset(state);
 
         // Add a control message for faster high watermark advance.
-        if (!log.endOffsetForEpoch(quorum.epoch()).isPresent()) {
-            appendControlRecord(MemoryRecords.withLeaderChangeMessage(
-                time.milliseconds(),
-                quorum.epoch(),
-                new LeaderChangeMessageData()
-                    .setLeaderId(state.election().leaderId())
-                    .setGrantedVoters(
-                        state.followers().stream().map(follower ->
-                            new Voter().setVoterId(follower)).collect(Collectors.toList())))
-            );
-        }
+        appendControlRecord(MemoryRecords.withLeaderChangeMessage(
+            time.milliseconds(),
+            quorum.epoch(),
+            new LeaderChangeMessageData()
+                .setLeaderId(state.election().leaderId())
+                .setGrantedVoters(
+                    state.followers().stream().map(
+                        follower -> new Voter().setVoterId(follower)).collect(Collectors.toList())))
+        );
 
         log.assignEpochStartOffset(quorum.epoch(), log.endOffset());
         electionTimer.reset(Long.MAX_VALUE);
         resetConnections();
+    }
+
+    private void appendControlRecord(Records controlRecord) {
+        if (shutdown.get() != null)
+            throw new IllegalStateException("Cannot append records while we are shutting down");
+        log.appendAsLeader(controlRecord, quorum.epoch());
     }
 
     private void maybeBecomeLeader(CandidateState state) throws IOException {
@@ -272,7 +276,6 @@ public class KafkaRaftClient implements RaftClient {
     private void becomeVotedFollower(int candidateId, int epoch) throws IOException {
         if (quorum.becomeVotedFollower(epoch, candidateId)) {
             electionTimer.reset(electionTimeoutMs);
-            logger.debug("Become voted follower to candidate {} at epoch {}", candidateId, epoch);
             resetConnections();
         }
     }
@@ -285,7 +288,6 @@ public class KafkaRaftClient implements RaftClient {
 
     private void becomeFollower(int leaderId, int epoch) throws IOException {
         if (quorum.becomeFollower(epoch, leaderId)) {
-            logger.debug("Become follower of leader " + leaderId + " at epoch " + epoch);
             onBecomeFollowerOfElectedLeader(quorum.followerStateOrThrow());
         }
     }
@@ -972,21 +974,6 @@ public class KafkaRaftClient implements RaftClient {
                 "append queue is full"));
         }
         return future;
-    }
-
-    /**
-     * Append a control record to the local log.
-     *
-     * @param controlRecord the control record to be appended
-     * @return the updated log end offset and epoch
-     */
-    @Override
-    public OffsetAndEpoch appendControlRecord(Records controlRecord) {
-        if (shutdown.get() != null)
-            throw new IllegalStateException("Cannot append records while we are shutting down");
-
-        Long baseOffset = log.appendAsLeader(controlRecord, quorum.epoch());
-        return new OffsetAndEpoch(baseOffset, quorum.epoch());
     }
 
     /**
