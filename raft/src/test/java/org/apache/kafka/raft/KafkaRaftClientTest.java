@@ -645,7 +645,7 @@ public class KafkaRaftClientTest {
         LeaderChangeMessageData leaderChangeMessage = RaftUtils.deserialize(recordValue);
         assertEquals(leaderId, leaderChangeMessage.leaderId());
         assertEquals(voters.stream().map(voterId -> new Voter().setVoterId(voterId)).collect(Collectors.toList()),
-            leaderChangeMessage.grantedVoters());
+            leaderChangeMessage.voters());
     }
 
     private int assertSentFindQuorumResponse(int epoch, Optional<Integer> leaderId) {

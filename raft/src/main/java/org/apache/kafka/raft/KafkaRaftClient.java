@@ -231,7 +231,7 @@ public class KafkaRaftClient implements RaftClient {
             quorum.epoch(),
             new LeaderChangeMessageData()
                 .setLeaderId(state.election().leaderId())
-                .setGrantedVoters(
+                .setVoters(
                     state.followers().stream().map(
                         follower -> new Voter().setVoterId(follower)).collect(Collectors.toList())))
         );

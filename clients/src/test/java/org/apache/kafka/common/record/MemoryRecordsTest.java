@@ -454,7 +454,7 @@ public class MemoryRecordsTest {
 
             LeaderChangeMessageData leaderChangeMessage = new LeaderChangeMessageData()
                 .setLeaderId(leaderId)
-                .setGrantedVoters(Collections.singletonList(
+                .setVoters(Collections.singletonList(
                     new Voter().setVoterId(voterId)));
             MemoryRecords records = MemoryRecords.withLeaderChangeMessage(System.currentTimeMillis(),
                 leaderEpoch, leaderChangeMessage);
@@ -477,8 +477,8 @@ public class MemoryRecordsTest {
 
             LeaderChangeMessageData deserializedMessage = RaftUtils.deserialize(record);
             assertEquals(leaderId, deserializedMessage.leaderId());
-            assertEquals(1, deserializedMessage.grantedVoters().size());
-            assertEquals(voterId, deserializedMessage.grantedVoters().get(0).voterId());
+            assertEquals(1, deserializedMessage.voters().size());
+            assertEquals(voterId, deserializedMessage.voters().get(0).voterId());
         }
     }
 

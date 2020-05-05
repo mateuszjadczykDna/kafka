@@ -43,7 +43,7 @@ public class RaftUtilsTest {
         final int voterId = 2;
         LeaderChangeMessageData data = new LeaderChangeMessageData()
                                            .setLeaderId(leaderId)
-                                           .setGrantedVoters(Collections.singletonList(
+                                           .setVoters(Collections.singletonList(
                                                new Voter().setVoterId(voterId)));
 
         ByteBuffer valueBuffer = ByteBuffer.allocate(256);
@@ -60,6 +60,6 @@ public class RaftUtilsTest {
 
         Assert.assertEquals(leaderId, deserializedData.leaderId());
         Assert.assertEquals(Collections.singletonList(
-            new Voter().setVoterId(voterId)), deserializedData.grantedVoters());
+            new Voter().setVoterId(voterId)), deserializedData.voters());
     }
 }

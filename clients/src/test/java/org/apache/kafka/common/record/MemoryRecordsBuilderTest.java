@@ -236,7 +236,7 @@ public class MemoryRecordsBuilderTest {
         builder.appendLeaderChangeMessage(RecordBatch.NO_TIMESTAMP,
             new LeaderChangeMessageData()
                 .setLeaderId(leaderId)
-                .setGrantedVoters(Collections.emptyList()));
+                .setVoters(Collections.emptyList()));
     }
 
     @Test
@@ -255,7 +255,7 @@ public class MemoryRecordsBuilderTest {
         builder.appendLeaderChangeMessage(RecordBatch.NO_TIMESTAMP,
             new LeaderChangeMessageData()
                 .setLeaderId(leaderId)
-                .setGrantedVoters(voters.stream().map(
+                .setVoters(voters.stream().map(
                     voterId -> new Voter().setVoterId(voterId)).collect(Collectors.toList())));
 
         MemoryRecords built = builder.build();
@@ -264,7 +264,7 @@ public class MemoryRecordsBuilderTest {
         LeaderChangeMessageData leaderChangeMessage = RaftUtils.deserialize(records.get(0));
 
         assertEquals(leaderId, leaderChangeMessage.leaderId());
-        assertEquals(voters, leaderChangeMessage.grantedVoters().stream().map(Voter::voterId).collect(Collectors.toList()));
+        assertEquals(voters, leaderChangeMessage.voters().stream().map(Voter::voterId).collect(Collectors.toList()));
     }
 
     @Test
