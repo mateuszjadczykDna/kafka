@@ -261,7 +261,7 @@ public class MemoryRecordsBuilderTest {
         MemoryRecords built = builder.build();
         List<Record> records = TestUtils.toList(built.records());
         assertEquals(1, records.size());
-        LeaderChangeMessageData leaderChangeMessage = RaftUtils.deserialize(records.get(0));
+        LeaderChangeMessageData leaderChangeMessage = ControlRecordUtils.deserialize(records.get(0));
 
         assertEquals(leaderId, leaderChangeMessage.leaderId());
         assertEquals(voters, leaderChangeMessage.voters().stream().map(Voter::voterId).collect(Collectors.toList()));

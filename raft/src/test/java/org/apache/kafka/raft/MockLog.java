@@ -20,7 +20,7 @@ import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MemoryRecordsBuilder;
-import org.apache.kafka.common.record.RaftUtils;
+import org.apache.kafka.common.record.ControlRecordUtils;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
@@ -186,7 +186,7 @@ public class MockLog implements ReplicatedLog {
                 RecordBatch.NO_SEQUENCE, false, controlBatch, epoch);
 
             builder.appendLeaderChangeMessage(first.record.timestamp(),
-                RaftUtils.deserialize(first.record.value().duplicate()));
+                ControlRecordUtils.deserialize(first.record.value().duplicate()));
             builder.close();
             entries = entries.subList(1, entries.size());
         }

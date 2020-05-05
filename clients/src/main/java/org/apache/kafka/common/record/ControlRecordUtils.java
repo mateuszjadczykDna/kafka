@@ -22,9 +22,9 @@ import org.apache.kafka.common.protocol.types.Struct;
 import java.nio.ByteBuffer;
 
 /**
- * Utility class for easy interaction with Raft library.
+ * Utility class for easy interaction with control records.
  */
-public class RaftUtils {
+public class ControlRecordUtils {
 
     public static LeaderChangeMessageData deserialize(Record record) {
         ControlRecordType recordType = ControlRecordType.parse(record.key());

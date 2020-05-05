@@ -24,7 +24,7 @@ import org.junit.Test;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 
-public class RaftUtilsTest {
+public class ControlRecordUtilsTest {
 
     @Test
     public void testInvalidControlRecordType() {
@@ -56,7 +56,7 @@ public class RaftUtilsTest {
             256, (byte) 0, 0, 0L, 0, ByteBuffer.wrap(keyData),  valueBuffer, null
         );
 
-        LeaderChangeMessageData deserializedData = RaftUtils.deserialize(record);
+        LeaderChangeMessageData deserializedData = ControlRecordUtils.deserialize(record);
 
         Assert.assertEquals(leaderId, deserializedData.leaderId());
         Assert.assertEquals(Collections.singletonList(

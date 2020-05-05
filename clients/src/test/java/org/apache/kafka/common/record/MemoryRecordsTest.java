@@ -475,7 +475,7 @@ public class MemoryRecordsTest {
             assertTrue(record.isValid());
             assertEquals(ControlRecordType.LEADER_CHANGE, ControlRecordType.parse(record.key()));
 
-            LeaderChangeMessageData deserializedMessage = RaftUtils.deserialize(record);
+            LeaderChangeMessageData deserializedMessage = ControlRecordUtils.deserialize(record);
             assertEquals(leaderId, deserializedMessage.leaderId());
             assertEquals(1, deserializedMessage.voters().size());
             assertEquals(voterId, deserializedMessage.voters().get(0).voterId());
