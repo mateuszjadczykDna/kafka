@@ -42,9 +42,6 @@ public class FileBasedStateStoreTest {
 
     @Test
     public void testReadElectionState() throws IOException {
-        final File stateFile = TestUtils.tempFile();
-        final FileOutputStream fileOutputStream = new FileOutputStream(stateFile);
-
         final int leaderId = 1;
         final int epoch = 2;
 
@@ -52,8 +49,10 @@ public class FileBasedStateStoreTest {
             .setLeaderId(leaderId)
             .setLeaderEpoch(epoch);
 
-        try (final BufferedWriter writer = new BufferedWriter(
-            new OutputStreamWriter(fileOutputStream, StandardCharsets.UTF_8))) {
+        final File stateFile = TestUtils.tempFile();
+        try (final FileOutputStream fileOutputStream = new FileOutputStream(stateFile);
+             final BufferedWriter writer = new BufferedWriter(
+                 new OutputStreamWriter(fileOutputStream, StandardCharsets.UTF_8))) {
             short version = data.highestSupportedVersion();
 
             ObjectNode node = (ObjectNode) data.toJson(version);

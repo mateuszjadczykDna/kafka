@@ -16,27 +16,17 @@
  */
 package org.apache.kafka.raft;
 
-import com.fasterxml.jackson.databind.node.TextNode;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.test.TestUtils;
 import org.junit.Test;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -488,29 +478,17 @@ public class QuorumStateTest {
 
     @Test
     public void testInitializeWithCorruptedStore() throws IOException {
-        int otherNodeId = 1;
-        Set<Integer> voters = Utils.mkSet(otherNodeId);
-        final File stateFile = TestUtils.tempFile();
-        assertTrue(stateFile.exists());
+        MockQuorumStateStore stateStore = new MockQuorumStateStore() {
+            @Override
+            public ElectionState readElectionState() throws IOException {
+                throw new IOException("Could not read corrupted state");
+            }
+        };
 
-        final BufferedWriter writer = new BufferedWriter(
-            new OutputStreamWriter(new FileOutputStream(stateFile), StandardCharsets.UTF_8));
-
-        String sampleTextNode = new TextNode("text").toString();
-        writer.write(sampleTextNode);
-        writer.flush();
-
-        FileBasedStateStore stateStore = new FileBasedStateStore(stateFile);
-        QuorumState state = new QuorumState(localId, voters, stateStore, new LogContext());
+        QuorumState state = new QuorumState(localId, Utils.mkSet(1), stateStore, new LogContext());
 
         int epoch = 2;
         state.initialize(new OffsetAndEpoch(0L, epoch));
         assertEquals(epoch, state.epoch());
-
-        // The state file should be updated.
-        assertTrue(stateFile.exists());
-
-        final BufferedReader reader = Files.newBufferedReader(stateFile.toPath());
-        assertNotEquals(sampleTextNode, reader.readLine());
     }
 }

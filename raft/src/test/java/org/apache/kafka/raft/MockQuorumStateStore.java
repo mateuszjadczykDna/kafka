@@ -16,11 +16,13 @@
  */
 package org.apache.kafka.raft;
 
+import java.io.IOException;
+
 public class MockQuorumStateStore implements QuorumStateStore {
     private ElectionState current = ElectionState.withUnknownLeader(0);
 
     @Override
-    public ElectionState readElectionState() {
+    public ElectionState readElectionState() throws IOException {
         return current;
     }
 

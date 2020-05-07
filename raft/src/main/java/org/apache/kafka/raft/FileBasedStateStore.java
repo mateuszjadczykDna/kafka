@@ -79,15 +79,15 @@ public class FileBasedStateStore implements QuorumStateStore {
             JsonNode readNode = objectMapper.readTree(line);
 
             if (!(readNode instanceof ObjectNode)) {
-                throw new IOException("Deserialized node " + readNode.toString() +
+                throw new IOException("Deserialized node " + readNode +
                     " is not an object node");
             }
             final ObjectNode dataObject = (ObjectNode) readNode;
 
             JsonNode dataVersionNode = dataObject.get(DATA_VERSION);
             if (dataVersionNode == null) {
-                throw new IOException("Deserialized node " + readNode.toString() +
-                    " does not have 'data_version' field");
+                throw new IOException("Deserialized node " + readNode +
+                    " does not have " + DATA_VERSION + " field");
             }
 
             final short dataVersion = dataVersionNode.shortValue();
@@ -151,6 +151,7 @@ public class FileBasedStateStore implements QuorumStateStore {
     @Override
     public void clear() throws IOException {
         Files.deleteIfExists(stateFile.toPath());
+        Files.deleteIfExists(new File(stateFile.getAbsolutePath() + ".tmp").toPath());
     }
 
     @Override

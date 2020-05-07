@@ -44,7 +44,6 @@ import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.raft.generated.QuorumStateData;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.BufferedReader;
@@ -77,18 +76,11 @@ public class KafkaRaftClientTest {
     private final MockLog log = new MockLog();
     private final MockNetworkChannel channel = new MockNetworkChannel();
 
-    private QuorumStateStore quorumStateStore;
-
-    @Before
-    public void setUpStateStore() {
-        quorumStateStore = new MockQuorumStateStore();
-    }
+    private QuorumStateStore quorumStateStore = new MockQuorumStateStore();
 
     @After
     public void cleanUp() throws IOException {
-        if (quorumStateStore instanceof FileBasedStateStore) {
-            ((FileBasedStateStore) quorumStateStore).clear();
-        }
+        quorumStateStore.clear();
     }
 
     private InetSocketAddress mockAddress(int id) {

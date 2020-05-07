@@ -120,8 +120,7 @@ class KafkaNetworkChannel(time: Time,
             val success = undelivered.offer(new RaftResponse.Inbound(
               request.correlationId, disconnectResponse, request.destinationId))
             if (!success) {
-              debug(s"Request to ${request.destinationId()} failed to add to undelivered queue, " +
-                s"because the queue was full.")
+              throw new KafkaException("Undelivered queue is full")
             }
           } else if (client.ready(node, currentTimeMs)) {
             pendingOutbound.poll()
