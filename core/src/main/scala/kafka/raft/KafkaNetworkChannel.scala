@@ -31,7 +31,7 @@ import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.{KafkaException, Node}
 import org.apache.kafka.raft.{NetworkChannel, RaftMessage, RaftRequest, RaftResponse}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 
 object KafkaNetworkChannel {
