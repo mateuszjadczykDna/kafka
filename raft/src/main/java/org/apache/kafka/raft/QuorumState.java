@@ -63,6 +63,7 @@ public class QuorumState {
             store.clear();
 
             election = ElectionState.withUnknownLeader(0);
+            state = new FollowerState(election.epoch);
         }
 
         if (election.epoch < logEndOffsetAndEpoch.epoch) {
