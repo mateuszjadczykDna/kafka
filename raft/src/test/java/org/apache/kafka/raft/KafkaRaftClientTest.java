@@ -16,8 +16,6 @@
  */
 package org.apache.kafka.raft;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
 import org.apache.kafka.common.message.FetchQuorumRecordsRequestData;
@@ -41,17 +39,13 @@ import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.raft.generated.QuorumStateData;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Test;
 
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -61,7 +55,6 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.apache.kafka.raft.QuorumStateStore.NOT_VOTED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -563,33 +556,6 @@ public class KafkaRaftClientTest {
 
     @Test
     public void testLeaderAppendSingleMemberQuorum() throws IOException {
-        leaderAppendSingleMemberQuorum();
-    }
-
-    @Test
-    public void testLeaderAppendSingleMemberQuorumWithFileBasedStore() throws IOException {
-        File testStateFile = TestUtils.tempFile();
-        quorumStateStore = new FileBasedStateStore(testStateFile);
-
-        // Align with the mock store setup.
-        quorumStateStore.writeElectionState(ElectionState.withUnknownLeader(0));
-
-        leaderAppendSingleMemberQuorum();
-
-        try (final BufferedReader reader = Files.newBufferedReader(testStateFile.toPath())) {
-            final ObjectMapper objectMapper = new ObjectMapper();
-            final ObjectNode dataObject = (ObjectNode) objectMapper.readTree(reader.readLine());
-
-            QuorumStateData data = new QuorumStateData();
-            data.fromJson(dataObject, data.highestSupportedVersion());
-
-            assertEquals(localId, data.leaderId());
-            assertEquals(1, data.leaderEpoch());
-            assertEquals(NOT_VOTED, data.votedId());
-        }
-    }
-
-    private void leaderAppendSingleMemberQuorum() throws IOException {
         long now = time.milliseconds();
 
         KafkaRaftClient client = buildClient(Collections.singleton(localId));

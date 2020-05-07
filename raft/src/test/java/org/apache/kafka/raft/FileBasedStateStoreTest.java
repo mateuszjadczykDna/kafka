@@ -16,22 +16,14 @@
  */
 package org.apache.kafka.raft;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.ShortNode;
-import org.apache.kafka.raft.generated.QuorumStateData;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Test;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.OptionalInt;
 
-import static org.apache.kafka.raft.FileBasedStateStore.DATA_VERSION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -42,30 +34,19 @@ public class FileBasedStateStoreTest {
 
     @Test
     public void testReadElectionState() throws IOException {
+        final File stateFile = TestUtils.tempFile();
+
+        stateStore = new FileBasedStateStore(stateFile);
+
         final int leaderId = 1;
         final int epoch = 2;
+        stateStore.writeElectionState(ElectionState.withElectedLeader(epoch, leaderId));
+        assertTrue(stateFile.exists());
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), stateStore.readElectionState());
 
-        final QuorumStateData data = new QuorumStateData()
-            .setLeaderId(leaderId)
-            .setLeaderEpoch(epoch);
-
-        final File stateFile = TestUtils.tempFile();
-        try (final FileOutputStream fileOutputStream = new FileOutputStream(stateFile);
-             final BufferedWriter writer = new BufferedWriter(
-                 new OutputStreamWriter(fileOutputStream, StandardCharsets.UTF_8))) {
-            short version = data.highestSupportedVersion();
-
-            ObjectNode node = (ObjectNode) data.toJson(version);
-            node.set(DATA_VERSION, new ShortNode(version));
-
-            writer.write(node.toString());
-            writer.flush();
-            fileOutputStream.getFD().sync();
-
-            stateStore = new FileBasedStateStore(stateFile);
-            assertTrue(stateFile.exists());
-            assertEquals(ElectionState.withElectedLeader(epoch, leaderId), stateStore.readElectionState());
-        }
+        // Start another state store and try to read from the same file.
+        final FileBasedStateStore secondStateStore = new FileBasedStateStore(stateFile);
+        assertEquals(ElectionState.withElectedLeader(epoch, leaderId), secondStateStore.readElectionState());
     }
 
     @Test
