@@ -455,6 +455,11 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
+    private int positiveRandomElectionJitterMs() {
+        final int randomJitterMs = randomElectionJitterMs();
+        return randomJitterMs == 0 ? 1 : randomJitterMs;
+    }
+
     private int randomElectionJitterMs() {
         if (electionJitterMs == 0)
             return 0;
@@ -548,9 +553,15 @@ public class KafkaRaftClient implements RaftClient {
             if (state.isUnattached()
                 || state.hasLeader(requestReplicaId)
                 || state.hasVotedFor(requestReplicaId)) {
-                // reset the timer to election jitter so that they would become candidate
-                // after a pretty short period of time
-                timer.reset(randomElectionJitterMs());
+                List<Integer> preferableVoters = request.preferableVoters();
+                // We didn't find the corresponding voters inside.
+                if (!preferableVoters.contains(quorum.localId)) {
+                    return buildEndQuorumEpochResponse(Errors.INCONSISTENT_VOTER_SET);
+                }
+                // Based on the priority inside the preferable voters, choose the corresponding delayed
+                // election time so that the most up-to-date voter has a higher chance to be elected.
+                // The reasoning for always making it positive is for deterministic unit testing.
+                timer.reset(electionJitterMs * preferableVoters.indexOf(quorum.localId) + positiveRandomElectionJitterMs());
             }
         } // else if we are already leader or a candidate, then we take no action
 
@@ -1083,7 +1094,9 @@ public class KafkaRaftClient implements RaftClient {
         return new EndQuorumEpochRequestData()
                 .setReplicaId(quorum.localId)
                 .setLeaderId(quorum.leaderIdOrNil())
-                .setLeaderEpoch(quorum.epoch());
+                .setLeaderEpoch(quorum.epoch())
+                .setPreferableVoters(
+                    quorum.leaderStateOrThrow().nonLeaderVotersByDescendingFetchOffset());
     }
 
     private void maybeSendEndQuorumEpoch(long currentTimeMs) throws IOException {
@@ -1186,16 +1199,16 @@ public class KafkaRaftClient implements RaftClient {
         // to finish our term. We consider the term finished if we are a follower or if one of
         // the remaining voters bumps the existing epoch.
 
-        shutdown.timer.update();
+        shutdown.update();
 
         if (quorum.isFollower() || quorum.remoteVoters().isEmpty()) {
             // Shutdown immediately if we are a follower or we are the only voter
             shutdown.finished.set(true);
         } else if (!shutdown.isFinished()) {
-            long currentTimeMs = shutdown.timer.currentTimeMs();
+            long currentTimeMs = shutdown.finishTimer.currentTimeMs();
             maybeSendEndQuorumEpoch(currentTimeMs);
 
-            List<RaftMessage> inboundMessages = channel.receive(shutdown.timer.remainingMs());
+            List<RaftMessage> inboundMessages = channel.receive(shutdown.finishTimer.remainingMs());
             for (RaftMessage message : inboundMessages)
                 handleInboundMessage(message, currentTimeMs);
         }
@@ -1303,11 +1316,13 @@ public class KafkaRaftClient implements RaftClient {
 
     private class GracefulShutdown {
         final int epoch;
-        final Timer timer;
+        final Timer finishTimer;
+
         final AtomicBoolean finished = new AtomicBoolean(false);
 
-        public GracefulShutdown(int shutdownTimeoutMs, int epoch) {
-            this.timer = time.timer(shutdownTimeoutMs);
+        public GracefulShutdown(long shutdownTimeoutMs,
+                                int epoch) {
+            this.finishTimer = time.timer(shutdownTimeoutMs);
             this.epoch = epoch;
         }
 
@@ -1319,6 +1334,10 @@ public class KafkaRaftClient implements RaftClient {
                 finished.set(true);
         }
 
+        public void update() {
+            finishTimer.update();
+        }
+
         public boolean isFinished() {
             return succeeded() || failed();
         }
@@ -1328,9 +1347,8 @@ public class KafkaRaftClient implements RaftClient {
         }
 
         public boolean failed() {
-            return timer.isExpired();
+            return finishTimer.isExpired();
         }
-
     }
 
     private static class PendingAppendRequest {
