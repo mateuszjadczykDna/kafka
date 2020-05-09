@@ -24,19 +24,22 @@ import org.apache.kafka.common.record.Records;
  * record appends will be routed to the leader, which will have an opportunity to either
  * accept or reject the append attempt.
  */
-public interface DistributedStateMachine {
+public interface ReplicatedStateMachine extends AutoCloseable {
 
     /**
      * Become a leader. This is invoked after a new election in the quorum if this
      * node was elected as the leader.
      *
      * @param epoch The latest quorum epoch
+     * @param recordAppender The record appender for appending records
      */
-    void becomeLeader(int epoch);
+    void becomeLeader(int epoch, RecordAppender recordAppender);
 
     /**
      * Become a follower. This is invoked after a new election finishes if this
-     * node was not elected as the leader.
+     * node was not elected as the leader. Note that only leader should have the access
+     * to {@link RecordAppender}, which means the appender reference should be reset
+     * upon transiting to follower state.
      *
      * @param epoch The latest quorum epoch
      */
@@ -57,17 +60,4 @@ public interface DistributedStateMachine {
      * @param records The records to apply to the state machine
      */
     void apply(Records records);
-
-    /**
-     * This is only invoked by leaders. The leader is guaranteed to have the full committed
-     * state before this method is invoked in a new leader epoch.
-     *
-     * Note that acceptance does not guarantee that the records will become committed
-     * since that depends on replication to the quorum. For example, if there is a leader
-     * change before the record can be committed, then accepted records may be lost.
-     *
-     * @param records The records appended to the leader
-     * @return true if the records should be appended to the log
-     */
-    boolean accept(Records records);
 }

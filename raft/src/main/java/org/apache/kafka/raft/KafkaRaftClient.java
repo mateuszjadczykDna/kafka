@@ -112,7 +112,6 @@ public class KafkaRaftClient implements RaftClient {
     private final int electionTimeoutMs;
     private final int electionJitterMs;
     private final int retryBackoffMs;
-    private final int requestTimeoutMs;
     private final long bootTimestamp;
     private final InetSocketAddress advertisedListener;
     private final NetworkChannel channel;
@@ -120,9 +119,10 @@ public class KafkaRaftClient implements RaftClient {
     private final QuorumState quorum;
     private final Random random;
     private final ConnectionCache connections;
+    private final RecordAppender recordAppender;
 
     private BlockingQueue<PendingAppendRequest> unsentAppends;
-    private DistributedStateMachine stateMachine;
+    private ReplicatedStateMachine stateMachine;
 
     public KafkaRaftClient(NetworkChannel channel,
                            ReplicatedLog log,
@@ -145,7 +145,6 @@ public class KafkaRaftClient implements RaftClient {
         this.retryBackoffMs = retryBackoffMs;
         this.electionTimeoutMs = electionTimeoutMs;
         this.electionJitterMs = electionJitterMs;
-        this.requestTimeoutMs = requestTimeoutMs;
         this.bootTimestamp = time.milliseconds();
         this.advertisedListener = advertisedListener;
         this.logger = logContext.logger(KafkaRaftClient.class);
@@ -154,6 +153,26 @@ public class KafkaRaftClient implements RaftClient {
             retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
         this.connections.maybeUpdate(quorum.localId, new HostInfo(advertisedListener, bootTimestamp));
+        this.recordAppender = records -> {
+            if (!quorum.isLeader()) {
+                CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
+                future.completeExceptionally(new IllegalStateException(
+                    "State machine is not the leader for append."));
+                return future;
+            }
+            if (shutdown.get() != null)
+                throw new IllegalStateException("Cannot append records while we are shutting down");
+
+            CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
+            PendingAppendRequest pendingAppendRequest = new PendingAppendRequest(
+                records, future, time.milliseconds(), requestTimeoutMs);
+
+            if (!unsentAppends.offer(pendingAppendRequest)) {
+                future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
+                                                                    "append queue is full"));
+            }
+            return future;
+        };
     }
 
     private void applyCommittedRecordsToStateMachine() {
@@ -195,7 +214,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     @Override
-    public void initialize(DistributedStateMachine stateMachine) throws IOException {
+    public void initialize(ReplicatedStateMachine stateMachine) throws IOException {
         this.stateMachine = stateMachine;
         quorum.initialize(new OffsetAndEpoch(log.endOffset(), log.lastFetchedEpoch()));
 
@@ -228,7 +247,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void onBecomeLeader(LeaderState state) {
-        stateMachine.becomeLeader(quorum.epoch());
+        stateMachine.becomeLeader(quorum.epoch(), recordAppender);
         updateLeaderEndOffset(state);
 
         // Add a control message for faster high watermark advance.
@@ -523,7 +542,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private OptionalLong maybeAppendAsLeader(LeaderState state, Records records) {
-        if (state.highWatermark().isPresent() && stateMachine.accept(records)) {
+        if (state.highWatermark().isPresent()) {
             Long baseOffset = log.appendAsLeader(records, quorum.epoch());
             updateLeaderEndOffset(state);
             logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());
@@ -957,29 +976,6 @@ public class KafkaRaftClient implements RaftClient {
             unsentAppend.fail(new NotLeaderForPartitionException("Append refused since this node is no longer " +
                 "the leader"));
         }
-    }
-
-    /**
-     * Append a set of records to the log. Successful completion of the future indicates a success of
-     * the append, with the uncommitted base offset and epoch.
-     *
-     * @param records The records to write to the log
-     * @return The uncommitted base offset and epoch of the appended records
-     */
-    @Override
-    public CompletableFuture<OffsetAndEpoch> append(Records records) {
-        if (shutdown.get() != null)
-            throw new IllegalStateException("Cannot append records while we are shutting down");
-
-        CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
-        PendingAppendRequest pendingAppendRequest = new PendingAppendRequest(
-            records, future, time.milliseconds(), requestTimeoutMs);
-
-        if (!unsentAppends.offer(pendingAppendRequest)) {
-            future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
-                "append queue is full"));
-        }
-        return future;
     }
 
     /**

@@ -19,8 +19,10 @@ package org.apache.kafka.raft;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 
-public class NoOpStateMachine implements DistributedStateMachine {
+public class NoOpStateMachine implements ReplicatedStateMachine {
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
+
+    private RecordAppender recordAppender = null;
 
     enum STATE {
         INITIALIZING,
@@ -33,7 +35,8 @@ public class NoOpStateMachine implements DistributedStateMachine {
     private int epoch = -1;
 
     @Override
-    public void becomeLeader(int epoch) {
+    public void becomeLeader(int epoch, RecordAppender appender) {
+        this.recordAppender = appender;
         this.epoch = epoch;
         state = STATE.LEADER;
     }
@@ -64,9 +67,13 @@ public class NoOpStateMachine implements DistributedStateMachine {
         }
     }
 
+    void append(Records records) {
+        recordAppender.append(records);
+    }
+
     @Override
-    public synchronized boolean accept(Records records) {
-        return true;
+    public void close() {
+        position = new OffsetAndEpoch(0, 0);
     }
 
     void clear() {

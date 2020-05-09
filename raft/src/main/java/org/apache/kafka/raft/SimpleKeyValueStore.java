@@ -25,11 +25,11 @@ import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.utils.Utils;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
@@ -39,25 +39,18 @@ import java.util.function.BiConsumer;
  * This is an experimental key-value store built on top of Raft consensus. Really
  * just trying to figure out what a useful API looks like.
  */
-public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
-    private final KafkaRaftClient client;
+public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
+    private Optional<RecordAppender> appender = Optional.empty();
     private final Serde<K> keySerde;
     private final Serde<V> valueSerde;
     private final Map<K, V> committed = new HashMap<>();
-    private final Map<K, V> uncommitted = new HashMap<>();
     private OffsetAndEpoch currentPosition = new OffsetAndEpoch(0L, 0);
     private SortedMap<OffsetAndEpoch, CompletableFuture<OffsetAndEpoch>> pendingCommit = new TreeMap<>();
 
-    public SimpleKeyValueStore(KafkaRaftClient client,
-                               Serde<K> keySerde,
+    public SimpleKeyValueStore(Serde<K> keySerde,
                                Serde<V> valueSerde) {
-        this.client = client;
         this.keySerde = keySerde;
         this.valueSerde = valueSerde;
-    }
-
-    public synchronized void initialize() throws IOException {
-        client.initialize(this);
     }
 
     public synchronized V get(K key) {
@@ -71,7 +64,14 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
     public synchronized CompletableFuture<OffsetAndEpoch> putAll(Map<K, V> map) {
         // Append returns after the data was accepted by the leader, but we need to wait
         // for it to be committed.
-        CompletableFuture<OffsetAndEpoch> appendFuture = client.append(buildRecords(map));
+        if (!appender.isPresent()) {
+            CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalStateException(
+                "State machine is not the leader for append."));
+            return future;
+        }
+
+        CompletableFuture<OffsetAndEpoch> appendFuture = appender.get().append(buildRecords(map));
         return appendFuture.thenCompose(offsetAndEpoch -> {
             synchronized (this) {
                 // It is possible when this is invoked that the operation has already been applied to
@@ -88,13 +88,13 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
     }
 
     @Override
-    public synchronized void becomeLeader(int epoch) {
-
+    public synchronized void becomeLeader(int epoch, final RecordAppender appender) {
+        this.appender = Optional.of(appender);
     }
 
     @Override
     public synchronized void becomeFollower(int epoch) {
-        uncommitted.clear();
+        appender = Optional.empty();
     }
 
     @Override
@@ -104,21 +104,12 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
 
     @Override
     public synchronized void apply(Records records) {
-        withRecords(records, (key, value) -> {
-            uncommitted.remove(key, value);
-            committed.put(key, value);
-        });
+        withRecords(records, committed::put);
 
         for (RecordBatch batch : records.batches()) {
             maybeCompletePendingCommit(batch);
             currentPosition = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
-    }
-
-    @Override
-    public synchronized boolean accept(Records records) {
-        withRecords(records, uncommitted::put);
-        return true;
     }
 
     private void withRecords(Records records, BiConsumer<K, V> action) {
@@ -175,4 +166,7 @@ public class SimpleKeyValueStore<K, V> implements DistributedStateMachine {
         }
     }
 
+    @Override
+    public void close() {
+    }
 }

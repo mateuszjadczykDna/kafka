@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -35,15 +36,21 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This is the simplest interesting state machine. It maintains a simple counter which can only
  * be incremented by one.
  */
-public class DistributedCounter implements DistributedStateMachine {
+public class DistributedCounter implements ReplicatedStateMachine {
     private final Logger log;
     private final KafkaRaftClient client;
+    private final int nodeId;
     private final AtomicInteger committed = new AtomicInteger(0);
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
-    private AtomicInteger uncommitted;
+    private AtomicInteger uncommitted = new AtomicInteger(committed.get());
 
-    public DistributedCounter(KafkaRaftClient client, LogContext logContext) {
+    private Optional<RecordAppender> appender = Optional.empty();
+
+    public DistributedCounter(KafkaRaftClient client,
+                              int nodeId,
+                              LogContext logContext) {
         this.client = client;
+        this.nodeId = nodeId;
         this.log = logContext.logger(DistributedCounter.class);
     }
 
@@ -52,13 +59,15 @@ public class DistributedCounter implements DistributedStateMachine {
     }
 
     @Override
-    public synchronized void becomeLeader(int epoch) {
+    public synchronized void becomeLeader(int epoch, RecordAppender appender) {
+        this.appender = Optional.of(appender);
         uncommitted = new AtomicInteger(committed.get());
     }
 
     @Override
     public synchronized void becomeFollower(int epoch) {
-        uncommitted = null;
+        appender = Optional.empty();
+        uncommitted = new AtomicInteger(committed.get());
     }
 
     @Override
@@ -72,8 +81,9 @@ public class DistributedCounter implements DistributedStateMachine {
             if (!batch.isControlBatch()) {
                 for (Record record : batch) {
                     int value = deserialize(record);
-                    if (value != committed.get() + 1) {
-                        throw new IllegalStateException("Detected invalid increment in record at offset " + record.offset() +
+
+                    if (value != committed.get() && value != committed.get() + 1) {
+                        throw new IllegalStateException("Node " + nodeId + " detected invalid increment in record at offset " + record.offset() +
                                                             ", epoch " + batch.partitionLeaderEpoch() + ": " + committed.get() + " -> " + value);
                     }
                     log.trace("Applied counter update at offset {}: {} -> {}", record.offset(), committed.get(), value);
@@ -82,38 +92,20 @@ public class DistributedCounter implements DistributedStateMachine {
             }
             this.position = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
-
-        if (uncommitted != null && committed.get() > uncommitted.get())
-            uncommitted.set(committed.get());
     }
 
-    @Override
-    public synchronized boolean accept(Records records) {
-        int lastUncommitted = uncommitted.get();
-        for (RecordBatch batch : records.batches()) {
-            for (Record record : batch) {
-                int value = deserialize(record);
-                if (value != lastUncommitted + 1)
-                    return false;
-                lastUncommitted = value;
-            }
+    synchronized CompletableFuture<Integer> increment() {
+        int incremented = committed.get() + 1;
+
+        Records records = MemoryRecords.withRecords(CompressionType.NONE, serialize(incremented));
+        if (!appender.isPresent()) {
+            CompletableFuture<Integer> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalStateException(
+                "State machine is not the leader for append."));
+            return future;
         }
 
-        log.trace("Accept counter update: {} -> {}", uncommitted.get(), lastUncommitted);
-        uncommitted.set(lastUncommitted);
-        return true;
-    }
-
-    public synchronized int value() {
-        return committed.get();
-    }
-
-    public synchronized CompletableFuture<Integer> increment() {
-        int incremented = uncommitted != null ?
-            uncommitted.get() + 1 :
-            value() + 1;
-        Records records = MemoryRecords.withRecords(CompressionType.NONE, serialize(incremented));
-        CompletableFuture<OffsetAndEpoch> future = client.append(records);
+        CompletableFuture<OffsetAndEpoch> future = appender.get().append(records);
         return future.thenApply(offsetAndEpoch -> incremented);
     }
 
@@ -128,4 +120,7 @@ public class DistributedCounter implements DistributedStateMachine {
         return (Integer) Type.INT32.read(record.value());
     }
 
+    @Override
+    public void close() {
+    }
 }

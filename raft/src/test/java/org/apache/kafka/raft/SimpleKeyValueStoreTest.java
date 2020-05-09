@@ -22,6 +22,7 @@ import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.common.utils.Time;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.List;
@@ -35,7 +36,9 @@ import static org.junit.Assert.assertTrue;
 
 public class SimpleKeyValueStoreTest {
 
-    private KafkaRaftClient setupSingleNodeRaftManager() {
+    private int epoch = 2;
+
+    private KafkaRaftClient setupSingleNodeRaftManager() throws IOException {
         int localId = 1;
         int electionTimeoutMs = 10000;
         int electionJitterMs = 50;
@@ -43,6 +46,7 @@ public class SimpleKeyValueStoreTest {
         int requestTimeoutMs = 5000;
         Set<Integer> voters = Collections.singleton(localId);
         QuorumStateStore store = new MockQuorumStateStore();
+        store.writeElectionState(ElectionState.withElectedLeader(epoch, localId));
         Time time = new MockTime();
         ReplicatedLog log = new MockLog();
         NetworkChannel channel = new MockNetworkChannel();
@@ -61,18 +65,17 @@ public class SimpleKeyValueStoreTest {
 
     @Test
     public void testPutAndGet() throws Exception {
-        KafkaRaftClient manager = setupSingleNodeRaftManager();
-        manager.initialize(new NoOpStateMachine());
-        SimpleKeyValueStore<Integer, Integer> store = new SimpleKeyValueStore<>(manager,
+        SimpleKeyValueStore<Integer, Integer> store = new SimpleKeyValueStore<>(
             new Serdes.IntegerSerde(), new Serdes.IntegerSerde());
-        store.initialize();
+        KafkaRaftClient manager = setupSingleNodeRaftManager();
+        manager.initialize(store);
 
         CompletableFuture<OffsetAndEpoch> future = store.put(0, 1);
         manager.poll();
 
         assertTrue(future.isDone());
         // The control record takes up one offset.
-        assertEquals(new OffsetAndEpoch(2L, 1), future.get());
+        assertEquals(new OffsetAndEpoch(1L, epoch), future.get());
         assertEquals(1, store.get(0).intValue());
     }
 }

@@ -668,7 +668,7 @@ public class RaftEventSimulationTest {
         }
 
         void initialize() {
-            this.counter = new DistributedCounter(manager, logContext);
+            this.counter = new DistributedCounter(manager, nodeId, logContext);
             try {
                 counter.initialize();
             } catch (IOException e) {
@@ -845,8 +845,10 @@ public class RaftEventSimulationTest {
                     assertTrue(offset < highWatermark.getAsLong());
 
                     int sequence = parseSequenceNumber(entry.record.value().duplicate());
-                    assertEquals("Unexpected sequence found at offset " + offset + " on node " + nodeId,
-                        nextExpectedSequence, sequence);
+
+                    assertTrue("Unexpected sequence found at offset " + offset + " on node " + nodeId +
+                        ": should be at most greater than 1",
+                        nextExpectedSequence - sequence <= 1);
 
                     committedSequenceNumbers.putIfAbsent(offset, sequence);
 
@@ -854,7 +856,7 @@ public class RaftEventSimulationTest {
                     assertEquals("Committed sequence at offset " + offset + " changed on node " + nodeId,
                         committedSequence, sequence);
 
-                    nextExpectedSequence++;
+                    nextExpectedSequence = sequence + 1;
                 }
             }
         }

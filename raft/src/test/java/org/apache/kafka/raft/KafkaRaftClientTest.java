@@ -94,6 +94,10 @@ public class KafkaRaftClientTest {
     }
 
     private KafkaRaftClient buildClient(Set<Integer> voters) throws IOException {
+        return buildClient(voters, new NoOpStateMachine());
+    }
+
+    private KafkaRaftClient buildClient(Set<Integer> voters, ReplicatedStateMachine stateMachine) throws IOException {
         LogContext logContext = new LogContext();
         QuorumState quorum = new QuorumState(localId, voters, quorumStateStore, logContext);
 
@@ -1085,7 +1089,8 @@ public class KafkaRaftClientTest {
     public void testLeaderAppendSingleMemberQuorum() throws IOException {
         long now = time.milliseconds();
 
-        KafkaRaftClient client = buildClient(Collections.singleton(localId));
+        NoOpStateMachine stateMachine = new NoOpStateMachine();
+        KafkaRaftClient client = buildClient(Collections.singleton(localId), stateMachine);
         assertEquals(ElectionState.withElectedLeader(1, localId), quorumStateStore.readElectionState());
 
         SimpleRecord[] appendRecords = new SimpleRecord[] {
@@ -1099,7 +1104,7 @@ public class KafkaRaftClientTest {
         client.poll();
         assertEquals(OptionalLong.of(0L), client.highWatermark());
 
-        client.append(records);
+        stateMachine.append(records);
 
         // Then poll the appended data with leader change record
         client.poll();
