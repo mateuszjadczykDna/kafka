@@ -72,7 +72,6 @@ public class RaftConfig extends AbstractConfig {
                 ConfigDef.Type.LIST,
                 ConfigDef.NO_DEFAULT_VALUE,
                 new ConfigDef.Validator() {
-                    // Copy from `NonEmptyListValidator` in Connect
                     @Override
                     public void ensureValid(String name, Object value) {
                         if (value == null || ((List) value).isEmpty()) {

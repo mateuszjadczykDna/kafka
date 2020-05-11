@@ -19,26 +19,39 @@ package org.apache.kafka.raft;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 
-import java.util.Collections;
 import java.util.Optional;
 
 public class NoOpStateMachine implements DistributedStateMachine {
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
 
-    private Optional<EpochState> state = Optional.empty();
+    enum STATE {
+        INITIALIZING,
+        LEADER,
+        FOLLOWER
+    }
+
+    private STATE state = STATE.INITIALIZING;
+
+    private int epoch = -1;
 
     @Override
     public void becomeLeader(int epoch) {
-        this.state = Optional.of(new LeaderState(0, epoch, 0L, Collections.emptySet()));
+        this.epoch = epoch;
+        state = STATE.LEADER;
     }
 
     @Override
     public void becomeFollower(int epoch) {
-        this.state = Optional.of(new FollowerState(epoch));
+        this.epoch = epoch;
+        state = state.FOLLOWER;
     }
 
-    Optional<EpochState> state() {
-        return state;
+    boolean isLeader() {
+        return state == STATE.LEADER;
+    }
+
+    boolean isFollower() {
+        return state == STATE.FOLLOWER;
     }
 
     @Override
@@ -59,6 +72,11 @@ public class NoOpStateMachine implements DistributedStateMachine {
     }
 
     void clear() {
-        state = Optional.empty();
+        state = STATE.INITIALIZING;
+        epoch = -1;
+    }
+
+    public int epoch() {
+        return epoch;
     }
 }
