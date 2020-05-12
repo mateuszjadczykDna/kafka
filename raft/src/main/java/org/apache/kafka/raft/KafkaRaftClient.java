@@ -194,11 +194,6 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    // For testing only
-    QuorumState quorumState() {
-        return quorum;
-    }
-
     @Override
     public void initialize(DistributedStateMachine stateMachine) throws IOException {
         this.stateMachine = stateMachine;
