@@ -66,6 +66,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -1031,7 +1032,9 @@ public class KafkaRaftClientTest {
         int epoch = 5;
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId));
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        KafkaRaftClient client = buildClient(voters);
+
+        NoOpStateMachine stateMachine = new NoOpStateMachine();
+        buildClient(voters, stateMachine);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
         assertEquals(epoch, stateMachine.epoch());
@@ -1043,11 +1046,7 @@ public class KafkaRaftClientTest {
         };
         Records records = MemoryRecords.withRecords(0L, CompressionType.NONE, 1, appendRecords);
 
-        CompletableFuture<OffsetAndEpoch> future = client.append(records);
-        client.poll();
-
-        assertTrue(future.isCompletedExceptionally());
-        TestUtils.assertFutureThrows(future, NotLeaderForPartitionException.class);
+        assertThrows(IllegalStateException.class, () -> stateMachine.append(records));
     }
 
     @Test

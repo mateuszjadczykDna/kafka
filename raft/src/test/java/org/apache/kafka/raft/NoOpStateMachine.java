@@ -19,6 +19,8 @@ package org.apache.kafka.raft;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.Records;
 
+import java.util.concurrent.CompletableFuture;
+
 public class NoOpStateMachine implements ReplicatedStateMachine {
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
 
@@ -67,8 +69,11 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
         }
     }
 
-    void append(Records records) {
-        recordAppender.append(records);
+    CompletableFuture<OffsetAndEpoch> append(Records records) {
+        if (recordAppender == null) {
+            throw new IllegalStateException("Record appender is not set");
+        }
+        return recordAppender.append(records);
     }
 
     @Override
