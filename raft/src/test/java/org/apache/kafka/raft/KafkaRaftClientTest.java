@@ -451,7 +451,7 @@ public class KafkaRaftClientTest {
 
         client.poll();
 
-        collectVoteResponses(leaderEpoch, false, expectedError);
+        assertSentVoteResponse(leaderEpoch, false, expectedError);
     }
 
     @Test
