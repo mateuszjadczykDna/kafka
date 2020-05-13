@@ -217,7 +217,7 @@ public class QuorumState {
         int newEpoch = epoch() + 1;
         log.info("Become candidate in epoch {}", newEpoch);
         CandidateState state = new CandidateState(localId, newEpoch, voters);
-        store.writeElectionState(state.election());
+        store.writeElectionState(state.election(), );
         this.state = state;
         return state;
     }
@@ -232,7 +232,7 @@ public class QuorumState {
 
         log.info("Become leader in epoch {}", epoch());
         LeaderState state = new LeaderState(localId, epoch(), epochStartOffset, voters);
-        store.writeElectionState(state.election());
+        store.writeElectionState(state.election(), voters);
         this.state = state;
         return state;
     }

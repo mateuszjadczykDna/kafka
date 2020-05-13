@@ -16,7 +16,9 @@
  */
 package org.apache.kafka.raft;
 
+import java.util.Collections;
 import java.util.OptionalInt;
+import java.util.Set;
 
 /**
  * Encapsulate election state stored on disk after every state change.
@@ -25,13 +27,16 @@ public class ElectionState {
     public final int epoch;
     private final OptionalInt leaderIdOpt;
     private final OptionalInt votedIdOpt;
+    private final Set<Integer> voters;
 
     ElectionState(int epoch,
                   OptionalInt leaderIdOpt,
-                  OptionalInt votedIdOpt) {
+                  OptionalInt votedIdOpt,
+                  Set<Integer> voters) {
         this.epoch = epoch;
         this.leaderIdOpt = leaderIdOpt;
         this.votedIdOpt = votedIdOpt;
+        this.voters = voters;
     }
 
     public static ElectionState withVotedCandidate(int epoch, int votedId) {

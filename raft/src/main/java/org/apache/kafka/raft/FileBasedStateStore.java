@@ -116,7 +116,8 @@ public class FileBasedStateStore implements QuorumStateStore {
         QuorumStateData data = new QuorumStateData()
             .setLeaderEpoch(latest.epoch)
             .setVotedId(latest.hasVoted() ? latest.votedId() : NOT_VOTED)
-            .setLeaderId(latest.hasLeader() ? latest.leaderId() : UNKNOWN_LEADER_ID);
+            .setLeaderId(latest.hasLeader() ? latest.leaderId() : UNKNOWN_LEADER_ID)
+            .setCurrentVoters(latest);
         writeElectionStateToFile(stateFile, data);
     }
 
