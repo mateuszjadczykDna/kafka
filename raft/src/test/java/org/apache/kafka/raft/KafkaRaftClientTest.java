@@ -268,14 +268,16 @@ public class KafkaRaftClientTest {
 
         List<RaftMessage> sentMessages = channel.drainSendQueue();
         assertEquals(2, sentMessages.size());
-        RaftMessage raftMessage = sentMessages.get(0);
-        assertTrue(raftMessage.data() instanceof FindQuorumRequestData);
-        FindQuorumRequestData request = (FindQuorumRequestData) raftMessage.data();
-        assertEquals(localId, request.replicaId());
-        int findQuorumCorrelationId = raftMessage.correlationId();
 
-        raftMessage = sentMessages.get(1);
-        assertTrue(raftMessage.data() instanceof EndQuorumEpochResponseData);
+        RaftMessage findQuorumMessage = getSentMessageByType(sentMessages, ApiKeys.FIND_QUORUM);
+        assertTrue(findQuorumMessage.data() instanceof FindQuorumRequestData);
+
+        FindQuorumRequestData findQuorumData = (FindQuorumRequestData) findQuorumMessage.data();
+        assertEquals(localId, findQuorumData.replicaId());
+        int findQuorumCorrelationId = findQuorumMessage.correlationId();
+
+        RaftMessage endQuorumMessage = getSentMessageByType(sentMessages, ApiKeys.END_QUORUM_EPOCH);
+        assertTrue(endQuorumMessage.data() instanceof EndQuorumEpochResponseData);
 
         channel.mockReceive(new RaftResponse.Inbound(findQuorumCorrelationId,
             findQuorumResponse(localId, leaderEpoch, voters), -1));
@@ -391,7 +393,7 @@ public class KafkaRaftClientTest {
 
         client.poll();
 
-        assertSentVoteResponse(lastEpoch + 1, voteGranted);
+        assertSentVoteResponse(lastEpoch + 1, voteGranted, Errors.NONE);
     }
 
     @Test
@@ -449,11 +451,7 @@ public class KafkaRaftClientTest {
 
         client.poll();
 
-        List<RaftResponse.Outbound> voteResponses = collectVoteResponses(leaderEpoch, false);
-
-        assertEquals(1, voteResponses.size());
-        assertEquals(expectedError,
-            Errors.forCode(((VoteResponseData) voteResponses.get(0).data()).errorCode()));
+        collectVoteResponses(leaderEpoch, false, expectedError);
     }
 
     @Test
@@ -1259,13 +1257,13 @@ public class KafkaRaftClientTest {
         return voteRequests;
     }
 
-    private int assertSentVoteResponse(int leaderEpoch, boolean voteGranted) {
-        List<RaftResponse.Outbound> voteResponses = collectVoteResponses(leaderEpoch, voteGranted);
+    private int assertSentVoteResponse(int leaderEpoch, boolean voteGranted, Errors expectedError) {
+        List<RaftResponse.Outbound> voteResponses = collectVoteResponses(leaderEpoch, voteGranted, expectedError);
         assertEquals(1, voteResponses.size());
         return voteResponses.iterator().next().correlationId();
     }
 
-    private List<RaftResponse.Outbound> collectVoteResponses(int leaderEpoch, boolean voteGranted) {
+    private List<RaftResponse.Outbound> collectVoteResponses(int leaderEpoch, boolean voteGranted, Errors expectedError) {
         List<RaftResponse.Outbound> voteResponses = new ArrayList<>();
         for (RaftMessage raftMessage : channel.drainSendQueue()) {
             if (raftMessage.data() instanceof VoteResponseData) {
@@ -1275,6 +1273,7 @@ public class KafkaRaftClientTest {
                 }
                 assertEquals(leaderEpoch, response.leaderEpoch());
                 assertEquals(voteGranted, response.voteGranted());
+                assertEquals(expectedError, Errors.forCode(response.errorCode()));
                 voteResponses.add((RaftResponse.Outbound) raftMessage);
             }
         }

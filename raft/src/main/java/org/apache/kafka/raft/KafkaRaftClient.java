@@ -137,7 +137,7 @@ public class KafkaRaftClient implements RaftClient {
                            LogContext logContext,
                            Random random) {
         this.channel = channel;
-        Objects.requireNonNull(log, "Log instance could not be null");
+        Objects.requireNonNull(log, "Log instance cannot be null");
         this.log = log;
         this.quorum = quorum;
         this.time = time;
