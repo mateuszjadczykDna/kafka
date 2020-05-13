@@ -112,6 +112,7 @@ public class KafkaRaftClient implements RaftClient {
     private final int electionTimeoutMs;
     private final int electionJitterMs;
     private final int retryBackoffMs;
+    private final int requestTimeoutMs;
     private final long bootTimestamp;
     private final InetSocketAddress advertisedListener;
     private final NetworkChannel channel;
@@ -145,6 +146,7 @@ public class KafkaRaftClient implements RaftClient {
         this.retryBackoffMs = retryBackoffMs;
         this.electionTimeoutMs = electionTimeoutMs;
         this.electionJitterMs = electionJitterMs;
+        this.requestTimeoutMs = requestTimeoutMs;
         this.bootTimestamp = time.milliseconds();
         this.advertisedListener = advertisedListener;
         this.logger = logContext.logger(KafkaRaftClient.class);
@@ -160,18 +162,7 @@ public class KafkaRaftClient implements RaftClient {
                     "State machine is not the leader for append."));
                 return future;
             }
-            if (shutdown.get() != null)
-                throw new IllegalStateException("Cannot append records while we are shutting down");
-
-            CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
-            PendingAppendRequest pendingAppendRequest = new PendingAppendRequest(
-                records, future, time.milliseconds(), requestTimeoutMs);
-
-            if (!unsentAppends.offer(pendingAppendRequest)) {
-                future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
-                                                                    "append queue is full"));
-            }
-            return future;
+            return this.append(records);
         };
     }
 
@@ -976,6 +967,28 @@ public class KafkaRaftClient implements RaftClient {
             unsentAppend.fail(new NotLeaderForPartitionException("Append refused since this node is no longer " +
                 "the leader"));
         }
+    }
+
+    /**
+     * Append a set of records to the log. Successful completion of the future indicates a success of
+     * the append, with the uncommitted base offset and epoch.
+     *
+     * @param records The records to write to the log
+     * @return The uncommitted base offset and epoch of the appended records
+     */
+    private CompletableFuture<OffsetAndEpoch> append(Records records) {
+        if (shutdown.get() != null)
+            throw new IllegalStateException("Cannot append records while we are shutting down");
+
+        CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
+        PendingAppendRequest pendingAppendRequest = new PendingAppendRequest(
+            records, future, time.milliseconds(), requestTimeoutMs);
+
+        if (!unsentAppends.offer(pendingAppendRequest)) {
+            future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
+                                                                "append queue is full"));
+        }
+        return future;
     }
 
     /**
