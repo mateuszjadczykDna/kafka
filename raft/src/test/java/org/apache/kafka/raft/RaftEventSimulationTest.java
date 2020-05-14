@@ -670,7 +670,7 @@ public class RaftEventSimulationTest {
         void initialize() {
             this.counter = new DistributedCounter(manager, nodeId, logContext);
             try {
-                counter.initialize();
+                manager.initialize(counter);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

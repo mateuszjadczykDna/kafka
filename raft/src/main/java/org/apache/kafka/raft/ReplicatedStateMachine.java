@@ -26,6 +26,8 @@ import org.apache.kafka.common.record.Records;
  */
 public interface ReplicatedStateMachine extends AutoCloseable {
 
+    void initialize(RecordAppender recordAppender);
+
     /**
      * Become a leader. This is invoked after a new election in the quorum if this
      * node was elected as the leader.

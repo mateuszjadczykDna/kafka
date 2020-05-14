@@ -44,7 +44,7 @@ public class DistributedCounter implements ReplicatedStateMachine {
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
     private AtomicInteger uncommitted = new AtomicInteger(committed.get());
 
-    private Optional<RecordAppender> appender = Optional.empty();
+    private RecordAppender appender;
 
     public DistributedCounter(KafkaRaftClient client,
                               int nodeId,
@@ -55,18 +55,21 @@ public class DistributedCounter implements ReplicatedStateMachine {
     }
 
     public synchronized void initialize() throws IOException {
-        client.initialize(this);
+
+    }
+
+    @Override
+    public void initialize(RecordAppender recordAppender) {
+        appender = recordAppender;
     }
 
     @Override
     public synchronized void becomeLeader(int epoch, RecordAppender appender) {
-        this.appender = Optional.of(appender);
         uncommitted = new AtomicInteger(committed.get());
     }
 
     @Override
     public synchronized void becomeFollower(int epoch) {
-        appender = Optional.empty();
         uncommitted = new AtomicInteger(committed.get());
     }
 
