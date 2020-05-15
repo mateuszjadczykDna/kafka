@@ -26,26 +26,31 @@ import org.apache.kafka.common.record.Records;
  */
 public interface ReplicatedStateMachine extends AutoCloseable {
 
+
+    /**
+     * Initialize the state machine.
+     *
+     * @param recordAppender handler for appending records.
+     */
     void initialize(RecordAppender recordAppender);
 
     /**
-     * Become a leader. This is invoked after a new election in the quorum if this
+     * Promote as a leader. This is invoked after a new election in the quorum if this
      * node was elected as the leader.
      *
      * @param epoch The latest quorum epoch
-     * @param recordAppender The record appender for appending records
      */
-    void becomeLeader(int epoch, RecordAppender recordAppender);
+    void onLeaderPromotion(int epoch);
 
     /**
-     * Become a follower. This is invoked after a new election finishes if this
+     * Resign from a leader. This is invoked when a new election finishes if this
      * node was not elected as the leader. Note that only leader should have the access
      * to {@link RecordAppender}, which means the appender reference should be reset
      * upon transiting to follower state.
      *
      * @param epoch The latest quorum epoch
      */
-    void becomeFollower(int epoch);
+    void onLeaderDemotion(int epoch);
 
     /**
      * The next expected offset that will be appended to the log. This should be

@@ -111,7 +111,6 @@ public class KafkaRaftClient implements RaftClient {
     private final Timer electionTimer;
     private final int electionTimeoutMs;
     private final int electionJitterMs;
-    private final int retryBackoffMs;
     private final int requestTimeoutMs;
     private final long bootTimestamp;
     private final InetSocketAddress advertisedListener;
@@ -143,7 +142,6 @@ public class KafkaRaftClient implements RaftClient {
         this.quorum = quorum;
         this.time = time;
         this.electionTimer = time.timer(electionTimeoutMs);
-        this.retryBackoffMs = retryBackoffMs;
         this.electionTimeoutMs = electionTimeoutMs;
         this.electionJitterMs = electionJitterMs;
         this.requestTimeoutMs = requestTimeoutMs;
@@ -155,15 +153,7 @@ public class KafkaRaftClient implements RaftClient {
             retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
         this.connections.maybeUpdate(quorum.localId, new HostInfo(advertisedListener, bootTimestamp));
-        this.recordAppender = records -> {
-            if (!quorum.isLeader()) {
-                CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
-                future.completeExceptionally(new IllegalStateException(
-                    "State machine is not the leader for append."));
-                return future;
-            }
-            return this.append(records);
-        };
+        this.recordAppender = this::append;
     }
 
     private void applyCommittedRecordsToStateMachine() {
@@ -239,7 +229,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void onBecomeLeader(LeaderState state) {
-        stateMachine.becomeLeader(quorum.epoch(), recordAppender);
+        stateMachine.onLeaderPromotion(quorum.epoch());
         updateLeaderEndOffset(state);
 
         // Add a control message for faster high watermark advance.
@@ -285,6 +275,7 @@ public class KafkaRaftClient implements RaftClient {
             resetConnections();
 
             if (isLeader) {
+                stateMachine.onLeaderDemotion(epoch);
                 electionTimer.reset(electionTimeoutMs);
             }
         }
@@ -298,7 +289,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void onBecomeFollowerOfElectedLeader(FollowerState state) {
-        stateMachine.becomeFollower(state.epoch());
+        stateMachine.onLeaderDemotion(state.epoch());
         electionTimer.reset(electionTimeoutMs);
         resetConnections();
     }
@@ -609,14 +600,6 @@ public class KafkaRaftClient implements RaftClient {
         }
     }
 
-    private void becomeFollower(int epoch, OptionalInt leaderId) throws IOException {
-        if (leaderId.isPresent()) {
-            becomeFollower(leaderId.getAsInt(), epoch);
-        } else {
-            becomeUnattachedFollower(epoch);
-        }
-    }
-
     private boolean maybeHandleError(RaftResponse.Inbound response, long currentTimeMs) throws IOException {
         ConnectionCache.ConnectionState connection = connections.getOrCreate(response.sourceId());
 
@@ -687,8 +670,10 @@ public class KafkaRaftClient implements RaftClient {
             GracefulShutdown gracefulShutdown = shutdown.get();
             if (gracefulShutdown != null) {
                 gracefulShutdown.onEpochUpdate(epoch);
+            } else if (leaderId.isPresent()) {
+                becomeFollower(leaderId.getAsInt(), epoch);
             } else {
-                becomeFollower(epoch, leaderId);
+                becomeUnattachedFollower(epoch);
             }
 
             return true;

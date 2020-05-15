@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
@@ -40,12 +39,13 @@ import java.util.function.BiConsumer;
  * just trying to figure out what a useful API looks like.
  */
 public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
-    private Optional<RecordAppender> appender = Optional.empty();
+    private RecordAppender appender = null;
     private final Serde<K> keySerde;
     private final Serde<V> valueSerde;
     private final Map<K, V> committed = new HashMap<>();
     private OffsetAndEpoch currentPosition = new OffsetAndEpoch(0L, 0);
     private SortedMap<OffsetAndEpoch, CompletableFuture<OffsetAndEpoch>> pendingCommit = new TreeMap<>();
+    private NodeState state = NodeState.UNINITIALIZED;
 
     public SimpleKeyValueStore(Serde<K> keySerde,
                                Serde<V> valueSerde) {
@@ -64,14 +64,17 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     public synchronized CompletableFuture<OffsetAndEpoch> putAll(Map<K, V> map) {
         // Append returns after the data was accepted by the leader, but we need to wait
         // for it to be committed.
-        if (!appender.isPresent()) {
+        if (appender == null) {
+            throw new IllegalStateException("The record appender is not initialized");
+        }
+        if (state == NodeState.NON_LEADER) {
             CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalStateException(
-                "State machine is not the leader for append."));
+                "State machine is not the leader for appending."));
             return future;
         }
 
-        CompletableFuture<OffsetAndEpoch> appendFuture = appender.get().append(buildRecords(map));
+        CompletableFuture<OffsetAndEpoch> appendFuture = appender.append(buildRecords(map));
         return appendFuture.thenCompose(offsetAndEpoch -> {
             synchronized (this) {
                 // It is possible when this is invoked that the operation has already been applied to
@@ -88,13 +91,19 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     }
 
     @Override
-    public synchronized void becomeLeader(int epoch, final RecordAppender appender) {
-        this.appender = Optional.of(appender);
+    public void initialize(RecordAppender recordAppender) {
+        this.appender = recordAppender;
+        this.state = NodeState.NON_LEADER;
     }
 
     @Override
-    public synchronized void becomeFollower(int epoch) {
-        appender = Optional.empty();
+    public void onLeaderPromotion(int epoch) {
+        this.state = NodeState.LEADER;
+    }
+
+    @Override
+    public void onLeaderDemotion(int epoch) {
+        this.state = NodeState.NON_LEADER;
     }
 
     @Override

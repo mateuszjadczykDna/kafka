@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.raft;
 
-import org.apache.kafka.common.errors.NotLeaderForPartitionException;
 import org.apache.kafka.common.message.BeginQuorumEpochRequestData;
 import org.apache.kafka.common.message.BeginQuorumEpochResponseData;
 import org.apache.kafka.common.message.EndQuorumEpochRequestData;
@@ -61,7 +60,6 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -127,7 +125,7 @@ public class KafkaRaftClientTest {
         Set<Integer> voters = Utils.mkSet(localId, 1);
         int epoch = 2;
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, localId));
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClient(voters, stateMachine);
         assertTrue(stateMachine.isLeader());
         assertEquals(epoch, stateMachine.epoch());
 
@@ -970,7 +968,7 @@ public class KafkaRaftClientTest {
         int otherNodeId = 1;
         int epoch = 5;
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId));
-        KafkaRaftClient client = buildClient(Utils.mkSet(localId, otherNodeId));
+        KafkaRaftClient client = buildClient(Utils.mkSet(localId, otherNodeId), stateMachine);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
         assertEquals(epoch, stateMachine.epoch());
@@ -1003,7 +1001,7 @@ public class KafkaRaftClientTest {
         int epoch = 5;
         quorumStateStore.writeElectionState(ElectionState.withElectedLeader(epoch, otherNodeId));
         Set<Integer> voters = Utils.mkSet(localId, otherNodeId);
-        KafkaRaftClient client = buildClient(voters);
+        KafkaRaftClient client = buildClient(voters, stateMachine);
         assertEquals(ElectionState.withElectedLeader(epoch, otherNodeId), quorumStateStore.readElectionState());
         assertTrue(stateMachine.isFollower());
         assertEquals(epoch, stateMachine.epoch());

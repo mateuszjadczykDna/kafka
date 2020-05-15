@@ -399,7 +399,11 @@ public class RaftEventSimulationTest {
 
         @Override
         public void execute() {
-            cluster.withCurrentLeader(node -> node.counter.increment());
+            cluster.withCurrentLeader(node -> {
+                if (node.counter.isLeader()) {
+                    node.counter.increment();
+                }
+            });
         }
     }
 
@@ -668,7 +672,7 @@ public class RaftEventSimulationTest {
         }
 
         void initialize() {
-            this.counter = new DistributedCounter(manager, nodeId, logContext);
+            this.counter = new DistributedCounter(nodeId, logContext);
             try {
                 manager.initialize(counter);
             } catch (IOException e) {

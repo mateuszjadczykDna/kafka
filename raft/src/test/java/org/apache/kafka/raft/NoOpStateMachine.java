@@ -26,35 +26,34 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
 
     private RecordAppender recordAppender = null;
 
-    enum STATE {
-        INITIALIZING,
-        LEADER,
-        FOLLOWER
-    }
-
-    private STATE state = STATE.INITIALIZING;
+    private NodeState nodeState = NodeState.UNINITIALIZED;
 
     private int epoch = -1;
 
-    @Override
-    public void becomeLeader(int epoch, RecordAppender appender) {
-        this.recordAppender = appender;
-        this.epoch = epoch;
-        state = STATE.LEADER;
-    }
-
-    @Override
-    public void becomeFollower(int epoch) {
-        this.epoch = epoch;
-        state = STATE.FOLLOWER;
-    }
-
     boolean isLeader() {
-        return state == STATE.LEADER;
+        return nodeState == NodeState.LEADER;
     }
 
     boolean isFollower() {
-        return state == STATE.FOLLOWER;
+        return nodeState == NodeState.NON_LEADER;
+    }
+
+    @Override
+    public void initialize(RecordAppender recordAppender) {
+        this.recordAppender = recordAppender;
+        nodeState = NodeState.NON_LEADER;
+    }
+
+    @Override
+    public void onLeaderPromotion(int epoch) {
+        this.epoch = epoch;
+        nodeState = NodeState.LEADER;
+    }
+
+    @Override
+    public void onLeaderDemotion(int epoch) {
+        this.epoch = epoch;
+        nodeState = NodeState.NON_LEADER;
     }
 
     @Override
@@ -73,6 +72,9 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
         if (recordAppender == null) {
             throw new IllegalStateException("Record appender is not set");
         }
+        if (nodeState != NodeState.LEADER) {
+            throw new IllegalStateException("The raft client is not leader yet");
+        }
         return recordAppender.append(records);
     }
 
@@ -82,7 +84,7 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
     }
 
     void clear() {
-        state = STATE.INITIALIZING;
+        nodeState = NodeState.NON_LEADER;
         epoch = -1;
     }
 

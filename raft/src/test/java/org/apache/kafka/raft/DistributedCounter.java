@@ -26,9 +26,7 @@ import org.apache.kafka.common.record.SimpleRecord;
 import org.apache.kafka.common.utils.LogContext;
 import org.slf4j.Logger;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -38,39 +36,37 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class DistributedCounter implements ReplicatedStateMachine {
     private final Logger log;
-    private final KafkaRaftClient client;
     private final int nodeId;
     private final AtomicInteger committed = new AtomicInteger(0);
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
-    private AtomicInteger uncommitted = new AtomicInteger(committed.get());
 
-    private RecordAppender appender;
+    private RecordAppender appender = null;
+    private NodeState state = NodeState.UNINITIALIZED;
 
-    public DistributedCounter(KafkaRaftClient client,
-                              int nodeId,
+    public DistributedCounter(int nodeId,
                               LogContext logContext) {
-        this.client = client;
         this.nodeId = nodeId;
         this.log = logContext.logger(DistributedCounter.class);
-    }
-
-    public synchronized void initialize() throws IOException {
-
     }
 
     @Override
     public void initialize(RecordAppender recordAppender) {
         appender = recordAppender;
+        state = NodeState.NON_LEADER;
     }
 
     @Override
-    public synchronized void becomeLeader(int epoch, RecordAppender appender) {
-        uncommitted = new AtomicInteger(committed.get());
+    public void onLeaderPromotion(int epoch) {
+        state = NodeState.LEADER;
     }
 
     @Override
-    public synchronized void becomeFollower(int epoch) {
-        uncommitted = new AtomicInteger(committed.get());
+    public void onLeaderDemotion(int epoch) {
+        state = NodeState.NON_LEADER;
+    }
+
+    public boolean isLeader() {
+        return state == NodeState.LEADER;
     }
 
     @Override
@@ -98,17 +94,22 @@ public class DistributedCounter implements ReplicatedStateMachine {
     }
 
     synchronized CompletableFuture<Integer> increment() {
-        int incremented = committed.get() + 1;
+        if (appender == null) {
+            throw new IllegalStateException("The record appender is not initialized");
+        }
 
-        Records records = MemoryRecords.withRecords(CompressionType.NONE, serialize(incremented));
-        if (!appender.isPresent()) {
+        if (state == NodeState.NON_LEADER) {
             CompletableFuture<Integer> future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalStateException(
                 "State machine is not the leader for append."));
             return future;
         }
 
-        CompletableFuture<OffsetAndEpoch> future = appender.get().append(records);
+        int incremented = committed.get() + 1;
+
+        Records records = MemoryRecords.withRecords(CompressionType.NONE, serialize(incremented));
+
+        CompletableFuture<OffsetAndEpoch> future = appender.append(records);
         return future.thenApply(offsetAndEpoch -> incremented);
     }
 
