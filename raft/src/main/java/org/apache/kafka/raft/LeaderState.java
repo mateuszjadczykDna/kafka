@@ -50,7 +50,7 @@ public class LeaderState implements EpochState {
 
     @Override
     public ElectionState election() {
-        return ElectionState.withElectedLeader(epoch, localId);
+        return ElectionState.withElectedLeader(epoch, localId, voterReplicaStates.keySet());
     }
 
     @Override
