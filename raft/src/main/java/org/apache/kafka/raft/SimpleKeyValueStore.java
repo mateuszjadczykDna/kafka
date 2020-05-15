@@ -45,7 +45,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     private final Map<K, V> committed = new HashMap<>();
     private OffsetAndEpoch currentPosition = new OffsetAndEpoch(0L, 0);
     private SortedMap<OffsetAndEpoch, CompletableFuture<OffsetAndEpoch>> pendingCommit = new TreeMap<>();
-    private NodeState state = NodeState.UNINITIALIZED;
+    private RaftState state = RaftState.UNINITIALIZED;
 
     public SimpleKeyValueStore(Serde<K> keySerde,
                                Serde<V> valueSerde) {
@@ -67,7 +67,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
         if (appender == null) {
             throw new IllegalStateException("The record appender is not initialized");
         }
-        if (state == NodeState.NON_LEADER) {
+        if (state == RaftState.NON_LEADER) {
             CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalStateException(
                 "State machine is not the leader for appending."));
@@ -93,17 +93,17 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     @Override
     public void initialize(RecordAppender recordAppender) {
         this.appender = recordAppender;
-        this.state = NodeState.NON_LEADER;
+        this.state = RaftState.NON_LEADER;
     }
 
     @Override
     public void onLeaderPromotion(int epoch) {
-        this.state = NodeState.LEADER;
+        this.state = RaftState.LEADER;
     }
 
     @Override
     public void onLeaderDemotion(int epoch) {
-        this.state = NodeState.NON_LEADER;
+        this.state = RaftState.NON_LEADER;
     }
 
     @Override
@@ -177,5 +177,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
 
     @Override
     public void close() {
+        committed.clear();
+        pendingCommit.clear();
     }
 }

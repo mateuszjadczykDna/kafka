@@ -26,34 +26,34 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
 
     private RecordAppender recordAppender = null;
 
-    private NodeState nodeState = NodeState.UNINITIALIZED;
+    private RaftState nodeState = RaftState.UNINITIALIZED;
 
     private int epoch = -1;
 
     boolean isLeader() {
-        return nodeState == NodeState.LEADER;
+        return nodeState == RaftState.LEADER;
     }
 
     boolean isFollower() {
-        return nodeState == NodeState.NON_LEADER;
+        return nodeState == RaftState.NON_LEADER;
     }
 
     @Override
     public void initialize(RecordAppender recordAppender) {
         this.recordAppender = recordAppender;
-        nodeState = NodeState.NON_LEADER;
+        nodeState = RaftState.NON_LEADER;
     }
 
     @Override
     public void onLeaderPromotion(int epoch) {
         this.epoch = epoch;
-        nodeState = NodeState.LEADER;
+        nodeState = RaftState.LEADER;
     }
 
     @Override
     public void onLeaderDemotion(int epoch) {
         this.epoch = epoch;
-        nodeState = NodeState.NON_LEADER;
+        nodeState = RaftState.NON_LEADER;
     }
 
     @Override
@@ -72,7 +72,7 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
         if (recordAppender == null) {
             throw new IllegalStateException("Record appender is not set");
         }
-        if (nodeState != NodeState.LEADER) {
+        if (nodeState != RaftState.LEADER) {
             throw new IllegalStateException("The raft client is not leader yet");
         }
         return recordAppender.append(records);
@@ -80,11 +80,11 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
 
     @Override
     public void close() {
-        position = new OffsetAndEpoch(0, 0);
+        clear();
     }
 
     void clear() {
-        nodeState = NodeState.NON_LEADER;
+        nodeState = RaftState.NON_LEADER;
         epoch = -1;
     }
 

@@ -16,8 +16,11 @@
  */
 package org.apache.kafka.raft;
 
-public enum NodeState {
-    LEADER,
-    NON_LEADER,
-    UNINITIALIZED
+/**
+ * Raft state of the state machine.
+ */
+public enum RaftState {
+    UNINITIALIZED, // The state machine hasn't been initialized yet
+    LEADER, // The state machine acts as a stable leader
+    NON_LEADER // The underlying raft node is a follower or undergoing a election.
 }

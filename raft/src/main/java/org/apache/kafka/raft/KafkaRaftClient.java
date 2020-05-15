@@ -119,7 +119,6 @@ public class KafkaRaftClient implements RaftClient {
     private final QuorumState quorum;
     private final Random random;
     private final ConnectionCache connections;
-    private final RecordAppender recordAppender;
 
     private BlockingQueue<PendingAppendRequest> unsentAppends;
     private ReplicatedStateMachine stateMachine;
@@ -153,7 +152,6 @@ public class KafkaRaftClient implements RaftClient {
             retryBackoffMs, requestTimeoutMs, logContext);
         this.unsentAppends = new ArrayBlockingQueue<>(10);
         this.connections.maybeUpdate(quorum.localId, new HostInfo(advertisedListener, bootTimestamp));
-        this.recordAppender = this::append;
     }
 
     private void applyCommittedRecordsToStateMachine() {
@@ -198,7 +196,7 @@ public class KafkaRaftClient implements RaftClient {
     public void initialize(ReplicatedStateMachine stateMachine) throws IOException {
         this.stateMachine = stateMachine;
         quorum.initialize(new OffsetAndEpoch(log.endOffset(), log.lastFetchedEpoch()));
-        stateMachine.initialize(recordAppender);
+        stateMachine.initialize(this::append);
 
         if (quorum.isLeader()) {
             electionTimer.reset(Long.MAX_VALUE);
@@ -972,7 +970,7 @@ public class KafkaRaftClient implements RaftClient {
 
         if (!unsentAppends.offer(pendingAppendRequest)) {
             future.completeExceptionally(new KafkaException("Failed to append records since the unsent " +
-                                                                "append queue is full"));
+                "append queue is full"));
         }
         return future;
     }

@@ -41,7 +41,7 @@ public class DistributedCounter implements ReplicatedStateMachine {
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
 
     private RecordAppender appender = null;
-    private NodeState state = NodeState.UNINITIALIZED;
+    private RaftState state = RaftState.UNINITIALIZED;
 
     public DistributedCounter(int nodeId,
                               LogContext logContext) {
@@ -52,21 +52,21 @@ public class DistributedCounter implements ReplicatedStateMachine {
     @Override
     public void initialize(RecordAppender recordAppender) {
         appender = recordAppender;
-        state = NodeState.NON_LEADER;
+        state = RaftState.NON_LEADER;
     }
 
     @Override
     public void onLeaderPromotion(int epoch) {
-        state = NodeState.LEADER;
+        state = RaftState.LEADER;
     }
 
     @Override
     public void onLeaderDemotion(int epoch) {
-        state = NodeState.NON_LEADER;
+        state = RaftState.NON_LEADER;
     }
 
     public boolean isLeader() {
-        return state == NodeState.LEADER;
+        return state == RaftState.LEADER;
     }
 
     @Override
@@ -98,7 +98,7 @@ public class DistributedCounter implements ReplicatedStateMachine {
             throw new IllegalStateException("The record appender is not initialized");
         }
 
-        if (state == NodeState.NON_LEADER) {
+        if (state == RaftState.NON_LEADER) {
             CompletableFuture<Integer> future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalStateException(
                 "State machine is not the leader for append."));

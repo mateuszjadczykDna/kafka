@@ -43,10 +43,9 @@ public interface ReplicatedStateMachine extends AutoCloseable {
     void onLeaderPromotion(int epoch);
 
     /**
-     * Resign from a leader. This is invoked when a new election finishes if this
-     * node was not elected as the leader. Note that only leader should have the access
-     * to {@link RecordAppender}, which means the appender reference should be reset
-     * upon transiting to follower state.
+     * Resign from a leader. This is invoked when a new election starts or the leadership
+     * gets transferred due to seeing a higher epoch leader when the current node
+     * is acting as the leader.
      *
      * @param epoch The latest quorum epoch
      */
