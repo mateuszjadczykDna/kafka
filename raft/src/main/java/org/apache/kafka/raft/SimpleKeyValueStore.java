@@ -43,9 +43,9 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     private final Serde<K> keySerde;
     private final Serde<V> valueSerde;
     private final Map<K, V> committed = new HashMap<>();
+    private final Map<K, V> uncommitted = new HashMap<>();
     private OffsetAndEpoch currentPosition = new OffsetAndEpoch(0L, 0);
     private SortedMap<OffsetAndEpoch, CompletableFuture<OffsetAndEpoch>> pendingCommit = new TreeMap<>();
-    private RaftState state = RaftState.UNINITIALIZED;
 
     public SimpleKeyValueStore(Serde<K> keySerde,
                                Serde<V> valueSerde) {
@@ -67,12 +67,6 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
         if (appender == null) {
             throw new IllegalStateException("The record appender is not initialized");
         }
-        if (state == RaftState.NON_LEADER) {
-            CompletableFuture<OffsetAndEpoch> future = new CompletableFuture<>();
-            future.completeExceptionally(new IllegalStateException(
-                "State machine is not the leader for appending."));
-            return future;
-        }
 
         CompletableFuture<OffsetAndEpoch> appendFuture = appender.append(buildRecords(map));
         return appendFuture.thenCompose(offsetAndEpoch -> {
@@ -93,17 +87,14 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
     @Override
     public void initialize(RecordAppender recordAppender) {
         this.appender = recordAppender;
-        this.state = RaftState.NON_LEADER;
     }
 
     @Override
-    public void onLeaderPromotion(int epoch) {
-        this.state = RaftState.LEADER;
+    public void becomeLeader(int epoch) {
     }
 
     @Override
-    public void onLeaderDemotion(int epoch) {
-        this.state = RaftState.NON_LEADER;
+    public void becomeFollower(int epoch) {
     }
 
     @Override
@@ -113,12 +104,21 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
 
     @Override
     public synchronized void apply(Records records) {
-        withRecords(records, committed::put);
+        withRecords(records, (key, value) -> {
+            uncommitted.remove(key, value);
+            committed.put(key, value);
+        });
 
         for (RecordBatch batch : records.batches()) {
             maybeCompletePendingCommit(batch);
             currentPosition = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
+    }
+
+    @Override
+    public synchronized boolean accept(Records records) {
+        withRecords(records, uncommitted::put);
+        return true;
     }
 
     private void withRecords(Records records, BiConsumer<K, V> action) {
@@ -177,6 +177,7 @@ public class SimpleKeyValueStore<K, V> implements ReplicatedStateMachine {
 
     @Override
     public void close() {
+        uncommitted.clear();
         committed.clear();
         pendingCommit.clear();
     }

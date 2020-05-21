@@ -399,11 +399,7 @@ public class RaftEventSimulationTest {
 
         @Override
         public void execute() {
-            cluster.withCurrentLeader(node -> {
-                if (node.counter.isLeader()) {
-                    node.counter.increment();
-                }
-            });
+            cluster.withCurrentLeader(node -> node.counter.increment());
         }
     }
 
@@ -653,7 +649,7 @@ public class RaftEventSimulationTest {
         final MockQuorumStateStore store;
         final QuorumState quorum;
         final LogContext logContext;
-        DistributedCounter counter;
+        ReplicatedCounter counter;
 
         private RaftNode(int nodeId,
                          KafkaRaftClient manager,
@@ -672,7 +668,7 @@ public class RaftEventSimulationTest {
         }
 
         void initialize() {
-            this.counter = new DistributedCounter(nodeId, logContext);
+            this.counter = new ReplicatedCounter(nodeId, logContext);
             try {
                 manager.initialize(counter);
             } catch (IOException e) {
@@ -850,9 +846,9 @@ public class RaftEventSimulationTest {
 
                     int sequence = parseSequenceNumber(entry.record.value().duplicate());
 
-                    assertTrue("Unexpected sequence found at offset " + offset + " on node " + nodeId +
-                        ": should be at most greater than 1",
-                        nextExpectedSequence - sequence <= 1);
+                    assertEquals("Unexpected sequence found at offset " + offset + " on node " + nodeId,
+                        nextExpectedSequence, sequence);
+
 
                     committedSequenceNumbers.putIfAbsent(offset, sequence);
 
@@ -860,7 +856,7 @@ public class RaftEventSimulationTest {
                     assertEquals("Committed sequence at offset " + offset + " changed on node " + nodeId,
                         committedSequence, sequence);
 
-                    nextExpectedSequence = sequence + 1;
+                    nextExpectedSequence++;
                 }
             }
         }

@@ -45,13 +45,13 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
     }
 
     @Override
-    public void onLeaderPromotion(int epoch) {
+    public void becomeLeader(int epoch) {
         this.epoch = epoch;
         nodeState = RaftState.LEADER;
     }
 
     @Override
-    public void onLeaderDemotion(int epoch) {
+    public void becomeFollower(int epoch) {
         this.epoch = epoch;
         nodeState = RaftState.NON_LEADER;
     }
@@ -66,6 +66,11 @@ public class NoOpStateMachine implements ReplicatedStateMachine {
         for (RecordBatch batch : records.batches()) {
             this.position = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
+    }
+
+    @Override
+    public boolean accept(Records records) {
+        return true;
     }
 
     CompletableFuture<OffsetAndEpoch> append(Records records) {

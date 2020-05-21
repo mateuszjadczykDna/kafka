@@ -34,19 +34,20 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This is the simplest interesting state machine. It maintains a simple counter which can only
  * be incremented by one.
  */
-public class DistributedCounter implements ReplicatedStateMachine {
+public class ReplicatedCounter implements ReplicatedStateMachine {
     private final Logger log;
     private final int nodeId;
     private final AtomicInteger committed = new AtomicInteger(0);
     private OffsetAndEpoch position = new OffsetAndEpoch(0, 0);
+    private AtomicInteger uncommitted;
 
     private RecordAppender appender = null;
     private RaftState state = RaftState.UNINITIALIZED;
 
-    public DistributedCounter(int nodeId,
-                              LogContext logContext) {
+    public ReplicatedCounter(int nodeId,
+                             LogContext logContext) {
         this.nodeId = nodeId;
-        this.log = logContext.logger(DistributedCounter.class);
+        this.log = logContext.logger(ReplicatedCounter.class);
     }
 
     @Override
@@ -56,17 +57,15 @@ public class DistributedCounter implements ReplicatedStateMachine {
     }
 
     @Override
-    public void onLeaderPromotion(int epoch) {
+    public void becomeLeader(int epoch) {
+        uncommitted = new AtomicInteger(committed.get());
         state = RaftState.LEADER;
     }
 
     @Override
-    public void onLeaderDemotion(int epoch) {
+    public void becomeFollower(int epoch) {
+        uncommitted = null;
         state = RaftState.NON_LEADER;
-    }
-
-    public boolean isLeader() {
-        return state == RaftState.LEADER;
     }
 
     @Override
@@ -81,7 +80,7 @@ public class DistributedCounter implements ReplicatedStateMachine {
                 for (Record record : batch) {
                     int value = deserialize(record);
 
-                    if (value != committed.get() && value != committed.get() + 1) {
+                    if (value != committed.get() + 1) {
                         throw new IllegalStateException("Node " + nodeId + " detected invalid increment in record at offset " + record.offset() +
                                                             ", epoch " + batch.partitionLeaderEpoch() + ": " + committed.get() + " -> " + value);
                     }
@@ -91,6 +90,27 @@ public class DistributedCounter implements ReplicatedStateMachine {
             }
             this.position = new OffsetAndEpoch(batch.lastOffset() + 1, batch.partitionLeaderEpoch());
         }
+    }
+
+    @Override
+    public synchronized boolean accept(Records records) {
+        int lastUncommitted = uncommitted.get();
+        for (RecordBatch batch : records.batches()) {
+            for (Record record : batch) {
+                int value = deserialize(record);
+                if (value != lastUncommitted + 1)
+                    return false;
+                lastUncommitted = value;
+            }
+        }
+
+        log.trace("Accept counter update: {} -> {}", uncommitted.get(), lastUncommitted);
+        uncommitted.set(lastUncommitted);
+        return true;
+    }
+
+    public synchronized int value() {
+        return committed.get();
     }
 
     synchronized CompletableFuture<Integer> increment() {

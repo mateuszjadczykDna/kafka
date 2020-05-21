@@ -227,7 +227,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void onBecomeLeader(LeaderState state) {
-        stateMachine.onLeaderPromotion(quorum.epoch());
+        stateMachine.becomeLeader(quorum.epoch());
         updateLeaderEndOffset(state);
 
         // Add a control message for faster high watermark advance.
@@ -273,7 +273,6 @@ public class KafkaRaftClient implements RaftClient {
             resetConnections();
 
             if (isLeader) {
-                stateMachine.onLeaderDemotion(epoch);
                 electionTimer.reset(electionTimeoutMs);
             }
         }
@@ -287,7 +286,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private void onBecomeFollowerOfElectedLeader(FollowerState state) {
-        stateMachine.onLeaderDemotion(state.epoch());
+        stateMachine.becomeFollower(state.epoch());
         electionTimer.reset(electionTimeoutMs);
         resetConnections();
     }
@@ -523,7 +522,7 @@ public class KafkaRaftClient implements RaftClient {
     }
 
     private OptionalLong maybeAppendAsLeader(LeaderState state, Records records) {
-        if (state.highWatermark().isPresent()) {
+        if (state.highWatermark().isPresent() && stateMachine.accept(records)) {
             Long baseOffset = log.appendAsLeader(records, quorum.epoch());
             updateLeaderEndOffset(state);
             logger.trace("Leader appended records at base offset {}, new end offset is {}", baseOffset, endOffset());

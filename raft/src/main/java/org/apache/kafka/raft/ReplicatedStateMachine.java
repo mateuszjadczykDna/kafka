@@ -35,21 +35,20 @@ public interface ReplicatedStateMachine extends AutoCloseable {
     void initialize(RecordAppender recordAppender);
 
     /**
-     * Promote as a leader. This is invoked after a new election in the quorum if this
+     * Become as a leader. This is invoked after a new election in the quorum if this
      * node was elected as the leader.
      *
      * @param epoch The latest quorum epoch
      */
-    void onLeaderPromotion(int epoch);
+    void becomeLeader(int epoch);
 
     /**
-     * Resign from a leader. This is invoked when a new election starts or the leadership
-     * gets transferred due to seeing a higher epoch leader when the current node
-     * is acting as the leader.
+     * Become a follower. This is invoked after a new election finishes if this
+     * node was not elected as the leader.
      *
      * @param epoch The latest quorum epoch
      */
-    void onLeaderDemotion(int epoch);
+    void becomeFollower(int epoch);
 
     /**
      * The next expected offset that will be appended to the log. This should be
@@ -66,4 +65,24 @@ public interface ReplicatedStateMachine extends AutoCloseable {
      * @param records The records to apply to the state machine
      */
     void apply(Records records);
+
+    /**
+     * This is only invoked by leaders. The leader is guaranteed to have the full committed
+     * state before this method is invoked in a new leader epoch.
+     *
+     * Note that acceptance does not guarantee that the records will become committed
+     * since that depends on replication to the quorum. For example, if there is a leader
+     * change before the record can be committed, then accepted records may be lost.
+     *
+     * @param records The records appended to the leader
+     * @return true if the records should be appended to the log
+     */
+    boolean accept(Records records);
+
+    /**
+     * Close the state machine
+     */
+    @Override
+    default void close() {
+    }
 }
