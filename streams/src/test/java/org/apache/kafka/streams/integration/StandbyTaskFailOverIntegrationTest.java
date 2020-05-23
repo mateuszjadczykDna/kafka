@@ -120,9 +120,9 @@ public class StandbyTaskFailOverIntegrationTest {
 
         streamInstanceOne = getStreamInstance(1, waitPoisonRecordReplication);
         streamInstanceTwo = getStreamInstance(2, null);
-        streamInstanceThree = getStreamInstance(2, null);
+        streamInstanceThree = getStreamInstance(3, null);
 
-        CountDownLatch threadDeaths = new CountDownLatch(3);
+        CountDownLatch threadDeaths = new CountDownLatch(6);
         streamInstanceOne.setUncaughtExceptionHandler((t, e) -> {
             if (e.getMessage().startsWith("Caught a duplicate key") && eosConfig.equals(StreamsConfig.EXACTLY_ONCE)) {
                 fail("Should not hit duplicate key in EOS");
@@ -162,8 +162,7 @@ public class StandbyTaskFailOverIntegrationTest {
         waitForCondition(() -> streamInstanceThree.state().equals(KafkaStreams.State.RUNNING),
             "Stream instance three should be up and running by now");
 
-
-        log.info("Stream instance two starts up, producing the poison record");
+        log.info("3 stream instance starts up, producing the poison record");
         // Produce the poison record
         IntegrationTestUtils.produceKeyValuesSynchronouslyWithTimestamp(
             inputTopic,
@@ -241,12 +240,12 @@ public class StandbyTaskFailOverIntegrationTest {
             }, STORE_NAME
         ).peek((key, value) -> {
             if (key.equals(poisonKey)) {
-                try {
-                    if (waitPoisonRecordReplication != null) {
-                        waitPoisonRecordReplication.await(15_000L, TimeUnit.MILLISECONDS);
-                    }
-                } catch (InterruptedException ignored) {
-                }
+//                try {
+//                    if (waitPoisonRecordReplication != null) {
+//                        waitPoisonRecordReplication.await(15_000L, TimeUnit.MILLISECONDS);
+//                    }
+//                } catch (InterruptedException ignored) {
+//                }
                 throw new IllegalStateException("Throw on key_two to trigger rebalance");
             }
         });
@@ -289,6 +288,8 @@ public class StandbyTaskFailOverIntegrationTest {
         streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         streamsConfiguration.put(ProducerConfig.LINGER_MS_CONFIG, 0);
         streamsConfiguration.put(StreamsConfig.CLIENT_ID_CONFIG, "client-" + instanceId);
+        streamsConfiguration.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 5000);
+
 
         return streamsConfiguration;
     }
