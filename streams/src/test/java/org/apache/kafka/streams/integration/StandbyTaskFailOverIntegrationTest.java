@@ -88,6 +88,7 @@ public class StandbyTaskFailOverIntegrationTest {
     private final int numThreads = 2;
     private KafkaStreams streamInstanceOne;
     private KafkaStreams streamInstanceTwo;
+    private KafkaStreams streamInstanceThree;
 
     @ClassRule
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(
@@ -117,8 +118,9 @@ public class StandbyTaskFailOverIntegrationTest {
 
         CountDownLatch waitPoisonRecordReplication = new CountDownLatch(1);
 
-        streamInstanceOne = getStreamInstance(2, waitPoisonRecordReplication);
-        streamInstanceTwo = getStreamInstance(1, null);
+        streamInstanceOne = getStreamInstance(1, waitPoisonRecordReplication);
+        streamInstanceTwo = getStreamInstance(2, null);
+        streamInstanceThree = getStreamInstance(2, null);
 
         CountDownLatch threadDeaths = new CountDownLatch(3);
         streamInstanceOne.setUncaughtExceptionHandler((t, e) -> {
@@ -155,6 +157,11 @@ public class StandbyTaskFailOverIntegrationTest {
         streamInstanceTwo.start();
         waitForCondition(() -> streamInstanceTwo.state().equals(KafkaStreams.State.RUNNING),
             "Stream instance two should be up and running by now");
+
+        streamInstanceThree.start();
+        waitForCondition(() -> streamInstanceThree.state().equals(KafkaStreams.State.RUNNING),
+            "Stream instance three should be up and running by now");
+
 
         log.info("Stream instance two starts up, producing the poison record");
         // Produce the poison record
@@ -258,6 +265,11 @@ public class StandbyTaskFailOverIntegrationTest {
         if (streamInstanceTwo != null) {
             streamInstanceTwo.close(Duration.ofSeconds(30L));
             streamInstanceTwo.cleanUp();
+        }
+
+        if (streamInstanceThree != null) {
+            streamInstanceThree.close(Duration.ofSeconds(30L));
+            streamInstanceThree.cleanUp();
         }
     }
 
