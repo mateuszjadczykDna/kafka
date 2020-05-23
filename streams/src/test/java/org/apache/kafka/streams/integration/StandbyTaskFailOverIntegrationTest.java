@@ -245,7 +245,7 @@ public class StandbyTaskFailOverIntegrationTest {
         });
 
         return new KafkaStreams(builder.build(),
-            props(numThreads, String.format("/tmp/kafka-streams/instance-%d/", instanceId)));
+            props(numThreads, instanceId, String.format("/tmp/kafka-streams/instance-%d/", instanceId)));
     }
 
     @After
@@ -261,7 +261,7 @@ public class StandbyTaskFailOverIntegrationTest {
         }
     }
 
-    private Properties props(final int numThreads, final String stateDirPath) {
+    private Properties props(final int numThreads, final int instanceId, final String stateDirPath) {
         final Properties streamsConfiguration = new Properties();
         streamsConfiguration.put(StreamsConfig.APPLICATION_ID_CONFIG, appId);
         streamsConfiguration.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, CLUSTER.bootstrapServers());
@@ -276,6 +276,7 @@ public class StandbyTaskFailOverIntegrationTest {
         streamsConfiguration.put(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG, 100);
         streamsConfiguration.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         streamsConfiguration.put(ProducerConfig.LINGER_MS_CONFIG, 0);
+        streamsConfiguration.put(StreamsConfig.CLIENT_ID_CONFIG, "client-" + instanceId);
 
         return streamsConfiguration;
     }
