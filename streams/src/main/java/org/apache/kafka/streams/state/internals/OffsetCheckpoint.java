@@ -128,7 +128,9 @@ public class OffsetCheckpoint {
      * @throws IllegalArgumentException if the offset checkpoint version is unknown
      */
     public Map<TopicPartition, Long> read() throws IOException {
+        LOG.info("read");
         synchronized (lock) {
+            LOG.info("reading");
             try (final BufferedReader reader = Files.newBufferedReader(file.toPath())) {
                 final int version = readInt(reader);
                 switch (version) {
@@ -159,6 +161,7 @@ public class OffsetCheckpoint {
                         throw new IllegalArgumentException("Unknown offset checkpoint version: " + version);
                 }
             } catch (final NoSuchFileException e) {
+                LOG.info("no such file. returning empty list");
                 return Collections.emptyMap();
             }
         }
@@ -179,7 +182,7 @@ public class OffsetCheckpoint {
      * @throws IOException if there is any IO exception during delete
      */
     public void delete() throws IOException {
-        LOG.info("delete offset checkpoint " + file.toPath());
+        LOG.info("delete offset checkpoint {}, exists: {}", file.toPath(), file.exists());
         Files.deleteIfExists(file.toPath());
     }
 
