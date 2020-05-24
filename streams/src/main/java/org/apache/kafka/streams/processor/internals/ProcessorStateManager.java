@@ -279,6 +279,14 @@ public class ProcessorStateManager implements StateManager {
                 if (entry.getValue().isPresent()) {
                     final StateStore store = entry.getValue().get();
                     log.trace("Flushing store {}", store.name());
+                    if(isStandby && "dedup-store".equals(store.name())) {
+                        try {
+                            log.trace("Waiting 200ms before closing");
+                            Thread.sleep(200);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
                     try {
                         store.flush();
                     } catch (final RuntimeException e) {
