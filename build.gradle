@@ -36,7 +36,7 @@ buildscript {
     classpath "com.github.jengelman.gradle.plugins:shadow:$versions.shadowPlugin"
     classpath "org.owasp:dependency-check-gradle:$versions.owaspDepCheckPlugin"
     classpath "com.diffplug.spotless:spotless-plugin-gradle:$versions.spotlessPlugin"
-    classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:$versions.spotbugsPlugin"
+//    classpath "gradle.plugin.com.github.spotbugs:spotbugs-gradle-plugin:$versions.spotbugsPlugin"
   }
 }
 
@@ -54,7 +54,7 @@ allprojects {
   repositories {
     mavenCentral()
   }
-  
+
   apply plugin: 'idea'
   apply plugin: 'org.owasp.dependencycheck'
   apply plugin: 'com.github.ben-manes.versions'
@@ -152,7 +152,7 @@ subprojects {
   apply plugin: 'maven'
   apply plugin: 'signing'
   apply plugin: 'checkstyle'
-  apply plugin: "com.github.spotbugs"
+//  apply plugin: "com.github.spotbugs"
 
   sourceCompatibility = minJavaVersion
   targetCompatibility = minJavaVersion
@@ -164,7 +164,7 @@ subprojects {
     options.compilerArgs << "-Xlint:-rawtypes"
     options.compilerArgs << "-Xlint:-serial"
     options.compilerArgs << "-Xlint:-try"
-    options.compilerArgs << "-Werror"
+//    options.compilerArgs << "-Werror"
     // --release is the recommended way to select the target release, but it's only supported in Java 9 so we also
     // set --source and --target via `sourceCompatibility` and `targetCompatibility`. If/when Gradle supports `--release`
     // natively (https://github.com/gradle/gradle/issues/2510), we should switch to that.
@@ -436,7 +436,7 @@ subprojects {
       scalaCompileOptions.additionalParameters += ["-opt:l:inline"]
       scalaCompileOptions.additionalParameters += inlineFrom
     }
-    
+
   // these options are valid for Scala versions < 2.13 only
   // Scala 2.13 removes them, see https://github.com/scala/scala/pull/6502 and https://github.com/scala/scala/pull/5969
     if (versions.baseScala in ['2.11','2.12']) {
@@ -470,21 +470,21 @@ subprojects {
 
   test.dependsOn('checkstyleMain', 'checkstyleTest')
 
-  spotbugs {
-    toolVersion = "$versions.spotbugs"
-    excludeFilter = file("$rootDir/gradle/spotbugs-exclude.xml")
-    ignoreFailures = false
-  }
-  test.dependsOn('spotbugsMain')
-
-  tasks.withType(com.github.spotbugs.SpotBugsTask) {
-    reports {
-      // Continue supporting `xmlFindBugsReport` for compatibility
-      xml.enabled(project.hasProperty('xmlSpotBugsReport') || project.hasProperty('xmlFindBugsReport'))
-      html.enabled(!project.hasProperty('xmlSpotBugsReport') && !project.hasProperty('xmlFindBugsReport'))
-    }
-    maxHeapSize = "2g"
-  }
+//  spotbugs {
+//    toolVersion = "$versions.spotbugs"
+//    excludeFilter = file("$rootDir/gradle/spotbugs-exclude.xml")
+//    ignoreFailures = false
+//  }
+//  test.dependsOn('spotbugsMain')
+//
+//  tasks.withType(com.github.spotbugs.SpotBugsTask) {
+//    reports {
+//      // Continue supporting `xmlFindBugsReport` for compatibility
+//      xml.enabled(project.hasProperty('xmlSpotBugsReport') || project.hasProperty('xmlFindBugsReport'))
+//      html.enabled(!project.hasProperty('xmlSpotBugsReport') && !project.hasProperty('xmlFindBugsReport'))
+//    }
+//    maxHeapSize = "2g"
+//  }
 
   // Ignore core since its a scala project
   if (it.path != ':core') {
@@ -513,11 +513,11 @@ subprojects {
 
 }
 
-gradle.taskGraph.whenReady { taskGraph ->
-  taskGraph.getAllTasks().findAll { it.name.contains('spotbugsScoverage') || it.name.contains('spotbugsTest') }.each { task ->
-    task.enabled = false
-  }
-}
+//gradle.taskGraph.whenReady { taskGraph ->
+//  taskGraph.getAllTasks().findAll { it.name.contains('spotbugsScoverage') || it.name.contains('spotbugsTest') }.each { task ->
+//    task.enabled = false
+//  }
+//}
 
 def fineTuneEclipseClasspathFile(eclipse, project) {
   eclipse.classpath.file {
@@ -535,8 +535,8 @@ def fineTuneEclipseClasspathFile(eclipse, project) {
       if (project.name.equals('core')) {
         cp.entries.findAll { it.kind == "src" && it.path.equals("src/test/scala") }*.excludes = ["integration/", "other/", "unit/"]
       }
-      /* 
-       * Set all eclipse build output to go to 'build_eclipse' directory. This is to ensure that gradle and eclipse use different 
+      /*
+       * Set all eclipse build output to go to 'build_eclipse' directory. This is to ensure that gradle and eclipse use different
        * build output directories, and also avoid using the eclpise default of 'bin' which clashes with some of our script directories.
        * https://discuss.gradle.org/t/eclipse-generated-files-should-be-put-in-the-same-place-as-the-gradle-generated-files/6986/2
        */
@@ -556,29 +556,29 @@ def checkstyleConfigProperties(configFileName) {
    headerFile: "$rootDir/checkstyle/java.header"]
 }
 
-// Aggregates all jacoco results into the root project directory
-task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
-  def javaProjects = subprojects.findAll { it.path != ':core' }
-
-  description = 'Generates an aggregate report from all subprojects'
-  dependsOn(javaProjects.test)
-
-  additionalSourceDirs = files(javaProjects.sourceSets.main.allSource.srcDirs)
-  sourceDirectories = files(javaProjects.sourceSets.main.allSource.srcDirs)
-  classDirectories =  files(javaProjects.sourceSets.main.output)
-  executionData = files(javaProjects.jacocoTestReport.executionData)
-
-  reports {
-    html.enabled = true
-    xml.enabled = true
-  }
-
-  // workaround to ignore projects that don't have any tests at all
-  onlyIf = { true }
-  doFirst {
-    executionData = files(executionData.findAll { it.exists() })
-  }
-}
+//// Aggregates all jacoco results into the root project directory
+//task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
+//  def javaProjects = subprojects.findAll { it.path != ':core' }
+//
+//  description = 'Generates an aggregate report from all subprojects'
+//  dependsOn(javaProjects.test)
+//
+//  additionalSourceDirs = files(javaProjects.sourceSets.main.allSource.srcDirs)
+//  sourceDirectories = files(javaProjects.sourceSets.main.allSource.srcDirs)
+//  classDirectories =  files(javaProjects.sourceSets.main.output)
+//  executionData = files(javaProjects.jacocoTestReport.executionData)
+//
+//  reports {
+//    html.enabled = true
+//    xml.enabled = true
+//  }
+//
+//  // workaround to ignore projects that don't have any tests at all
+//  onlyIf = { true }
+//  doFirst {
+//    executionData = files(executionData.findAll { it.exists() })
+//  }
+//}
 
 task reportCoverage(dependsOn: ['jacocoRootReport', 'core:reportCoverage'])
 
@@ -729,7 +729,7 @@ project(':core') {
     scoverage libs.scoveragePlugin
     scoverage libs.scoverageRuntime
   }
-  
+
   scoverage {
     reportDir = file("${rootProject.buildDir}/scoverage")
     highlighting = false

@@ -179,6 +179,7 @@ public class OffsetCheckpoint {
      * @throws IOException if there is any IO exception during delete
      */
     public void delete() throws IOException {
+        LOG.info("delete offset checkpoint " + file.toPath());
         Files.deleteIfExists(file.toPath());
     }
 

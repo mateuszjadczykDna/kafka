@@ -110,11 +110,12 @@ public class ProcessorStateManager implements StateManager {
         checkpointFile = new OffsetCheckpoint(new File(baseDir, CHECKPOINT_FILE_NAME));
         initialLoadedCheckpoints = checkpointFile.read();
 
-        log.trace("Checkpointable offsets read from checkpoint: {}", initialLoadedCheckpoints);
+        log.info("Checkpointable offsets read from checkpoint: {}", initialLoadedCheckpoints);
 
         if (eosEnabled) {
             // with EOS enabled, there should never be a checkpoint file _during_ processing.
             // delete the checkpoint file after loading its stored offsets.
+            log.info("eosEnabled checkpointFile.delete()");
             checkpointFile.delete();
             checkpointFile = null;
         }
@@ -200,11 +201,17 @@ public class ProcessorStateManager implements StateManager {
     }
 
     void clearCheckpoints() throws IOException {
+        log.info("Clear checkpoints");
         if (checkpointFile != null) {
+            log.info("Deleting checkpoints");
             checkpointFile.delete();
             checkpointFile = null;
 
             checkpointFileCache.clear();
+        }
+        else {
+            log.info("no checkpoint");
+
         }
     }
 
@@ -348,9 +355,7 @@ public class ProcessorStateManager implements StateManager {
 
         updateCheckpointFileCache(checkpointableOffsetsFromProcessing);
 
-        log.trace("Checkpointable offsets updated with active acked offsets: {}", checkpointFileCache);
-
-        log.trace("Writing checkpoint: {}", checkpointFileCache);
+        log.info("Writing checkpoint: {}", checkpointFileCache);
         try {
             checkpointFile.write(checkpointFileCache);
         } catch (final IOException e) {

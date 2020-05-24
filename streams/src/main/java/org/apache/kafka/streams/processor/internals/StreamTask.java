@@ -366,6 +366,8 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator 
             recordCollector.init(producer);
 
             try {
+                log.info("stateMgr.clearCheckpoints");
+
                 stateMgr.clearCheckpoints();
             } catch (final IOException e) {
                 throw new ProcessorStateException(format("%sError while deleting the checkpoint file", logPrefix), e);
@@ -980,8 +982,8 @@ public class StreamTask extends AbstractTask implements ProcessorNodePunctuator 
         switch (version) {
             case LATEST_MAGIC_BYTE:
                 return buffer.getLong();
-            default: 
-                log.warn("Unsupported offset metadata version found. Supported version {}. Found version {}.", 
+            default:
+                log.warn("Unsupported offset metadata version found. Supported version {}. Found version {}.",
                          LATEST_MAGIC_BYTE, version);
                 return RecordQueue.UNKNOWN;
         }
